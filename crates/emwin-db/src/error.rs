@@ -48,6 +48,14 @@ impl PersistError {
         }
     }
 
+    pub fn s3_response(operation: &'static str, status: u16, message: impl Into<String>) -> Self {
+        Self::S3 {
+            operation,
+            retryable: is_retryable_s3_status(status),
+            message: format!("HTTP {status}: {}", message.into()),
+        }
+    }
+
     /// Returns true when the operation should be retried after a backoff delay.
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -121,7 +129,7 @@ fn s3_status_code(err: &s3::error::S3Error) -> Option<u16> {
 }
 
 fn is_retryable_s3_error(err: &s3::error::S3Error, status: Option<u16>) -> bool {
-    if matches!(status, Some(408 | 429 | 500 | 502 | 503 | 504)) {
+    if status.is_some_and(is_retryable_s3_status) {
         return true;
     }
 
@@ -142,6 +150,10 @@ fn is_retryable_s3_error(err: &s3::error::S3Error, status: Option<u16>) -> bool 
         | s3::error::S3Error::CredentialsWriteLock => false,
         _ => false,
     }
+}
+
+fn is_retryable_s3_status(status: u16) -> bool {
+    matches!(status, 408 | 429 | 500 | 502 | 503 | 504)
 }
 
 #[cfg(test)]
@@ -181,5 +193,17 @@ mod tests {
         );
         assert!(err.is_retryable());
         assert_eq!(err.failure_class(), "s3_unavailable");
+    }
+
+    #[test]
+    fn s3_response_marks_retryable_status_codes() {
+        let err = PersistError::s3_response("create_bucket", 503, "service unavailable");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn s3_response_rejects_non_retryable_status_codes() {
+        let err = PersistError::s3_response("create_bucket", 403, "forbidden");
+        assert!(!err.is_retryable());
     }
 }

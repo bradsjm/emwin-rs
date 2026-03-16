@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use emwin_parser::{
-    enrich_product, ProductArtifact, ProductBody, ProductEnrichment, ProductParseIssue,
+    ProductArtifact, ProductBody, ProductEnrichment, ProductParseIssue, enrich_product,
 };
 
 #[derive(Debug, Clone)]

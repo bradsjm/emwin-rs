@@ -65,40 +65,44 @@ MAXWINDGUST...60 MPH
     )
 }
 
-fn sample_blobs(filename: &str) -> Vec<StoredBlob> {
-    let sidecar_name = filename.replace(".TXT", ".JSON");
+fn sample_blobs(_filename: &str) -> Vec<StoredBlob> {
+    let payload_location =
+        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
+    let sidecar_location =
+        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
     vec![
         StoredBlob {
             kind: BlobStorageKind::Filesystem,
             role: BlobRole::Payload,
-            location: format!("/tmp/{filename}"),
+            location: payload_location.to_string(),
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
             kind: BlobStorageKind::Filesystem,
             role: BlobRole::MetadataSidecar,
-            location: format!("/tmp/{sidecar_name}"),
+            location: sidecar_location.to_string(),
             size_bytes: 256,
             content_type: Some("application/json".to_string()),
         },
     ]
 }
 
-fn sample_s3_blobs(filename: &str) -> Vec<StoredBlob> {
-    let sidecar_name = filename.replace(".TXT", ".JSON");
+fn sample_s3_blobs(_filename: &str) -> Vec<StoredBlob> {
+    let payload_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
+    let sidecar_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
     vec![
         StoredBlob {
             kind: BlobStorageKind::S3,
             role: BlobRole::Payload,
-            location: format!("s3://example-bucket/archive/{filename}"),
+            location: payload_location.to_string(),
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
             kind: BlobStorageKind::S3,
             role: BlobRole::MetadataSidecar,
-            location: format!("s3://example-bucket/archive/{sidecar_name}"),
+            location: sidecar_location.to_string(),
             size_bytes: 256,
             content_type: Some("application/json".to_string()),
         },
@@ -300,11 +304,11 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
     assert!(row.get::<DateTime<Utc>, _>("ingested_at") <= Utc::now());
     assert_eq!(
         row.get::<String, _>("payload_location"),
-        "/tmp/FFWOAXNE.TXT"
+        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),
-        Some("/tmp/FFWOAXNE.JSON")
+        Some("/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON")
     );
     assert!(row.get::<bool, _>("has_vtec"));
     assert!(row.get::<bool, _>("has_ugc"));
@@ -438,7 +442,7 @@ async fn postgres_sink_persists_s3_blob_locations() {
     assert_eq!(row.get::<String, _>("payload_storage_kind"), "s3");
     assert_eq!(
         row.get::<String, _>("payload_location"),
-        "s3://example-bucket/archive/FFWOAXNE.TXT"
+        "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_storage_kind")
@@ -447,7 +451,9 @@ async fn postgres_sink_persists_s3_blob_locations() {
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),
-        Some("s3://example-bucket/archive/FFWOAXNE.JSON")
+        Some(
+            "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON"
+        )
     );
 
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;

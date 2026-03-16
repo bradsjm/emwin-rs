@@ -41,21 +41,23 @@ Live command: `server`
 - `--file-retention-secs <SECONDS>`
 - `--max-retained-files <N>`
 - `--quiet`
-- `--output-dir <PATH|s3://bucket[/prefix]>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar)
+- `--output-dir <PATH|s3://bucket[/prefix]>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar under canonical archival paths)
 
 Persistence behavior when `--output-dir` is set:
 
-- each persisted product writes the payload file and a sibling `.JSON` metadata sidecar
+- each persisted product writes the payload file and a sibling `.JSON` metadata sidecar under a canonical archival path such as `qbt/2026/03/16/BOX/nws_text_product/20260316T021530Z-4f2c9d91-AFDBOX.TXT`
 - persistence runs in a background task so live ingest does not wait on filesystem or S3 I/O
 - when `--persist-database-url` is set, the background task also upserts normalized product metadata and spatial child rows into Postgres/PostGIS
 - when `--persist-database-url` is set, startup runs one incident cleanup pass and the server retries cleanup every 5 minutes to mark `active` incidents `expired` after their `end_utc` passes
 - Postgres metadata failures do not roll back payload or sidecar files already written under `--output-dir`
 - Postgres outages no longer abort server startup; the server stays online and background persistence retries with backoff until the database is reachable again
+- S3 persistence attempts to auto-create the target bucket when missing; if S3 is unavailable or bucket creation/checks fail transiently, the server stays online and background persistence retries with backoff
 - transient filesystem write failures, including disk-full conditions, and transient S3 request failures are retried in the background with throttled warnings so live ingest and connected clients keep running
 - if the persistence queue fills, the oldest queued item is evicted so the newest product can still be accepted
 - `.ZIP` and `.ZIS` products are extracted before parsing, filtering, and persistence by default; the extracted entry filename replaces the archive filename
 - corrupt archives are logged as `Corrupt Zip File Received` and dropped when post-processing is enabled
-- sidecar names replace the original extension, for example `AFDBOX.TXT` -> `AFDBOX.JSON`
+- sidecar names replace the original extension within the canonical archival path, for example `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.TXT` -> `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.JSON`
+- ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/files`
 - `/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
 
 If `--server` is omitted, built-in default endpoints are used.

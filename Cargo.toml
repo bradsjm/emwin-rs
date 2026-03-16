@@ -50,6 +50,7 @@ minidom = "0.17"
 xmpp-parsers = "0.22"
 quick-xml = "0.38"
 csv = "1"
+crc32fast = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

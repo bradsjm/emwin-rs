@@ -497,6 +497,17 @@ mod tests {
             }
             _ => panic!("expected file_complete event"),
         }
+
+        let persisted = crate::live::file_pipeline::build_persist_request(
+            &retained.metadata.filename,
+            &retained.data,
+            retained.metadata.clone(),
+        )
+        .expect("persist request should build");
+        assert_eq!(
+            persisted.request_key,
+            "qbt/1970/01/01/FFC/nws_text_product/19700101T000001Z-e56e022c-TAFPDKGA.TXT"
+        );
     }
 
     #[test]

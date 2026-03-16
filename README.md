@@ -93,10 +93,11 @@ cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --
 
 Optional file persistence:
 
-- `server --output-dir <PATH|s3://bucket[/prefix]>` writes each completed assembled file and a sibling `.JSON` metadata sidecar.
+- `server --output-dir <PATH|s3://bucket[/prefix]>` writes each completed assembled file and a sibling `.JSON` metadata sidecar under canonical archival paths such as `qbt/2026/03/16/BOX/nws_text_product/20260316T021530Z-4f2c9d91-AFDBOX.TXT`.
 - When `--persist-database-url` is also set, blob writes still succeed even if the Postgres metadata upsert fails.
 - When Postgres is unavailable at startup or during runtime, the server stays up, retries metadata persistence in the background with backoff, and resumes writing after connectivity returns.
-- When filesystem writes fail transiently, including `ENOSPC`, or S3 returns transient service/network failures, the background persistence worker retries with throttled warning logs while live ingest and connected clients remain online.
+- When filesystem writes fail transiently, including `ENOSPC`, or S3 returns transient service/network failures, including bucket auto-create checks during startup/runtime, the background persistence worker retries with throttled warning logs while live ingest and connected clients remain online.
+- ZIP/ZIS archive entry directories are not preserved in persisted blob paths; the original delivered filename remains available in metadata and `/files` responses.
 - `server` defaults to `--post-process-archives true`, which extracts the first entry from completed `.ZIP` and `.ZIS` products before parsing and downstream delivery.
 - Corrupt `.ZIP` and `.ZIS` payloads are logged as `Corrupt Zip File Received` and dropped when archive post-processing is enabled.
 - `server` serves retained payloads over HTTP from the in-memory retention cache while optionally persisting payloads and metadata asynchronously in the background.

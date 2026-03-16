@@ -1636,6 +1636,61 @@ mod tests {
     }
 
     #[test]
+    fn prepared_product_keeps_original_filename_with_partitioned_locations() {
+        let metadata = CompletedFileMetadata::build(
+            "nested/FFWOAXNE.TXT",
+            1_704_070_800,
+            ProductOrigin::Qbt,
+            br#"000
+WUUS53 KOAX 051200
+FFWOAX
+
+Flash Flood Warning
+National Weather Service Omaha/Valley NE
+1200 PM CST Wed Mar 5 2025
+
+NEC001>003-051300-
+/O.NEW.KOAX.FF.W.0001.250305T1200Z-250305T1800Z/
+/MSRM1.3.ER.250305T1200Z.250305T1800Z.250306T0000Z.NO/
+
+LAT...LON 4143 9613 4145 9610 4140 9608 4138 9612
+TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
+MAXHAILSIZE...1.00 IN
+MAXWINDGUST...60 MPH
+"#,
+        );
+        let blobs = vec![
+            StoredBlob {
+                kind: BlobStorageKind::Filesystem,
+                role: BlobRole::Payload,
+                location: "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT".to_string(),
+                size_bytes: 1,
+                content_type: Some("application/octet-stream".to_string()),
+            },
+            StoredBlob {
+                kind: BlobStorageKind::Filesystem,
+                role: BlobRole::MetadataSidecar,
+                location: "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON".to_string(),
+                size_bytes: 1,
+                content_type: Some("application/json".to_string()),
+            },
+        ];
+
+        let prepared = PreparedProduct::prepare(&metadata, &blobs).expect("product should prepare");
+        assert_eq!(prepared.row.filename, "nested/FFWOAXNE.TXT");
+        assert_eq!(
+            prepared.row.payload_location,
+            "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
+        );
+        assert_eq!(
+            prepared.row.metadata_location.as_deref(),
+            Some(
+                "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON"
+            )
+        );
+    }
+
+    #[test]
     fn missing_payload_blob_is_rejected() {
         let err = find_blob(
             &[StoredBlob {

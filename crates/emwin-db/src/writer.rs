@@ -1,5 +1,6 @@
 use crate::error::{PersistError, PersistResult};
 use s3::Bucket;
+use s3::bucket_ops::BucketConfiguration;
 use s3::creds::Credentials;
 use s3::region::Region;
 use std::collections::BTreeMap;
@@ -7,6 +8,7 @@ use std::future::Future;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -106,8 +108,21 @@ impl FilesystemBlobWriter {
 /// S3-backed blob writer rooted at a bucket and optional prefix.
 #[derive(Debug, Clone)]
 pub struct S3BlobWriter {
-    bucket: Box<Bucket>,
+    state: Arc<S3WriterState>,
     prefix: Option<String>,
+}
+
+#[derive(Debug)]
+struct S3WriterState {
+    config: ResolvedS3Config,
+    bucket: Box<Bucket>,
+    readiness: Mutex<S3BucketReadiness>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum S3BucketReadiness {
+    Unknown,
+    Ready,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,11 +146,91 @@ impl S3BlobWriter {
     /// Creates an S3 writer using env-driven AWS-compatible configuration.
     pub fn new(bucket_name: String, prefix: Option<String>) -> PersistResult<Self> {
         let config = resolve_s3_config(bucket_name, prefix, &S3Environment::from_process())?;
+        let normalized_prefix = config.prefix.clone();
         let bucket = build_bucket(&config)?;
         Ok(Self {
-            bucket,
-            prefix: config.prefix,
+            state: Arc::new(S3WriterState {
+                config,
+                bucket,
+                readiness: Mutex::new(S3BucketReadiness::Unknown),
+            }),
+            prefix: normalized_prefix,
         })
+    }
+
+    async fn ensure_bucket_ready(&self) -> PersistResult<Box<Bucket>> {
+        if *self
+            .state
+            .readiness
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            == S3BucketReadiness::Ready
+        {
+            return Ok(self.state.bucket.clone());
+        }
+
+        let bucket = self.state.bucket.clone();
+        if bucket
+            .exists()
+            .await
+            .map_err(|err| PersistError::s3_client("check_bucket", &err))?
+        {
+            self.mark_bucket_ready();
+            return Ok(bucket);
+        }
+
+        let credentials =
+            Credentials::new(None, None, None, None, self.state.config.profile.as_deref())
+                .map_err(|err| {
+                    PersistError::InvalidConfig(format!("invalid S3 credentials: {err}"))
+                })?;
+
+        let response = if self.state.config.path_style {
+            Bucket::create_with_path_style(
+                &self.state.config.bucket_name,
+                self.state.config.region.clone(),
+                credentials,
+                BucketConfiguration::default(),
+            )
+            .await
+            .map_err(|err| PersistError::s3_client("create_bucket", &err))?
+        } else {
+            Bucket::create(
+                &self.state.config.bucket_name,
+                self.state.config.region.clone(),
+                credentials,
+                BucketConfiguration::default(),
+            )
+            .await
+            .map_err(|err| PersistError::s3_client("create_bucket", &err))?
+        };
+
+        if !matches!(response.response_code, 200 | 409) {
+            return Err(PersistError::s3_response(
+                "create_bucket",
+                response.response_code,
+                response.response_text,
+            ));
+        }
+
+        self.mark_bucket_ready();
+        Ok(self.state.bucket.clone())
+    }
+
+    fn mark_bucket_ready(&self) {
+        *self
+            .state
+            .readiness
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = S3BucketReadiness::Ready;
+    }
+
+    fn reset_bucket_ready(&self) {
+        *self
+            .state
+            .readiness
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = S3BucketReadiness::Unknown;
     }
 }
 
@@ -200,7 +295,7 @@ impl BlobWriter for FilesystemBlobWriter {
 
 impl BlobWriter for S3BlobWriter {
     fn write<'a>(&'a self, entry: &'a BlobEntry) -> BoxFuture<'a, PersistResult<StoredBlob>> {
-        let bucket = self.bucket.clone();
+        let writer = self.clone();
         let key = build_object_key(self.prefix.as_deref(), &entry.relative_path);
         let content_type = entry.content_type.clone();
         let size_bytes = entry.bytes.len();
@@ -208,6 +303,7 @@ impl BlobWriter for S3BlobWriter {
         let bytes = entry.bytes.clone();
 
         Box::pin(async move {
+            let bucket = writer.ensure_bucket_ready().await?;
             let result = if let Some(content_type) = content_type.as_deref() {
                 bucket
                     .put_object_with_content_type(&key, &bytes, content_type)
@@ -216,7 +312,17 @@ impl BlobWriter for S3BlobWriter {
                 bucket.put_object(&key, &bytes).await
             };
 
-            result.map_err(|err| PersistError::s3_client("put_object", &err))?;
+            result.map_err(|err| match s3_status_code_for_reset(&err) {
+                Some(404) => {
+                    writer.reset_bucket_ready();
+                    PersistError::S3 {
+                        operation: "put_object",
+                        retryable: true,
+                        message: format!("HTTP 404: {err}"),
+                    }
+                }
+                _ => PersistError::s3_client("put_object", &err),
+            })?;
 
             Ok(StoredBlob {
                 kind: BlobStorageKind::S3,
@@ -229,7 +335,7 @@ impl BlobWriter for S3BlobWriter {
     }
 
     fn delete<'a>(&'a self, blob: &'a StoredBlob) -> BoxFuture<'a, PersistResult<()>> {
-        let bucket = self.bucket.clone();
+        let bucket = self.state.bucket.clone();
         let location = blob.location.clone();
 
         Box::pin(async move {
@@ -324,6 +430,13 @@ fn normalize_relative_path(relative_path: &str) -> String {
         .to_string()
 }
 
+fn s3_status_code_for_reset(err: &s3::error::S3Error) -> Option<u16> {
+    match err {
+        s3::error::S3Error::HttpFailWithBody(status, _) => Some(*status),
+        _ => None,
+    }
+}
+
 fn build_object_key(prefix: Option<&str>, relative_path: &str) -> String {
     let normalized_relative_path = normalize_relative_path(relative_path);
     match prefix {
@@ -348,11 +461,15 @@ fn parse_s3_location<'a>(location: &'a str, bucket: &str) -> PersistResult<&'a s
 #[cfg(test)]
 mod tests {
     use super::{
-        S3Environment, build_object_key, format_s3_location, normalize_prefix, parse_s3_location,
+        FilesystemBlobWriter, ResolvedS3Config, S3BlobWriter, S3BucketReadiness, S3Environment,
+        S3WriterState, build_object_key, format_s3_location, normalize_prefix, parse_s3_location,
         resolve_s3_config,
     };
+    use crate::{BlobEntry, BlobRole, BlobStorageKind, BlobWriter};
+    use s3::Bucket;
     use s3::region::Region;
     use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn s3_key_joining_normalizes_prefix_and_relative_path() {
@@ -457,6 +574,58 @@ mod tests {
         )
         .expect_err("missing region should fail");
         assert!(err.to_string().contains("AWS_REGION or AWS_DEFAULT_REGION"));
+    }
+
+    #[tokio::test]
+    async fn filesystem_writer_creates_deep_parent_directories() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+        let writer = FilesystemBlobWriter::new(temp.path().to_path_buf());
+        let entry = BlobEntry::new(
+            BlobRole::Payload,
+            "qbt/2026/03/16/BOX/nws_text_product/20260316T021530Z-deadbeef-AFDBOX.TXT",
+            b"payload".to_vec(),
+            Some("text/plain"),
+        );
+
+        let stored = writer.write(&entry).await.expect("write should succeed");
+
+        assert_eq!(stored.kind, BlobStorageKind::Filesystem);
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join(&entry.relative_path))
+                .expect("payload should exist"),
+            "payload"
+        );
+    }
+
+    #[test]
+    fn bucket_readiness_can_be_reset() {
+        let writer = S3BlobWriter {
+            state: Arc::new(S3WriterState {
+                config: ResolvedS3Config {
+                    bucket_name: "bucket".to_string(),
+                    prefix: Some("archive".to_string()),
+                    region: Region::UsEast1,
+                    path_style: false,
+                    profile: None,
+                },
+                bucket: Box::new(
+                    Bucket::new_public("bucket", Region::UsEast1).expect("bucket should build"),
+                ),
+                readiness: Mutex::new(S3BucketReadiness::Ready),
+            }),
+            prefix: Some("archive".to_string()),
+        };
+
+        writer.reset_bucket_ready();
+
+        assert_eq!(
+            *writer
+                .state
+                .readiness
+                .lock()
+                .expect("mutex should not be poisoned"),
+            S3BucketReadiness::Unknown
+        );
     }
 
     fn env_with<const N: usize>(entries: [(String, String); N]) -> S3Environment {

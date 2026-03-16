@@ -4,9 +4,18 @@
 //! delivery so the same assembled payload can be retained in memory, exposed over HTTP, and
 //! persisted asynchronously.
 
+use chrono::{DateTime, Utc};
+use crc32fast::Hasher;
 use emwin_db::{BlobEntry, BlobRole, CompletedFileMetadata, PersistRequest};
 use emwin_protocol::ingest::ProductOrigin;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ArchiveStoragePlan {
+    payload_relative_path: String,
+    metadata_relative_path: String,
+    request_key: String,
+}
 
 /// Paths and metadata returned after a file plus sidecar have been written.
 #[cfg(test)]
@@ -93,30 +102,93 @@ pub(crate) fn build_persist_request(
     data: &[u8],
     metadata: CompletedFileMetadata,
 ) -> crate::error::CliResult<PersistRequest<CompletedFileMetadata>> {
-    let metadata_path = metadata_sidecar_path(Path::new(""), filename)
-        .to_string_lossy()
-        .trim_start_matches('/')
-        .to_string();
+    let plan = build_archive_storage_plan(filename, data, &metadata);
     let metadata_bytes = metadata_json_bytes(&metadata)?;
 
     Ok(PersistRequest {
-        request_key: filename.to_string(),
+        request_key: plan.request_key,
         metadata,
         blobs: vec![
             BlobEntry::new(
                 BlobRole::Payload,
-                filename,
+                plan.payload_relative_path,
                 data.to_vec(),
                 Some("application/octet-stream"),
             ),
             BlobEntry::new(
                 BlobRole::MetadataSidecar,
-                metadata_path,
+                plan.metadata_relative_path,
                 metadata_bytes,
                 Some("application/json"),
             ),
         ],
     })
+}
+
+fn build_archive_storage_plan(
+    filename: &str,
+    data: &[u8],
+    metadata: &CompletedFileMetadata,
+) -> ArchiveStoragePlan {
+    let timestamp = timestamp_utc(metadata.timestamp_utc);
+    let origin = origin_segment(&metadata.origin);
+    let office = metadata
+        .product_summary
+        .office
+        .as_ref()
+        .map(|office| office.code.to_string())
+        .filter(|code| !code.is_empty())
+        .unwrap_or_else(|| "UNK".to_string());
+    let family = metadata.product_summary.family.unwrap_or("unknown");
+    let basename = basename_segment(filename);
+    let leaf = format!(
+        "{}-{}-{}",
+        timestamp.format("%Y%m%dT%H%M%SZ"),
+        crc32_hex(data),
+        basename
+    );
+    let payload_relative_path = format!(
+        "{origin}/{}/{}/{}/{office}/{family}/{leaf}",
+        timestamp.format("%Y"),
+        timestamp.format("%m"),
+        timestamp.format("%d")
+    );
+    let metadata_relative_path = metadata_sidecar_path(Path::new(""), &payload_relative_path)
+        .to_string_lossy()
+        .trim_start_matches('/')
+        .to_string();
+
+    ArchiveStoragePlan {
+        request_key: payload_relative_path.clone(),
+        payload_relative_path,
+        metadata_relative_path,
+    }
+}
+
+fn timestamp_utc(timestamp_utc: u64) -> DateTime<Utc> {
+    DateTime::from_timestamp(i64::try_from(timestamp_utc).unwrap_or(0), 0)
+        .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
+}
+
+fn origin_segment(origin: &ProductOrigin) -> &'static str {
+    match origin {
+        ProductOrigin::Qbt => "qbt",
+        ProductOrigin::WxWire { .. } => "wxwire",
+        _ => "unknown",
+    }
+}
+
+fn basename_segment(filename: &str) -> &str {
+    filename
+        .rsplit(['/', '\\'])
+        .find(|segment| !segment.is_empty())
+        .unwrap_or(filename)
+}
+
+fn crc32_hex(data: &[u8]) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(data);
+    format!("{:08x}", hasher.finalize())
 }
 
 #[cfg(test)]
@@ -126,8 +198,8 @@ mod tests {
     use emwin_protocol::ingest::ProductOrigin;
 
     use super::{
-        build_completed_file_metadata, metadata_sidecar_path, persist_completed_record,
-        write_completed_metadata_json,
+        build_archive_storage_plan, build_completed_file_metadata, build_persist_request,
+        metadata_sidecar_path, persist_completed_record, write_completed_metadata_json,
     };
     use std::path::{Path, PathBuf};
 
@@ -246,6 +318,71 @@ mod tests {
             "invalid_wmo_header"
         );
         assert!(decoded["product"].get("parsed").is_none());
+    }
+
+    #[test]
+    fn build_persist_request_uses_partitioned_archival_paths() {
+        let metadata = build_completed_file_metadata(
+            "AFDBOX.TXT",
+            1704070800,
+            ProductOrigin::Qbt,
+            b"000 \nFXUS61 KBOX 022101\nAFDBOX\nBody\n",
+        );
+
+        let request = build_persist_request(
+            "AFDBOX.TXT",
+            b"000 \nFXUS61 KBOX 022101\nAFDBOX\nBody\n",
+            metadata,
+        )
+        .expect("persist request should build");
+
+        assert_eq!(
+            request.request_key,
+            "qbt/2024/01/01/BOX/nws_text_product/20240101T010000Z-3addeb79-AFDBOX.TXT"
+        );
+        assert_eq!(request.blobs[0].relative_path, request.request_key);
+        assert_eq!(
+            request.blobs[1].relative_path,
+            "qbt/2024/01/01/BOX/nws_text_product/20240101T010000Z-3addeb79-AFDBOX.JSON"
+        );
+    }
+
+    #[test]
+    fn archive_storage_plan_flattens_nested_filename_to_basename() {
+        let metadata = build_completed_file_metadata(
+            "nested/TAFPDKGA.TXT",
+            1,
+            ProductOrigin::Qbt,
+            b"000 \nFTUS42 KFFC 022320\nTAFPDK\nBody\n",
+        );
+
+        let plan = build_archive_storage_plan(
+            "nested/TAFPDKGA.TXT",
+            b"000 \nFTUS42 KFFC 022320\nTAFPDK\nBody\n",
+            &metadata,
+        );
+
+        assert_eq!(
+            plan.payload_relative_path,
+            "qbt/1970/01/01/FFC/nws_text_product/19700101T000001Z-e56e022c-TAFPDKGA.TXT"
+        );
+        assert_eq!(
+            plan.metadata_relative_path,
+            "qbt/1970/01/01/FFC/nws_text_product/19700101T000001Z-e56e022c-TAFPDKGA.JSON"
+        );
+    }
+
+    #[test]
+    fn archive_storage_plan_uses_fallback_segments_when_metadata_is_missing() {
+        let metadata =
+            build_completed_file_metadata("nested/UNKNOWN.BIN", 0, ProductOrigin::Qbt, b"payload");
+
+        let plan = build_archive_storage_plan("nested/UNKNOWN.BIN", b"payload", &metadata);
+
+        assert_eq!(
+            plan.payload_relative_path,
+            "qbt/1970/01/01/UNK/unknown/19700101T000000Z-422c6a15-UNKNOWN.BIN"
+        );
     }
 
     #[test]

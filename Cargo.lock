@@ -655,6 +655,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "crc32fast",
  "dotenvy",
  "emwin-db",
  "emwin-parser",
