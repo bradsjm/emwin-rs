@@ -1,0 +1,160 @@
+303
+XOUS54 KWBC 160201
+CAPJAN
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.ae2688ffd23660945b84fbb466883f7041aeafea.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:01:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.21787e6b487e94736a8eff4a0f67a54fe88e1e1b.001.1,2026-03-15T20:30:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>Shelter</responseType>
+        <urgency>Immediate</urgency>
+        <severity>Severe</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T21:01:00-05:00</effective>
+        <onset>2026-03-15T21:01:00-05:00</onset>
+        <expires>2026-03-15T21:45:00-05:00</expires>
+        <senderName>NWS Jackson MS</senderName>
+        <headline>Severe Thunderstorm Warning issued March 15 at 9:01PM CDT until March 15 at 9:45PM CDT by NWS Jackson MS</headline>
+        <description>At 901 PM CDT, a severe thunderstorm was located near Archibald, or
+near Rayville, moving east at 45 mph.
+HAZARD...60 mph wind gusts and nickel size hail.
+SOURCE...Radar indicated.
+IMPACT...Expect damage to roofs, siding, and trees.
+This severe storm will be near...
+Delhi, Bakers, and Holly Ridge around 905 PM CDT.
+Waverly and Tendal around 915 PM CDT.
+</description>
+        <instruction>A Tornado Watch remains in effect until 1100 PM CDT for northeastern
+Louisiana. A Tornado Watch also remains in effect until midnight CDT
+for northeastern Louisiana.
+For your protection move to an interior room on the lowest floor of a
+building.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSJAN</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS54 KJAN 160201</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>A SEVERE THUNDERSTORM WARNING REMAINS IN EFFECT UNTIL 945 PM CDT FOR SOUTH CENTRAL MOREHOUSE...SOUTHWESTERN EAST CARROLL...WESTERN MADISON...RICHLAND...SOUTHWESTERN WEST CARROLL AND NORTHEASTERN FRANKLIN PARISHES</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T02:01:00-00:00...storm...268DEG...38KT...32.4,-91.7</value>
+        </parameter>
+        <parameter>
+            <valueName>windThreat</valueName>
+            <value>RADAR INDICATED</value>
+        </parameter>
+        <parameter>
+            <valueName>maxWindGust</valueName>
+            <value>60 MPH</value>
+        </parameter>
+        <parameter>
+            <valueName>hailThreat</valueName>
+            <value>RADAR INDICATED</value>
+        </parameter>
+        <parameter>
+            <valueName>maxHailSize</valueName>
+            <value>0.88</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KJAN.SV.W.0048.000000T0000Z-260316T0245Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T21:45:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>East Carroll, LA; Franklin, LA; Madison, LA; Morehouse, LA; Richland, LA; West Carroll, LA</areaDesc>
+            <polygon>32.3,-91.88 32.39,-91.85 32.65,-91.73 32.75,-91.65 32.64,-91.16 32.2,-91.39 32.2,-91.53 32.25,-91.91 32.3,-91.88</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022035</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022041</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022065</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022067</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022083</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022123</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC035</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC041</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC065</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC067</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC083</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC123</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

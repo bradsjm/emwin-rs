@@ -1,0 +1,164 @@
+520
+XOUS54 KWBC 160140
+CAPCRP
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.39477eb662d295efd8d9517b5c7c11ae3d7f7cdf.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:40:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a6bf3c57235694268fd7a012f4f0483e693bacc8.001.1,2026-03-15T02:05:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a9c6e4b42b2a18d05ea933bbe830a0ae7017b0cb.001.1,2026-03-15T14:16:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Small Craft Advisory</event>
+        <responseType>Avoid</responseType>
+        <urgency>Expected</urgency>
+        <severity>Minor</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SCY</value>
+        </eventCode>
+        <effective>2026-03-15T20:40:00-05:00</effective>
+        <onset>2026-03-15T20:40:00-05:00</onset>
+        <expires>2026-03-16T13:00:00-05:00</expires>
+        <senderName>NWS Corpus Christi TX</senderName>
+        <headline>Small Craft Advisory issued March 15 at 8:40PM CDT until March 15 at 10:00PM CDT by NWS Corpus Christi TX</headline>
+        <description>* WHAT...For the first Small Craft Advisory, south winds around
+20 knots with gusts up to 25 knots. For the Gale Warning, north
+winds 30 to 40 knots with gusts up to 45 knots and seas 9 to 14
+feet expected. For the second Small Craft Advisory, north winds
+20 to 30 knots and seas 7 to 12 feet expected.
+* WHERE...Baffin Bay and Upper Laguna Madre, Corpus Christi and
+Nueces Bays, Copano, Aransas, and Redfish Bays, San Antonio,
+Mesquite, and Espiritu Santo Bays, Coastal waters from Baffin
+Bay to Port Aransas out 20 NM, Coastal waters from Port
+Aransas to Matagorda Ship Channel out 20 NM, Waters from
+Baffin Bay to Port Aransas from 20 to 60 NM and Waters from
+Port Aransas to Matagorda Ship Channel from 20 to 60 NM.
+* WHEN...For the first Small Craft Advisory, until 10 PM CDT
+this evening. For the Gale Warning, until 1 PM CDT Monday. For
+the second Small Craft Advisory, from 1 PM Monday to 1 AM CDT
+Tuesday.
+* IMPACTS...Gale force winds and high seas will result in
+dangerous marine conditions which could result in capsized or
+damaged vessels.
+</description>
+        <instruction>Mariners should consider altering plans to avoid possible
+hazardous conditions.  Remain in port, seek safe harbor, alter
+course, and/or secure the vessel for severe wind and seas.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>MWWCRP</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WHUS74 KCRP 160140</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>SMALL CRAFT ADVISORY REMAINS IN EFFECT UNTIL 10 PM CDT THIS EVENING... ...GALE WARNING REMAINS IN EFFECT UNTIL 1 PM CDT MONDAY... ...SMALL CRAFT ADVISORY IN EFFECT FROM 1 PM MONDAY TO 1 AM CDT TUESDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KCRP.SC.Y.0019.000000T0000Z-260316T0300Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.9990f6773f928ca9596a570bb7e5a3c31c623266.001.1,2026-03-14T21:47:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6bd1406b9bb5040e50d6bcefb7537eb8d790c405.001.1,2026-03-14T13:54:00-05:00</value>
+        </parameter>
+        <area>
+            <areaDesc>Baffin Bay and Upper Laguna Madre; Corpus Christi and Nueces Bays; Copano, Aransas, and Redfish Bays; San Antonio, Mesquite, and Espiritu Santo Bays; Coastal waters from Baffin Bay to Port Aransas out 20 NM; Coastal waters from Port Aransas to Matagorda Ship Channel out 20 NM; Waters from Baffin Bay to Port Aransas from 20 to 60 NM; Waters from Port Aransas to Matagorda Ship Channel from 20 to 60 NM</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077231</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077232</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077236</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077237</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077250</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077255</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077270</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>077275</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ231</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ232</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ236</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ237</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ250</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ255</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ270</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>GMZ275</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

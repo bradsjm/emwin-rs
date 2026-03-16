@@ -1,0 +1,110 @@
+007
+XOUS55 KWBC 160154
+CAPPUB
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.ba010b169a658a15b10accec81bc22d21f18b28c.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T19:54:00-06:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6d0d5cd48fb7b4fa66b9c00b7496d43bf9d975fa.001.1,2026-03-15T13:13:00-06:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Red Flag Warning</event>
+        <responseType>Prepare</responseType>
+        <urgency>Expected</urgency>
+        <severity>Severe</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>FWW</value>
+        </eventCode>
+        <effective>2026-03-15T19:54:00-06:00</effective>
+        <onset>2026-03-15T19:54:00-06:00</onset>
+        <expires>2026-03-15T21:00:00-06:00</expires>
+        <senderName>NWS Pueblo CO</senderName>
+        <headline>Red Flag Warning issued March 15 at 7:54PM MDT until March 15 at 8:00PM MDT by NWS Pueblo CO</headline>
+        <description>Winds across the San Luis Valley have diminished as humidity
+levels have increased. With criticial fire weather conditions
+no longer anticipated, the Red Flag Warning for the San Luis
+Valley will be allowed to expire at 8 PM MDT.
+</description>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>RFWPUB</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS85 KPUB 160154</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>RED FLAG WARNING WILL EXPIRE AT 8 PM MDT THIS EVENING FOR FIRE WEATHER ZONE 224</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.EXP.KPUB.FW.W.0027.000000T0000Z-260316T0200Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T20:00:00-06:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.d15112454f4e0246836904bbff55ab670e5be62a.001.2,2026-03-14T21:57:00-06:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.535c6ff4af7175fc198a1151dc8c5a383f415bb2.001.2,2026-03-14T12:26:00-06:00</value>
+        </parameter>
+        <area>
+            <areaDesc>San Luis Valley Including Alamosa/Del Norte/Fort Garland/Saguache</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008003</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008015</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008021</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008023</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008105</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>008109</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>COZ224</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

@@ -33,6 +33,22 @@ pub struct WindHailEntry {
     pub comparison: Option<char>,
 }
 
+impl WindHailEntry {
+    pub(crate) fn new(
+        kind: WindHailKind,
+        numeric_value: Option<f64>,
+        units: Option<String>,
+        comparison: Option<char>,
+    ) -> Self {
+        Self {
+            kind,
+            numeric_value,
+            units,
+            comparison,
+        }
+    }
+}
+
 /// Parses all wind and hail tags found in the given text.
 pub fn parse_wind_hail_entries(text: &str) -> Vec<WindHailEntry> {
     parse_wind_hail_entries_with_issues(text).0

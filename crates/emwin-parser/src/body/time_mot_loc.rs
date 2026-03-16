@@ -29,6 +29,23 @@ pub struct TimeMotLocEntry {
     pub wkt: String,
 }
 
+impl TimeMotLocEntry {
+    pub(crate) fn from_parts(
+        time_utc: DateTime<Utc>,
+        direction_degrees: u16,
+        speed_kt: u16,
+        points: Vec<(f64, f64)>,
+    ) -> Self {
+        Self {
+            time_utc,
+            direction_degrees,
+            speed_kt,
+            wkt: format_linestring_wkt(&points),
+            points,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TimeMotLocCandidate<'a> {
     raw: String,

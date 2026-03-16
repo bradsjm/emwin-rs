@@ -3,6 +3,7 @@
 //! This module provides parsing for geographic and temporal codes found within
 //! NWS text product bodies, including VTEC, UGC, HVTEC, and LAT...LON polygons.
 
+mod cap;
 mod enrich;
 mod hvtec;
 mod latlon;
@@ -13,7 +14,10 @@ mod vtec;
 mod vtec_events;
 mod wind_hail;
 
-pub(crate) use enrich::{BodyExtractionPlan, body_extraction_plan, enrich_body_from_plan};
+pub(crate) use enrich::{
+    BodyExtractionPlan, BodyInputFormat, body_extraction_plan, enrich_body_from_plan,
+    enrich_body_from_plan_with_format,
+};
 pub use enrich::{BodyExtractorId, GenericBody, ProductBody, enrich_body};
 pub use hvtec::{
     HvtecCause, HvtecCode, HvtecRecord, HvtecSeverity, parse_hvtec_codes,

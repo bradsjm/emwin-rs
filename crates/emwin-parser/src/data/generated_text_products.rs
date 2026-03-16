@@ -6,7 +6,7 @@
 use super::{TextProductBodyBehavior, TextProductCatalogEntry, TextProductRouting};
 use crate::body::BodyExtractorId;
 
-pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-13T01:38:41Z";
+pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-16T13:55:34Z";
 pub const TEXT_PRODUCT_ENTRY_COUNT: usize = 507;
 
 pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_COUNT] = [
@@ -300,7 +300,13 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         title: "Alert Messages in CAP XML",
         routing: TextProductRouting::Generic,
         body_behavior: TextProductBodyBehavior::Catalog,
-        extractors: &[BodyExtractorId::VtecEvents],
+        extractors: &[
+            BodyExtractorId::VtecEvents,
+            BodyExtractorId::Ugc,
+            BodyExtractorId::LatLon,
+            BodyExtractorId::TimeMotLoc,
+            BodyExtractorId::WindHail,
+        ],
     },
     TextProductCatalogEntry {
         pil: "CCF",

@@ -7,7 +7,7 @@
 use memchr::memchr_iter;
 
 /// Finds the first ASCII case-insensitive occurrence of `needle` in `haystack`.
-pub(super) fn ascii_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
+pub(crate) fn ascii_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
     }
@@ -24,7 +24,7 @@ pub(super) fn ascii_find_case_insensitive(haystack: &str, needle: &str) -> Optio
 }
 
 /// Collects slash-delimited candidates that do not cross line boundaries.
-pub(super) fn scan_slash_delimited_candidates<F>(text: &str, predicate: F) -> Vec<&str>
+pub(crate) fn scan_slash_delimited_candidates<F>(text: &str, predicate: F) -> Vec<&str>
 where
     F: Fn(&str) -> bool,
 {
@@ -57,7 +57,7 @@ where
 }
 
 /// Formats a WKT `LINESTRING` or `POINT` without intermediate `Vec<String>`.
-pub(super) fn format_linestring_wkt(points: &[(f64, f64)]) -> String {
+pub(crate) fn format_linestring_wkt(points: &[(f64, f64)]) -> String {
     if points.len() == 1 {
         return format!("POINT({:.4} {:.4})", points[0].1, points[0].0);
     }
@@ -75,7 +75,7 @@ pub(super) fn format_linestring_wkt(points: &[(f64, f64)]) -> String {
 }
 
 /// Formats a WKT `POLYGON` without intermediate `Vec<String>`.
-pub(super) fn format_polygon_wkt(points: &[(f64, f64)]) -> String {
+pub(crate) fn format_polygon_wkt(points: &[(f64, f64)]) -> String {
     let mut wkt = String::from("POLYGON((");
     for (index, (lat, lon)) in points.iter().enumerate() {
         if index > 0 {

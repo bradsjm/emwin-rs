@@ -9,7 +9,7 @@ use super::{AfosRoutingOverride, TextProductBodyBehavior, TextProductRouting};
 use crate::body::BodyExtractorId;
 
 #[allow(dead_code)]
-pub const AFOS_ROUTING_GENERATED_AT_UTC: &str = "2026-03-13T01:38:41Z";
+pub const AFOS_ROUTING_GENERATED_AT_UTC: &str = "2026-03-16T13:55:34Z";
 pub const AFOS_ROUTING_OVERRIDE_COUNT: usize = 8;
 
 pub static AFOS_ROUTING_OVERRIDES: [AfosRoutingOverride; AFOS_ROUTING_OVERRIDE_COUNT] = [

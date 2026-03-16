@@ -1,0 +1,103 @@
+062
+XOUS53 KWBC 160157
+CAPILX
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.4406f74e405a7b12ed3661fa0f981feb7b3fa86d.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:57:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.930b1f3e79b7fd09398fc404f8f4de10f53140c8.001.1,2026-03-15T20:45:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>Shelter</responseType>
+        <urgency>Immediate</urgency>
+        <severity>Severe</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T20:57:00-05:00</effective>
+        <onset>2026-03-15T20:57:00-05:00</onset>
+        <expires>2026-03-15T21:07:00-05:00</expires>
+        <senderName>NWS Lincoln IL</senderName>
+        <headline>Severe Thunderstorm Warning issued March 15 at 8:57PM CDT until March 15 at 9:00PM CDT by NWS Lincoln IL</headline>
+        <description>The storms which prompted the warning have moved out of the area.
+Therefore, the warning will be allowed to expire.
+A Tornado Watch remains in effect until 1000 PM CDT for southeastern
+and east central Illinois.
+</description>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSILX</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS53 KILX 160157</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>THE SEVERE THUNDERSTORM WARNING FOR EASTERN LAWRENCE AND SOUTHEASTERN CRAWFORD COUNTIES WILL EXPIRE AT 900 PM CDT</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T01:57:00-00:00...storm...216DEG...66KT...38.96,-87.51 38.76,-87.44</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.EXP.KILX.SV.W.0070.000000T0000Z-260316T0200Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T21:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Crawford, IL; Lawrence, IL</areaDesc>
+            <polygon>38.68,-87.54 38.66,-87.6 38.59,-87.63 38.81,-87.72 39.03,-87.58 39.0,-87.58 38.99,-87.56 38.99,-87.58 38.96,-87.51 38.9,-87.52 38.89,-87.54 38.88,-87.53 38.86,-87.55 38.79,-87.5 38.77,-87.51 38.76,-87.5 38.74,-87.5 38.68,-87.54</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>017033</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>017101</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>ILC033</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>ILC101</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

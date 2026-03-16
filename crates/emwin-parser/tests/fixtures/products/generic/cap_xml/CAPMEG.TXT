@@ -1,0 +1,99 @@
+362
+XOUS54 KWBC 160203
+CAPMEG
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.bc30800bbc77ef154d53ea1e500f78fb534489bf.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:03:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Cancel</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.411ce71deecf711d9135917738d25a0f44322e55.001.1,2026-03-15T20:34:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.cd7b1bd5c9884fddbe21839729fa8b9fc168cdde.001.1,2026-03-15T20:50:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>AllClear</responseType>
+        <urgency>Past</urgency>
+        <severity>Minor</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T21:03:00-05:00</effective>
+        <onset>2026-03-15T21:03:00-05:00</onset>
+        <expires>2026-03-15T21:18:58-05:00</expires>
+        <senderName>NWS Memphis TN</senderName>
+        <headline>The Severe Thunderstorm Warning has been cancelled.</headline>
+        <description>The Severe Thunderstorm Warning has been cancelled and is no longer in effect.</description>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSMEG</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS54 KMEG 160203</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>THE SEVERE THUNDERSTORM WARNING FOR SOUTHEASTERN UNION AND NORTHEASTERN PONTOTOC COUNTIES IS CANCELLED</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T02:02:00-00:00...storm...233DEG...47KT...34.52,-88.54</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CAN.KMEG.SV.W.0054.000000T0000Z-260316T0215Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T21:15:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Pontotoc, MS; Union, MS</areaDesc>
+            <polygon>34.31,-88.7 34.42,-88.79 34.44,-88.79 34.49,-88.74 34.51,-88.74 34.76,-88.52 34.76,-88.35 34.74,-88.35 34.74,-88.33 34.41,-88.33 34.31,-88.7</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>028115</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>028145</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MSC115</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MSC145</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

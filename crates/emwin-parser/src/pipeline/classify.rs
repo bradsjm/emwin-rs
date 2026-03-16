@@ -6,6 +6,7 @@
 
 use chrono::{DateTime, Utc};
 
+use crate::body::BodyInputFormat;
 use crate::data::{
     ResolvedTextProductPolicy, TextProductBodyBehavior, TextProductRouting,
     resolved_text_product_policy,
@@ -1241,7 +1242,17 @@ fn build_body_request(
         text: body_text.to_string(),
         plan,
         reference_time,
+        input_format: detect_body_input_format(body_text),
     })
+}
+
+fn detect_body_input_format(body_text: &str) -> BodyInputFormat {
+    let trimmed = body_text.trim_start_matches(|character: char| character.is_ascii_control());
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<alert") {
+        BodyInputFormat::CapXml
+    } else {
+        BodyInputFormat::PlainText
+    }
 }
 
 fn classify_wmo_fd(context: &WmoClassificationContext<'_>) -> Option<ClassificationCandidate> {

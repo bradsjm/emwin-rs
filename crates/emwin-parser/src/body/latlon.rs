@@ -22,6 +22,16 @@ pub struct LatLonPolygon {
     pub wkt: String,
 }
 
+impl LatLonPolygon {
+    pub(crate) fn from_points(points: Vec<(f64, f64)>) -> Result<Self, ProductParseIssue> {
+        let points = validate_polygon(points, "CAP polygon", &mut Vec::new())?;
+        Ok(Self {
+            wkt: format_polygon_wkt(&points),
+            points,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LatLonCandidate<'a> {
     raw: String,

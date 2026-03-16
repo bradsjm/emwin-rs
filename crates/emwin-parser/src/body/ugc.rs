@@ -72,7 +72,7 @@ pub enum UgcClass {
 }
 
 impl UgcClass {
-    fn from_char(c: char) -> Self {
+    pub(crate) fn from_char(c: char) -> Self {
         match c {
             'C' => UgcClass::County,
             'Z' => UgcClass::Zone,
@@ -82,7 +82,7 @@ impl UgcClass {
         }
     }
 
-    fn as_char(self) -> char {
+    pub(crate) fn as_char(self) -> char {
         match self {
             UgcClass::County => 'C',
             UgcClass::Zone => 'Z',
@@ -94,7 +94,7 @@ impl UgcClass {
 }
 
 impl UgcSection {
-    fn from_codes(codes: Vec<UgcCode>, expires: DateTime<Utc>) -> Self {
+    pub(crate) fn from_codes(codes: Vec<UgcCode>, expires: DateTime<Utc>) -> Self {
         let mut counties = BTreeMap::new();
         let mut zones = BTreeMap::new();
         let mut fire_zones = BTreeMap::new();

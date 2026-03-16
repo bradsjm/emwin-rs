@@ -280,7 +280,11 @@
     "routing": "generic",
     "body_behavior": "catalog",
     "extractors": [
-      "vtec_events"
+      "vtec_events",
+      "ugc",
+      "latlon",
+      "time_mot_loc",
+      "wind_hail"
     ]
   },
   "CCF": {

@@ -1,0 +1,91 @@
+291
+XOUS53 KWBC 160201
+CAPIWX
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.badd8c889cd2c0ca43f88b801224bf4689869a9c.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T22:01:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Cancel</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.81dc55b4d596350f2b9a488581a0b1d5f4e87435.001.1,2026-03-15T21:52:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.8aaaf6b1fd6deec955cb6d5f11043e0110aaef39.001.1,2026-03-15T21:53:00-04:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>AllClear</responseType>
+        <urgency>Past</urgency>
+        <severity>Minor</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T22:01:00-04:00</effective>
+        <onset>2026-03-15T22:01:00-04:00</onset>
+        <expires>2026-03-15T22:16:15-04:00</expires>
+        <senderName>NWS Northern Indiana</senderName>
+        <headline>The Severe Thunderstorm Warning has been cancelled.</headline>
+        <description>The Severe Thunderstorm Warning has been cancelled and is no longer in effect.</description>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSIWX</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS53 KIWX 160201</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>THE SEVERE THUNDERSTORM WARNING FOR NORTHEASTERN WHITE COUNTY IS CANCELLED</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T02:00:00-00:00...storm...232DEG...57KT...41.05,-86.66 40.79,-86.47 40.44,-86.56</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CAN.KIWX.SV.W.0036.000000T0000Z-260316T0230Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:30:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>White, IN</areaDesc>
+            <polygon>40.69,-86.37 40.69,-86.52 40.74,-86.52 40.74,-86.55 40.77,-86.54 40.83,-86.58 40.91,-86.58 40.91,-86.64 40.94,-86.66 41.03,-86.55 41.13,-86.33 41.02,-86.08 40.79,-86.06 40.64,-86.37 40.69,-86.37</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>018181</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>INC181</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

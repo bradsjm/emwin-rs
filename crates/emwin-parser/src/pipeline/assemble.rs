@@ -4,14 +4,16 @@
 //! owns all specialized parsing, and assembly performs a pure conversion from
 //! candidate to the public output model.
 
-use crate::data::{NonTextProductMeta, container_from_filename, wmo_office_entry};
+use crate::data::{container_from_filename, wmo_office_entry, NonTextProductMeta};
 use crate::{
-    ParserError, ProductArtifact, ProductEnrichment, ProductEnrichmentSource, ProductParseIssue,
-    TextProductHeader, WmoHeader, wmo_prefix_for_pil,
+    body::{enrich_body_from_plan, enrich_body_from_plan_with_format, BodyInputFormat},
+    ProductBody,
 };
-use crate::{ProductBody, body::enrich_body_from_plan};
+use crate::{
+    wmo_prefix_for_pil, ParserError, ProductArtifact, ProductEnrichment, ProductEnrichmentSource,
+    ProductParseIssue, TextProductHeader, WmoHeader,
+};
 
-use super::ClassificationCandidate;
 use super::candidate::{
     BodyContributionRequest, Cf6Candidate, CliCandidate, CwaCandidate, DcpCandidate, DsmCandidate,
     EroCandidate, FdCandidate, HmlCandidate, LsrCandidate, MalformedFamilyCandidate, McdCandidate,
@@ -19,6 +21,7 @@ use super::candidate::{
     SpcOutlookCandidate, TafCandidate, TextGenericCandidate, UnsupportedWmoCandidate, WwpCandidate,
 };
 use super::normalize::detected_container;
+use super::ClassificationCandidate;
 
 /// Assembles the public enrichment result from a parsed classification candidate.
 ///
@@ -478,8 +481,17 @@ fn assemble_optional_body(
 ) -> (Option<ProductBody>, Vec<ProductParseIssue>) {
     match request {
         Some(request) => {
-            let outcome =
-                enrich_body_from_plan(&request.text, &request.plan, request.reference_time);
+            let outcome = match request.input_format {
+                BodyInputFormat::PlainText => {
+                    enrich_body_from_plan(&request.text, &request.plan, request.reference_time)
+                }
+                BodyInputFormat::CapXml => enrich_body_from_plan_with_format(
+                    &request.text,
+                    &request.plan,
+                    request.reference_time,
+                    request.input_format,
+                ),
+            };
             (outcome.body, outcome.issues)
         }
         None => (None, Vec::new()),
@@ -721,13 +733,14 @@ mod tests {
 
     use chrono::{TimeZone, Utc};
 
-    use crate::ParserError;
+    use crate::body::BodyInputFormat;
     use crate::specialized::dcp::parse_dcp_bulletin;
     use crate::specialized::fd::parse_fd_bulletin;
-    use crate::specialized::metar::{MetarBulletin, parse_metar_bulletin};
+    use crate::specialized::metar::{parse_metar_bulletin, MetarBulletin};
     use crate::specialized::pirep::parse_pirep_bulletin;
     use crate::specialized::sigmet::parse_sigmet_bulletin;
     use crate::specialized::taf::parse_taf_bulletin;
+    use crate::ParserError;
     use crate::{
         Cf6Bulletin, Cf6DayRow, CwaBulletin, CwaGeometry, CwaGeometryKind, DsmBulletin, DsmSummary,
         GeoPoint, HmlBulletin, HmlDatum, HmlDocument, HmlSeries, LsrBulletin, LsrReport,
@@ -810,13 +823,11 @@ mod tests {
         let enrichment = assemble_product_enrichment(candidate, "FD1US1.TXT", b"ignored");
 
         assert_eq!(enrichment.family, Some("fd_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_fd)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_fd)
+            .is_some());
     }
 
     #[test]
@@ -839,13 +850,11 @@ mod tests {
             enrichment.source,
             crate::ProductEnrichmentSource::TextHeader
         );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_pirep)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_pirep)
+            .is_some());
     }
 
     #[test]
@@ -868,13 +877,11 @@ mod tests {
         let enrichment = assemble_product_enrichment(candidate, "SIGABC.TXT", b"ignored");
 
         assert_eq!(enrichment.family, Some("sigmet_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_sigmet)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_sigmet)
+            .is_some());
     }
 
     #[test]
@@ -918,20 +925,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("lsr_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_lsr)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_cwa)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_lsr)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_cwa)
+            .is_none());
         assert!(enrichment.body.is_none());
         assert_eq!(enrichment.issues.len(), 1);
     }
@@ -979,20 +982,16 @@ mod tests {
         assert_eq!(enrichment.family, Some("cwa_bulletin"));
         assert!(enrichment.header.is_none());
         assert!(enrichment.wmo_header.is_some());
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_cwa)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_wwp)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_cwa)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_wwp)
+            .is_none());
         assert!(enrichment.body.is_none());
     }
 
@@ -1031,20 +1030,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("wwp_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_wwp)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_cf6)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_wwp)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_cf6)
+            .is_none());
         assert!(enrichment.body.is_none());
     }
 
@@ -1062,6 +1057,7 @@ mod tests {
                     crate::BodyExtractorId::LatLon,
                 ]),
                 reference_time: Some(Utc::now()),
+                input_format: BodyInputFormat::PlainText,
             }),
             bulletin: SawBulletin {
                 saw_number: 2,
@@ -1087,13 +1083,11 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("saw_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_saw)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_saw)
+            .is_some());
         assert!(enrichment.body.is_some());
     }
 
@@ -1107,6 +1101,7 @@ mod tests {
                 text: "IAC001-022320-\n".to_string(),
                 plan: crate::body::body_extraction_plan(&[crate::BodyExtractorId::Ugc]),
                 reference_time: Some(Utc::now()),
+                input_format: BodyInputFormat::PlainText,
             }),
             bulletin: SelBulletin {
                 watch_number: 542,
@@ -1123,13 +1118,11 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("sel_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_sel)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_sel)
+            .is_some());
         assert!(enrichment.body.is_some());
     }
 
@@ -1183,20 +1176,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("cf6_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_cf6)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dsm)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_cf6)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_dsm)
+            .is_none());
         assert!(enrichment.body.is_none());
         assert_eq!(enrichment.issues.len(), 1);
     }
@@ -1244,20 +1233,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("dsm_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dsm)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_hml)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_dsm)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_hml)
+            .is_none());
         assert!(enrichment.body.is_none());
     }
 
@@ -1300,20 +1285,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("hml_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_hml)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_mos)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_hml)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_mos)
+            .is_none());
         assert!(enrichment.body.is_none());
     }
 
@@ -1349,20 +1330,16 @@ mod tests {
             crate::ProductEnrichmentSource::TextHeader
         );
         assert_eq!(enrichment.family, Some("mos_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_mos)
-                .is_some()
-        );
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_lsr)
-                .is_none()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_mos)
+            .is_some());
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_lsr)
+            .is_none());
         assert!(enrichment.body.is_none());
     }
 
@@ -1412,13 +1389,11 @@ mod tests {
         let enrichment = assemble_product_enrichment(candidate, "TAFWBCFJ.TXT", b"ignored");
 
         assert_eq!(enrichment.family, Some("taf_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_taf)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_taf)
+            .is_some());
     }
 
     #[test]
@@ -1435,13 +1410,11 @@ mod tests {
         let enrichment = assemble_product_enrichment(candidate, "MISDCPSV.TXT", b"ignored");
 
         assert_eq!(enrichment.family, Some("dcp_telemetry_bulletin"));
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dcp)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_dcp)
+            .is_some());
     }
 
     #[test]
@@ -1504,6 +1477,7 @@ mod tests {
                     .and_then(crate::data::body_extraction_plan_for_entry)
                     .expect("SVR should have body extraction plan"),
                 reference_time: Some(Utc::now()),
+                input_format: BodyInputFormat::PlainText,
             }),
             bbb_kind: None,
             reference_time: Some(Utc::now()),
@@ -1512,13 +1486,11 @@ mod tests {
         let enrichment = assemble_product_enrichment(candidate, "TAFPDKGA.TXT", b"ignored");
 
         assert!(enrichment.body.is_some());
-        assert!(
-            enrichment
-                .body
-                .as_ref()
-                .and_then(|body| body.as_vtec_event())
-                .is_some()
-        );
+        assert!(enrichment
+            .body
+            .as_ref()
+            .and_then(|body| body.as_vtec_event())
+            .is_some());
     }
 
     #[test]
@@ -1553,6 +1525,7 @@ mod tests {
                     crate::body::BodyExtractorId::TimeMotLoc,
                 ]),
                 reference_time: None,
+                input_format: BodyInputFormat::PlainText,
             }),
             bbb_kind: None,
             reference_time: None,
@@ -1582,6 +1555,7 @@ mod tests {
                     crate::body::BodyExtractorId::VtecEvents,
                 ]),
                 reference_time: Some(Utc::now()),
+                input_format: BodyInputFormat::PlainText,
             }),
             bulletin,
             issues: Vec::new(),
@@ -1589,20 +1563,16 @@ mod tests {
 
         let enrichment = assemble_product_enrichment(candidate, "SIGABC.TXT", b"ignored");
 
-        assert!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_sigmet)
-                .is_some()
-        );
+        assert!(enrichment
+            .parsed
+            .as_ref()
+            .and_then(ProductArtifact::as_sigmet)
+            .is_some());
         assert!(enrichment.body.is_some());
-        assert!(
-            enrichment
-                .body
-                .as_ref()
-                .and_then(|body| body.as_vtec_event())
-                .is_some()
-        );
+        assert!(enrichment
+            .body
+            .as_ref()
+            .and_then(|body| body.as_vtec_event())
+            .is_some());
     }
 }

@@ -1,0 +1,132 @@
+447
+XOUS51 KWBC 160134
+CAPILN
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.85ecd704066279dcb80ff1852afa7d685f623061.003.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:34:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.7be428ff361efd09e314c59cc64b99573832a887.001.1,2026-03-15T12:27:00-04:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.bfd3310ef21df61785fe594515a55868953d09a2.004.1,2026-03-15T13:47:00-04:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Wind Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WIY</value>
+        </eventCode>
+        <effective>2026-03-15T21:34:00-04:00</effective>
+        <onset>2026-03-16T00:00:00-04:00</onset>
+        <expires>2026-03-16T05:45:00-04:00</expires>
+        <senderName>NWS Wilmington OH</senderName>
+        <headline>Wind Advisory issued March 15 at 9:34PM EDT until March 16 at 8:00AM EDT by NWS Wilmington OH</headline>
+        <description>* WHAT...South winds 15 to 20 mph with gusts up to 50 mph becoming
+west southwest expected.
+* WHERE...In Kentucky, Lewis County. In Ohio, Hocking, Adams, Pike,
+Ross, and Scioto Counties.
+* WHEN...Until 8 AM EDT Monday.
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree
+limbs could be blown down and a few power outages may result.
+</description>
+        <instruction>Use extra caution when driving, especially if operating a high
+profile vehicle.
+Secure outdoor objects.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>NPWILN</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS71 KILN 160134</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WIND ADVISORY REMAINS IN EFFECT UNTIL 8 AM EDT MONDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KILN.WI.Y.0005.260316T0400Z-260316T1200Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-16T08:00:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Lewis; Ross; Hocking; Adams; Pike; Scioto</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>021135</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>039141</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>039073</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>039001</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>039131</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>039145</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KYZ100</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>OHZ073</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>OHZ074</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>OHZ081</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>OHZ082</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>OHZ088</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

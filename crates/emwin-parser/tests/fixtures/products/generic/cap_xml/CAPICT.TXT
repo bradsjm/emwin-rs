@@ -1,0 +1,110 @@
+242
+XOUS53 KWBC 160159
+CAPICT
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.556362064d0e654301129ccb13efe2e8087ac87c.002.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:59:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.5b3600ed699b55287dc8dc015d2567b863d971df.003.1,2026-03-15T12:55:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a3d46ca5f028f989e09d825f7d66663378b5e9cb.003.1,2026-03-15T12:58:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Wind Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WIY</value>
+        </eventCode>
+        <effective>2026-03-15T20:59:00-05:00</effective>
+        <onset>2026-03-15T20:59:00-05:00</onset>
+        <expires>2026-03-15T22:00:00-05:00</expires>
+        <senderName>NWS Wichita KS</senderName>
+        <headline>Wind Advisory issued March 15 at 8:59PM CDT until March 15 at 10:00PM CDT by NWS Wichita KS</headline>
+        <description>* WHAT...Northwest winds between 25 to 30 mph with gusts up to 50
+mph.
+* WHERE...Allen, Labette, and Neosho Counties.
+* WHEN...Until 10 PM CDT this evening.
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree
+limbs could be blown down and a few power outages may result.
+</description>
+        <instruction>Winds this strong can make driving difficult, especially for high
+profile vehicles. Use extra caution.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>NPWICT</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS73 KICT 160159</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WIND ADVISORY REMAINS IN EFFECT UNTIL 10 PM CDT THIS EVENING</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KICT.WI.Y.0003.000000T0000Z-260316T0300Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.7a707e257ec79301f7a73008c38b876a22833dcd.003.1,2026-03-15T02:57:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.23480b36f481a3c6a17aa1f1959ba45e45592298.004.1,2026-03-14T11:21:00-05:00</value>
+        </parameter>
+        <area>
+            <areaDesc>Allen; Neosho; Labette</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>020001</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>020133</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>020099</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KSZ072</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KSZ096</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KSZ100</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

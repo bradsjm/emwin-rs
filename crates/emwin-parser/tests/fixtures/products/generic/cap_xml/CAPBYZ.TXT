@@ -1,0 +1,102 @@
+523
+XOUS55 KWBC 160140
+CAPBYZ
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.f83a94f9b4c3c35e9a2d45909756cdf56840672c.003.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T19:40:00-06:00</sent>
+    <status>Actual</status>
+    <msgType>Alert</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>High Wind Watch</event>
+        <responseType>Prepare</responseType>
+        <urgency>Future</urgency>
+        <severity>Severe</severity>
+        <certainty>Possible</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>HWA</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>HWA</value>
+        </eventCode>
+        <effective>2026-03-15T19:40:00-06:00</effective>
+        <onset>2026-03-16T15:00:00-06:00</onset>
+        <expires>2026-03-16T19:45:00-06:00</expires>
+        <senderName>NWS Billings MT</senderName>
+        <headline>High Wind Watch issued March 15 at 7:40PM MDT until March 17 at 9:00PM MDT by NWS Billings MT</headline>
+        <description>* WHAT...West winds gusting up to 60 mph possible.
+* WHERE...Golden Valley and Northern Stillwater.
+* WHEN...From Monday afternoon through Tuesday evening.
+* IMPACTS...Travel could be difficult, especially for high profile
+vehicles.
+</description>
+        <instruction>Winds this strong can make driving difficult, especially for high
+profile vehicles. Use extra caution and consider postponing travel
+until winds subside, or take an alternate route.
+Monitor the latest forecast for updates.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>NPWBYZ</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS75 KBYZ 160140</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>HIGH WIND WATCH IN EFFECT FROM MONDAY AFTERNOON THROUGH TUESDAY EVENING</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.NEW.KBYZ.HW.A.0011.260316T2100Z-260318T0300Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-17T21:00:00-06:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Northern Stillwater; Golden Valley</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>030095</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>030037</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MTZ034</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MTZ042</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

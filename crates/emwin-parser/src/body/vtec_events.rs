@@ -32,6 +32,19 @@ pub struct VtecEventSegment {
     pub wind_hail: Vec<WindHailEntry>,
 }
 
+pub(crate) fn validate_vtec_event_segments(
+    segments: &[VtecEventSegment],
+) -> Vec<ProductParseIssue> {
+    let mut issues = Vec::new();
+    for segment in segments {
+        issues.extend(validate_vtec_segment(
+            segment,
+            VtecSegmentQcContext::default(),
+        ));
+    }
+    issues
+}
+
 pub(crate) fn parse_vtec_event_body_with_issues(
     text: &str,
     reference_time: Option<DateTime<Utc>>,

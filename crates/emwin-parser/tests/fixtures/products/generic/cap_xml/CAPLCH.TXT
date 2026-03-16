@@ -1,0 +1,126 @@
+348
+XOUS54 KWBC 160203
+CAPLCH
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.2e90e41a140a0587dfb2c7cf9679b70f3d1516a6.002.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:03:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.0f1a710784f3adc4c49ddae37ff6f55221219c1e.001.1,2026-03-15T20:11:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.b73d22349239b3d99b7a3df747082fae85f6b8f2.001.1,2026-03-15T20:23:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a733d0c72c2d9ac3e48eddc0735fbdb698097b75.001.1,2026-03-15T20:32:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.a989ba6aa94053e67fbaec6fde8c273123aea519.001.1,2026-03-15T20:42:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.ab1722508b02026d0f42a5ec9fdac7b96684caec.001.1,2026-03-15T20:50:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>Shelter</responseType>
+        <urgency>Immediate</urgency>
+        <severity>Severe</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T21:03:00-05:00</effective>
+        <onset>2026-03-15T21:03:00-05:00</onset>
+        <expires>2026-03-15T21:15:00-05:00</expires>
+        <senderName>NWS Lake Charles LA</senderName>
+        <headline>Severe Thunderstorm Warning issued March 15 at 9:03PM CDT until March 15 at 9:15PM CDT by NWS Lake Charles LA</headline>
+        <description>At 902 PM CDT, a severe thunderstorm was located near Rosepine,
+moving east at 35 mph.
+HAZARD...60 mph wind gusts and nickel size hail.
+SOURCE...Radar indicated.
+IMPACT...Expect damage to roofs, siding, and trees.
+Locations impacted include...
+De Ridder, Rosepine, and Junction.
+</description>
+        <instruction>A Tornado Watch remains in effect until midnight CDT for southwestern
+and west central Louisiana...and southeastern Texas.
+For your protection move to an interior room on the lowest floor of a
+building.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSLCH</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS54 KLCH 160203</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>A SEVERE THUNDERSTORM WARNING REMAINS IN EFFECT UNTIL 915 PM CDT FOR NORTH CENTRAL BEAUREGARD AND SOUTHWESTERN VERNON PARISHES</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T02:02:00-00:00...storm...279DEG...29KT...30.91,-93.36</value>
+        </parameter>
+        <parameter>
+            <valueName>windThreat</valueName>
+            <value>RADAR INDICATED</value>
+        </parameter>
+        <parameter>
+            <valueName>maxWindGust</valueName>
+            <value>60 MPH</value>
+        </parameter>
+        <parameter>
+            <valueName>hailThreat</valueName>
+            <value>RADAR INDICATED</value>
+        </parameter>
+        <parameter>
+            <valueName>maxHailSize</valueName>
+            <value>0.88</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KLCH.SV.W.0031.000000T0000Z-260316T0215Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T21:15:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Beauregard, LA; Vernon, LA</areaDesc>
+            <polygon>31.03,-93.19 30.72,-93.34 30.81,-93.56 30.82,-93.57 30.83,-93.55 30.84,-93.57 30.85,-93.56 30.87,-93.56 30.95,-93.5 31.02,-93.37 31.03,-93.19</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022011</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>022115</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC011</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LAC115</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

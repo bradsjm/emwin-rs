@@ -1,0 +1,98 @@
+859
+XOHW50 KWBC 160146
+CAPHFO
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.46b268fa817f3d6bac93f9f0beb564a2064aa11f.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T15:46:00-10:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.035b23a10aadb3886aea713503f8633fc9260a86.001.1,2026-03-15T03:42:00-10:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.921a864b6d37a38881a855cbf7f738379f1c7103.001.1,2026-03-15T15:44:00-10:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>High Surf Advisory</event>
+        <responseType>Avoid</responseType>
+        <urgency>Expected</urgency>
+        <severity>Minor</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SUY</value>
+        </eventCode>
+        <effective>2026-03-15T15:46:00-10:00</effective>
+        <onset>2026-03-15T15:46:00-10:00</onset>
+        <expires>2026-03-16T04:45:00-10:00</expires>
+        <senderName>NWS Honolulu HI</senderName>
+        <headline>High Surf Advisory issued March 15 at 3:46PM HST until March 16 at 6:00AM HST by NWS Honolulu HI</headline>
+        <description>...HIGH SURF ADVISORY IN EFFECT UNTIL 6 AM HST MONDAY FOR WEST
+FACING SHORES OF THE BIG ISLAND...
+.Strong south to southwesterly winds will bring large and rough
+surf to west facing shores of the Big Island through tonight. Surf
+is expected to fall below advisory criteria on Monday.
+* WHAT...Surf 6 to 8 feet.
+* WHERE...West facing shores of the Big Island.
+* WHEN...Until 6 AM HST Monday.
+* IMPACTS...Moderate. Strong breaking waves and strong currents
+will make swimming dangerous.
+</description>
+        <instruction>Heed all advice from ocean safety officials. When in doubt, don't
+go out.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>CFWHFO</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WHHW40 PHFO 160146 CCA</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>HIGH SURF ADVISORY NOW IN EFFECT UNTIL 6 AM HST MONDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.EXT.PHFO.SU.Y.0019.000000T0000Z-260316T1600Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-16T06:00:00-10:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Kona; Kohala</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>015001</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>HIZ023</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>HIZ026</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

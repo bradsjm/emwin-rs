@@ -5,6 +5,7 @@
 //! products now emit an event-oriented body model, while non-VTEC generic
 //! products continue to emit a simpler generic body shape.
 
+use crate::body::cap::parse_cap_body_with_issues;
 use crate::body::vtec_events::{
     VtecEventBody, parse_vtec_event_body_with_issues, vtec_event_body_has_marine_only_ugc,
     vtec_event_body_iter_location_points, vtec_event_body_iter_polygons,
@@ -184,6 +185,13 @@ pub(crate) struct BodyExtractionPlan {
     pub(crate) qc_rules: &'static [BodyQcRuleId],
 }
 
+/// Input-format hint for plan-driven body parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BodyInputFormat {
+    PlainText,
+    CapXml,
+}
+
 /// Shared context passed to plan-driven extractors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BodyExtractionContext<'a> {
@@ -241,6 +249,19 @@ pub(crate) fn enrich_body_from_plan(
     plan: &BodyExtractionPlan,
     reference_time: Option<DateTime<Utc>>,
 ) -> BodyExtractionOutcome {
+    enrich_body_from_plan_with_format(text, plan, reference_time, BodyInputFormat::PlainText)
+}
+
+pub(crate) fn enrich_body_from_plan_with_format(
+    text: &str,
+    plan: &BodyExtractionPlan,
+    reference_time: Option<DateTime<Utc>>,
+    input_format: BodyInputFormat,
+) -> BodyExtractionOutcome {
+    if input_format == BodyInputFormat::CapXml {
+        return parse_cap_body_with_issues(text, plan, reference_time);
+    }
+
     let context = BodyExtractionContext {
         text,
         reference_time,

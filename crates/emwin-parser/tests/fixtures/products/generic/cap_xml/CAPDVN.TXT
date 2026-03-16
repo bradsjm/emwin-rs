@@ -1,0 +1,119 @@
+892
+XOUS53 KWBC 160149
+CAPDVN
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.6f2726ce30b831fab6ef305b2d804159fbdc8d3f.004.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:49:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.2b7520c78321a62c3e6c4530c0a445445d973f7b.004.1,2026-03-15T13:18:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Winter Weather Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WWY</value>
+        </eventCode>
+        <effective>2026-03-15T20:49:00-05:00</effective>
+        <onset>2026-03-15T20:49:00-05:00</onset>
+        <expires>2026-03-16T05:00:00-05:00</expires>
+        <senderName>NWS Quad Cities IA IL</senderName>
+        <headline>Winter Weather Advisory issued March 15 at 8:49PM CDT until March 16 at 1:00PM CDT by NWS Quad Cities IA IL</headline>
+        <description>* WHAT...Snow. Additional snow accumulations between 1 and 3 inches.
+Winds gusting as high as 55 mph.
+* WHERE...In Illinois, Hancock and McDonough Counties. In Missouri,
+Clark and Scotland Counties.
+* WHEN...Until 1 PM CDT Monday.
+* IMPACTS...Plan on slippery road conditions. Widespread blowing
+snow could significantly reduce visibility. The hazardous
+conditions could impact the Monday morning commute. Strong winds
+could cause tree damage.
+</description>
+        <instruction>Slow down and use caution while traveling. In Illinois, the latest
+road conditions are available at gettingaroundillinois.com. In
+Missouri, the latest road conditions are available at modot.org or
+by calling 511.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>WSWDVN</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS43 KDVN 160149</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WINTER WEATHER ADVISORY REMAINS IN EFFECT UNTIL 1 PM CDT MONDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KDVN.WW.Y.0005.000000T0000Z-260316T1800Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-16T13:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Hancock; McDonough; Scotland; Clark</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>017067</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>017109</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>029199</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>029045</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>ILZ034</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>ILZ035</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MOZ009</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MOZ010</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

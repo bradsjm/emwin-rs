@@ -1,0 +1,102 @@
+898
+XOUS53 KWBC 160150
+CAPJKL
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.411871b9d56d53a1ea0a0a415e50be8ff56c7bff.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:50:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.d79b1e485e760a3b3c091632383e2eddb93c517a.001.1,2026-03-15T14:13:00-04:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Winter Weather Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WWY</value>
+        </eventCode>
+        <effective>2026-03-15T21:50:00-04:00</effective>
+        <onset>2026-03-16T12:00:00-04:00</onset>
+        <expires>2026-03-16T08:00:00-04:00</expires>
+        <senderName>NWS Jackson KY</senderName>
+        <headline>Winter Weather Advisory issued March 15 at 9:50PM EDT until March 17 at 8:00AM EDT by NWS Jackson KY</headline>
+        <description>* WHAT...Snow showers expected with snow squalls possible. Total
+snow accumulations of up to 2 inches with locally higher amounts
+possible. Winds gusting as high as 35 mph as temperatures fall
+into the 20s at lower elevations and 10s above 2,500 feet. Sudden
+visibility reductions to 1/4 mile or less possible in snow squalls.
+* WHERE...Harlan and Letcher Counties.
+* WHEN...From noon Monday to 8 AM EDT Tuesday.
+* IMPACTS...Plan on slippery road conditions, especially at
+elevations above 2,500 feet. The hazardous conditions could impact
+the Monday evening commute.
+</description>
+        <instruction>Slow down and use caution while traveling. The latest road
+conditions for Kentucky can be found by visiting https://goky.ky.gov.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>WSWJKL</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS43 KJKL 160150</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WINTER WEATHER ADVISORY REMAINS IN EFFECT FROM NOON MONDAY TO 8 AM EDT TUESDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KJKL.WW.Y.0010.260316T1600Z-260317T1200Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-17T08:00:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Harlan; Letcher</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>021095</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>021133</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KYZ088</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>KYZ118</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

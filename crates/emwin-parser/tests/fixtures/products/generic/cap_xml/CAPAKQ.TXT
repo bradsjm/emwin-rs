@@ -1,0 +1,139 @@
+991
+XOUS51 KWBC 160153
+CAPAKQ
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.766187ed6b162662041aae3a4e970a73df422735.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:53:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Alert</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Wind Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WIY</value>
+        </eventCode>
+        <effective>2026-03-15T21:53:00-04:00</effective>
+        <onset>2026-03-16T13:00:00-04:00</onset>
+        <expires>2026-03-16T06:00:00-04:00</expires>
+        <senderName>NWS Wakefield VA</senderName>
+        <headline>Wind Advisory issued March 15 at 9:53PM EDT until March 17 at 1:00AM EDT by NWS Wakefield VA</headline>
+        <description>* WHAT...South winds 20 to 30 mph with gusts up to 45 mph expected.
+* WHERE...In Maryland, Dorchester, Inland Worcester, Maryland
+Beaches, Somerset, and Wicomico Counties. In Virginia, Northampton
+and Accomack Counties.
+* WHEN...From 1 PM Monday to 1 AM EDT Tuesday.
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree
+limbs could be blown down and a few power outages may result.
+</description>
+        <instruction>Winds this strong can make driving difficult, especially for high
+profile vehicles. Use extra caution.
+Secure outdoor objects.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>NPWAKQ</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS71 KAKQ 160153</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WIND ADVISORY REMAINS IN EFFECT FROM 1 PM MONDAY TO 1 AM EDT TUESDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KAKQ.WI.Y.0004.260316T1700Z-260317T0500Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-17T01:00:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.f13ca1198a5c386ae0f8fe5fd375ddf9da575628.001.1,2026-03-15T13:41:00-04:00</value>
+        </parameter>
+        <area>
+            <areaDesc>Dorchester; Wicomico; Somerset; Inland Worcester; Maryland Beaches; Accomack; Northampton</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>024019</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>024045</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>024039</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>024047</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>051001</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>051131</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MDZ021</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MDZ022</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MDZ023</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MDZ024</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>MDZ025</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>VAZ099</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>VAZ100</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

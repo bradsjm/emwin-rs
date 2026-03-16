@@ -1,0 +1,178 @@
+833
+XOUS53 KWBC 160145
+CAPOAX
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.0cfff681c255e52d59a1e4ffcbf187e15dd02be0.004.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:45:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.b67cd2796c89a24b69a76a50f79092585754ec76.002.1,2026-03-14T23:35:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6724dc241718fcc4e1995597985fc4cab3e679ba.002.1,2026-03-14T23:42:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.6724dc241718fcc4e1995597985fc4cab3e679ba.003.1,2026-03-14T23:42:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.c7a517d8c29e61bc95c26ad03b5cf9c5954b780f.003.1,2026-03-15T08:39:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Winter Weather Advisory</event>
+        <responseType>Execute</responseType>
+        <urgency>Expected</urgency>
+        <severity>Moderate</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>WWY</value>
+        </eventCode>
+        <effective>2026-03-15T20:45:00-05:00</effective>
+        <onset>2026-03-15T20:45:00-05:00</onset>
+        <expires>2026-03-15T22:00:00-05:00</expires>
+        <senderName>NWS Omaha/Valley NE</senderName>
+        <headline>Winter Weather Advisory issued March 15 at 8:45PM CDT until March 15 at 10:00PM CDT by NWS Omaha/Valley NE</headline>
+        <description>* WHAT...Very strong winds combined with snowfall will continue to
+lead to greatly reduced visibility. Additional snow accumulations
+up to a half inch. Winds gusting as high as 60 mph.
+* WHERE...Portions of southwest Iowa and east central and southeast
+Nebraska.
+* WHEN...Until 10 PM CDT this evening.
+* IMPACTS...Plan on slippery road conditions. Areas of blowing snow
+could significantly reduce visibility. Strong winds could cause
+tree damage.
+</description>
+        <instruction>Slow down and use caution while traveling. The latest road
+conditions for the state you are calling from can be obtained by
+calling 5 1 1.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>WSWOAX</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS43 KOAX 160145</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>WINTER WEATHER ADVISORY NOW IN EFFECT UNTIL 10 PM CDT THIS EVENING</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.EXT.KOAX.WW.Y.0006.000000T0000Z-260316T0300Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.1cff6bf176753b6de818fb4ed9304ee680b43709.004.1,2026-03-14T11:16:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.1cff6bf176753b6de818fb4ed9304ee680b43709.003.2,2026-03-14T11:16:00-05:00</value>
+        </parameter>
+        <area>
+            <areaDesc>Harrison; Pottawattamie; Mills; Montgomery; Fremont; Page; Burt; Washington; Douglas; Sarpy; Cass</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019085</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019155</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019129</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019137</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019071</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>019145</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>031021</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>031177</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>031055</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>031153</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>031025</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ055</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ069</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ079</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ080</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ090</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>IAZ091</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>NEZ034</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>NEZ045</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>NEZ052</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>NEZ053</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>NEZ067</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

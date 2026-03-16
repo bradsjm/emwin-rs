@@ -27,6 +27,7 @@ The crate currently supports:
     - `TIME...MOT...LOC`
     - wind/hail tags
   - non-VTEC generic body fields such as UGC, `LAT...LON`, `TIME...MOT...LOC`, and wind/hail tags
+  - CAP XML body projection into those same existing body shapes when CAP parameters and areas carry matching data
 - Structured specialized parsing for:
   - FD winds and temperatures aloft bulletins
   - PIREP bulletins
@@ -111,6 +112,7 @@ crates/emwin-parser/src
 |
 +-- body/
 |   +-- enrich.rs    # plan-driven generic body extraction and QC
+|   +-- cap.rs       # CAP XML projection into generic body shapes
 |   +-- ugc.rs
 |   +-- vtec.rs
 |   +-- hvtec.rs
@@ -204,6 +206,11 @@ generic products now use the `vtec_events` extractor and emit a tagged
 `ProductBody` variant with ordered source segments. Non-VTEC generic products
 emit the `generic` body variant. If `body_behavior` is `never`, the candidate
 remains bodyless.
+
+CAP products remain on generic routing. Their wrapper AFOS/WMO identity stays
+authoritative, while the body pipeline detects CAP XML and projects supported
+fields such as `VTEC`, UGC geocodes, polygons, event motion, and wind/hail
+parameters into the existing generic body models.
 
 VTEC segment QC now emits event-oriented issue codes such as
 `vtec_segment_missing_required_polygon` and `vtec_segment_missing_ugc`. The

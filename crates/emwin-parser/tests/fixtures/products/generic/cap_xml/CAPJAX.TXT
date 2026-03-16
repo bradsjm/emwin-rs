@@ -1,0 +1,120 @@
+005
+XOUS52 KWBC 160154
+CAPJAX
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.29beb0f3ac797f82ee94fd1e3843442f27074218.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T21:54:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Alert</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Special Marine Warning</event>
+        <responseType>Avoid</responseType>
+        <urgency>Immediate</urgency>
+        <severity>Severe</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SMW</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>MAW</value>
+        </eventCode>
+        <effective>2026-03-15T21:54:00-04:00</effective>
+        <onset>2026-03-15T21:54:00-04:00</onset>
+        <expires>2026-03-15T22:45:00-04:00</expires>
+        <senderName>NWS Jacksonville FL</senderName>
+        <headline>Special Marine Warning issued March 15 at 9:54PM EDT until March 15 at 10:45PM EDT by NWS Jacksonville FL</headline>
+        <description>SMWJAX
+The National Weather Service in Jacksonville has issued a
+* Special Marine Warning for...
+Coastal waters from Altamaha Sound to Fernandina Beach FL out 20
+NM...
+Coastal waters from Fernandina Beach to St. Augustine FL out 20
+NM...
+* Until 1045 PM EDT.
+* At 953 PM EDT, showers and a thunderstorm were located over
+Atlantic Beach, or 27 nm north of Saint Augustine, moving
+northeast at 20 knots.
+HAZARD...Wind gusts 34 knots or greater.
+SOURCE...Radar.
+IMPACT...Small craft could be damaged in briefly higher winds and
+suddenly higher waves.
+* Locations impacted include...
+Atlantic Beach, Jacksonville Beach, Mayport, Talbot Island, Buoy
+Kby, Nassau Sound Approach Buoy 6a, Saint Johns Lighted Buoy,
+Dungeness, Saint Marys Entrance Buoy 16, Cumberland Island, Amelia
+City, and Whittakers Snapper Hole Reef.
+</description>
+        <instruction>Move to safe harbor until hazardous weather passes. If your vessel is
+caught offshore, immediately secure for heavy weather. Ensure all
+crew members are wearing USCG approved Type I life jackets and
+nonessential crew are below decks. Deploy jack lines and harnesses if
+available. Check life saving equipment, including batteries on
+handheld radios, for readiness.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SMWJAX</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WHUS52 KJAX 160154</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T01:53:00-00:00...storm...206DEG...19KT...30.34,-81.4</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.NEW.KJAX.MA.W.0020.260316T0154Z-260316T0245Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:45:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Coastal waters from Altamaha Sound to Fernandina Beach FL out 20 NM; Coastal waters from Fernandina Beach to St. Augustine FL out 20 NM</areaDesc>
+            <polygon>30.87,-81.48 30.75,-81.1 30.73,-81.09 30.69,-81.09 30.23,-81.3 30.29,-81.48 30.34,-81.48 30.38,-81.51 30.44,-81.49 30.52,-81.51 30.87,-81.48</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>075450</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>075452</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>AMZ450</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>AMZ452</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

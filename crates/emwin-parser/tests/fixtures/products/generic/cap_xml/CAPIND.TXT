@@ -1,0 +1,115 @@
+325
+XOUS53 KWBC 160202
+CAPIND
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.2384147bc37dffa2db75f16f3da853550b8f409a.001.1</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T22:02:00-04:00</sent>
+    <status>Actual</status>
+    <msgType>Cancel</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.cd6cc6f374aece5e7aa2175979ca0243de5e3dab.001.1,2026-03-15T21:43:00-04:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Severe Thunderstorm Warning</event>
+        <responseType>AllClear</responseType>
+        <urgency>Past</urgency>
+        <severity>Minor</severity>
+        <certainty>Observed</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>SVS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>SVW</value>
+        </eventCode>
+        <effective>2026-03-15T22:02:00-04:00</effective>
+        <onset>2026-03-15T22:02:00-04:00</onset>
+        <expires>2026-03-15T22:17:36-04:00</expires>
+        <senderName>NWS Indianapolis IN</senderName>
+        <headline>The Severe Thunderstorm Warning has been cancelled.</headline>
+        <description>The Severe Thunderstorm Warning has been cancelled and is no longer in effect.</description>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>SVSIND</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WWUS53 KIND 160202</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>THE SEVERE THUNDERSTORM WARNING FOR WESTERN CARROLL... TIPPECANOE...NORTHWESTERN CLINTON AND NORTHERN MONTGOMERY COUNTIES IS CANCELLED</value>
+        </parameter>
+        <parameter>
+            <valueName>eventMotionDescription</valueName>
+            <value>2026-03-16T02:00:00-00:00...storm...246DEG...50KT...40.63,-86.4</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>EAS-ORG</valueName>
+            <value>WXR</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CAN.KIND.SV.W.0036.000000T0000Z-260316T0230Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-15T22:30:00-04:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <area>
+            <areaDesc>Carroll, IN; Clinton, IN; Montgomery, IN; Tippecanoe, IN</areaDesc>
+            <polygon>40.73,-86.53 40.43,-86.53 40.2,-86.7 40.05,-87.09 40.54,-86.88 40.56,-86.77 40.66,-86.77 40.68,-86.74 40.68,-86.76 40.69,-86.75 40.7,-86.76 40.72,-86.75 40.73,-86.76 40.74,-86.75 40.74,-86.72 40.73,-86.53</polygon>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>018015</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>018023</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>018107</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>018157</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>INC015</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>INC023</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>INC107</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>INC157</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+

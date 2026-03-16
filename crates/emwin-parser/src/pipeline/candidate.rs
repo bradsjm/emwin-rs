@@ -7,7 +7,7 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::body::BodyExtractionPlan;
+use crate::body::{BodyExtractionPlan, BodyInputFormat};
 use crate::data::NonTextProductMeta;
 use crate::{
     BbbKind, Cf6Bulletin, CliBulletin, CwaBulletin, DcpBulletin, DsmBulletin, EroBulletin,
@@ -83,6 +83,8 @@ pub(crate) struct BodyContributionRequest {
     pub(crate) plan: BodyExtractionPlan,
     /// Reference time used by time-aware body parsers.
     pub(crate) reference_time: Option<DateTime<Utc>>,
+    /// Input format hint for plan-driven body parsing.
+    pub(crate) input_format: BodyInputFormat,
 }
 
 /// Generic AFOS text product candidate used for body enrichment.

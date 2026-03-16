@@ -1,0 +1,130 @@
+914
+XOUS53 KWBC 160150
+CAPMKX
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+    <identifier>urn:oid:2.49.0.1.840.0.41e484c3c10c110baece43ce40776dda8e885868.002.2</identifier>
+    <sender>w-nws.webmaster@noaa.gov</sender>
+    <sent>2026-03-15T20:50:00-05:00</sent>
+    <status>Actual</status>
+    <msgType>Update</msgType>
+    <scope>Public</scope>
+    <code>IPAWSv1.0</code>
+    <references>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.1308669c4de945078abf5bd63597fa19853aa0cd.003.2,2026-03-15T14:52:00-05:00</references>
+    <info>
+        <language>en-US</language>
+        <category>Met</category>
+        <event>Heavy Freezing Spray Warning</event>
+        <responseType>Avoid</responseType>
+        <urgency>Expected</urgency>
+        <severity>Severe</severity>
+        <certainty>Likely</certainty>
+        <eventCode>
+            <valueName>SAME</valueName>
+            <value>NWS</value>
+        </eventCode>
+        <eventCode>
+            <valueName>NationalWeatherService</valueName>
+            <value>UPW</value>
+        </eventCode>
+        <effective>2026-03-15T20:50:00-05:00</effective>
+        <onset>2026-03-16T04:00:00-05:00</onset>
+        <expires>2026-03-16T05:00:00-05:00</expires>
+        <senderName>NWS Milwaukee/Sullivan WI</senderName>
+        <headline>Heavy Freezing Spray Warning issued March 15 at 8:50PM CDT until March 17 at 11:00AM CDT by NWS Milwaukee/Sullivan WI</headline>
+        <description>* WHAT...For the Gale Warning, northwest winds 25 to 35 kt with
+gusts up to 45 kt and waves 11 to 16 ft. For the Heavy Freezing
+Spray Warning, heavy freezing spray at a rate of 2 cm per hour
+or greater expected, and may rapidly accumulate on vessels.
+* WHERE...Nearshore Waters from Sheboygan to Winthrop Harbor IL.
+* WHEN...For the Gale Warning, until 1 AM CDT Tuesday. For the
+Heavy Freezing Spray Warning, from 4 AM Monday to 11 AM CDT
+Tuesday.
+* IMPACTS...Operating a vessel in heavy freezing spray is
+hazardous. Freezing spray may render mechanical and electronic
+components inoperative. Rapid ice accretion on decks and
+superstructures may result in a catastrophic loss of
+stability. Strong winds will cause hazardous waves which could
+capsize or damage vessels and reduce visibility.
+</description>
+        <instruction>Mariners should prepare for dangerous accumulation of ice on
+their vessel. If possible, remain in port, avoid the warning area
+or conduct mitigation.
+Mariners should alter plans to avoid these hazardous conditions.
+Remain in port, seek safe harbor, alter course, and/or secure the
+vessel for severe conditions.</instruction>
+        <web>http://www.weather.gov</web>
+        <parameter>
+            <valueName>AWIPSidentifier</valueName>
+            <value>MWWMKX</value>
+        </parameter>
+        <parameter>
+            <valueName>WMOidentifier</valueName>
+            <value>WHUS73 KMKX 160150</value>
+        </parameter>
+        <parameter>
+            <valueName>NWSheadline</valueName>
+            <value>GALE WARNING REMAINS IN EFFECT UNTIL 1 AM CDT TUESDAY... ...HEAVY FREEZING SPRAY WARNING REMAINS IN EFFECT FROM 4 AM MONDAY TO 11 AM CDT TUESDAY</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>EAS</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>NWEM</value>
+        </parameter>
+        <parameter>
+            <valueName>VTEC</valueName>
+            <value>/O.CON.KMKX.UP.W.0005.260316T0900Z-260317T1600Z/</value>
+        </parameter>
+        <parameter>
+            <valueName>eventEndingTime</valueName>
+            <value>2026-03-17T11:00:00-05:00</value>
+        </parameter>
+        <parameter>
+            <valueName>BLOCKCHANNEL</valueName>
+            <value>CMAS</value>
+        </parameter>
+        <parameter>
+            <valueName>expiredReferences</valueName>
+            <value>w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.d37fa9cd783bd938d72c46639f6868caca6c2dd4.003.2,2026-03-15T09:08:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.ed27f0420fce80bc95513556eb454301be9ae9ab.003.2,2026-03-15T06:27:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.c8a30d0e20862d3d9d17788001906a06ade0b24d.002.4,2026-03-15T00:04:00-05:00</value>
+        </parameter>
+        <area>
+            <areaDesc>Sheboygan to Port Washington WI; Port Washington to North Point Light WI; North Point Light to Wind Point WI; Wind Point WI to Winthrop Harbor IL</areaDesc>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>092643</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>092644</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>092645</value>
+            </geocode>
+            <geocode>
+                <valueName>SAME</valueName>
+                <value>092646</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LMZ643</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LMZ644</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LMZ645</value>
+            </geocode>
+            <geocode>
+                <valueName>UGC</valueName>
+                <value>LMZ646</value>
+            </geocode>
+        </area>
+    </info>
+</alert>
+
