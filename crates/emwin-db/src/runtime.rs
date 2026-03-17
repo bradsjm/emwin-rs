@@ -331,7 +331,7 @@ where
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 guard.stats.persisted_total = guard.stats.persisted_total.saturating_add(1);
-                info!(request_key = %request_key, "persistence request completed");
+                info!(request_key = %request_key, "save complete");
             }
             Err((request_key, context, err)) => {
                 let mut guard = producer
