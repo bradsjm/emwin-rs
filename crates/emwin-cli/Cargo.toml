@@ -28,7 +28,7 @@ thiserror.workspace = true
 dotenvy.workspace = true
 url.workspace = true
 crc32fast.workspace = true
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip.workspace = true
 
 [lints]
 workspace = true
