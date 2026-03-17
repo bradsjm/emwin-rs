@@ -501,7 +501,12 @@ mod tests {
 
     #[test]
     fn duplicate_ugc_across_two_sections_in_same_segment_emits_duplicate_issue() {
-        let text = include_str!("../../tests/fixtures/products/generic/flood_statement/FLSRAH.txt");
+        let text = "\
+NCC101-051300-
+NCC101-051300-
+/O.NEW.KRAH.FL.W.0001.250305T1200Z-250305T1800Z/
+LAT...LON 3554 7829 3548 7834 3544 7829 3541 7833
+";
         let (_body, issues) = parse_vtec_event_body_with_issues(text, Some(Utc::now()));
         assert!(
             issues

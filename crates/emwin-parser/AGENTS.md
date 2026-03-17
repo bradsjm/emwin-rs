@@ -198,7 +198,7 @@ That means current specialized AFOS families remain bodyless by catalog policy.
 Exact-AFOS overrides also route:
 
 - `PRCUS` to specialized PIREP parsing
-- `NBXUSA` to specialized MOS parsing
+- `NBXUSA` to specialized MOS parsing; the MOS parser must preserve `NBX` as the parsed model identity rather than collapsing it into `NBE`
 - `SWOMCD` and `FFGMPD` to specialized MCD/MPD parsing
 - `RBG94E`, `RBG98E`, and `RBG99E` to specialized ERO parsing
 - `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized SPC outlook parsing

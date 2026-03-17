@@ -40,7 +40,7 @@ The crate currently supports:
   - CF6 climate bulletins
   - DSM collectives
   - HML bulletins
-  - MOS guidance bulletins for `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and exact-AFOS `NBXUSA`
+  - MOS guidance bulletins for `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and exact-AFOS `NBXUSA` (preserved as model `NBX`)
   - CLI daily climate bulletins
   - MCD/MPD bulletins
   - ERO bulletins
@@ -254,7 +254,7 @@ Text AFOS envelope
 Current repo truth is encoded directly in the catalog and exact-AFOS override data:
 
 - `FD*`, `PIR`, `SIG`, `LSR`, `CWA`, `WWP`, `CF6`, `DSM`, `HML`, `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and `CLI` are catalog-authorized AFOS families; classification now requires the matching `routing` value before any specialized parser can run
-- exact-AFOS overrides also route `PRCUS` to specialized PIREP parsing, `NBXUSA` to specialized MOS parsing, and `SWOMCD`, `FFGMPD`, `RBG94E`, `RBG98E`, `RBG99E`, `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized parsers
+- exact-AFOS overrides also route `PRCUS` to specialized PIREP parsing, `NBXUSA` to specialized MOS parsing while preserving native `NBX` model identity, and `SWOMCD`, `FFGMPD`, `RBG94E`, `RBG98E`, `RBG99E`, `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized parsers
 - generic warning products such as `SVR`, `TOR`, and `FFW` route as `generic`
   and use `body_behavior = catalog`
 

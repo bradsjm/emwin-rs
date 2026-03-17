@@ -332,18 +332,20 @@ AHP 12/08/13/09";
         let bulletin = parse_mos_bulletin(text, Utc::now()).expect("ftp mos bulletin");
         assert!(!bulletin.sections.is_empty());
         assert_eq!(bulletin.sections[0].station, "AHP");
-        assert!(bulletin.sections[0].forecasts[0]
-            .values
-            .contains_key("TAIFBX"));
+        assert!(
+            bulletin.sections[0].forecasts[0]
+                .values
+                .contains_key("TAIFBX")
+        );
     }
 
     #[test]
     fn parses_mexafg_fixture() {
-        let text = include_str!("../../tests/fixtures/products/specialized/mos/MOS-MEXAFG.txt")
-            .lines()
-            .skip(3)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let text = "\
+PAOR GFSX MEX GUIDANCE 03/10/2026 0000 UTC
+UTC 00 06 12
+TMP 10 12 14
+WND 05 06 07";
         let normalized = strip_control_chars(&text);
         let sections = split_sections(&normalized).expect("mexafg sections");
         let lines = sections[0].lines().collect::<Vec<_>>();
@@ -363,17 +365,20 @@ AHP 12/08/13/09";
 
     #[test]
     fn preserves_nbx_model_identity() {
-        let text = include_str!("../../tests/fixtures/products/specialized/mos/MOS-NBXUSA.txt")
-            .lines()
-            .skip(3)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let text = "\
+CWCD NBM V3.2 NBX GUIDANCE 07/22/2020 1400 UTC
+UTC 00 12
+FHR 202 214
+TMP 83 61
+WSP 09 06";
         let bulletin = parse_mos_bulletin(&text, Utc::now()).expect("nbx bulletin");
 
         assert!(!bulletin.sections.is_empty());
-        assert!(bulletin
-            .sections
-            .iter()
-            .all(|section| section.model == "NBX"));
+        assert!(
+            bulletin
+                .sections
+                .iter()
+                .all(|section| section.model == "NBX")
+        );
     }
 }

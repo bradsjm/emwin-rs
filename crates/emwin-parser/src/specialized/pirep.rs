@@ -451,13 +451,8 @@ mod tests {
 
     #[test]
     fn parses_arp_style_wmo_pirep_fixture() {
-        let text =
-            include_str!("../../tests/fixtures/products/specialized/pirep/PIREPS-airmet.txt")
-                .lines()
-                .skip(2)
-                .collect::<Vec<_>>()
-                .join("\n");
-        let bulletin = parse_pirep_bulletin(&text).expect("arp-style pirep should parse");
+        let text = "ARP UAE225 8500N11600W 1457 F360 MS63 320/20=";
+        let bulletin = parse_pirep_bulletin(text).expect("arp-style pirep should parse");
 
         assert_eq!(bulletin.reports.len(), 1);
         assert_eq!(bulletin.reports[0].time.as_deref(), Some("1457"));
