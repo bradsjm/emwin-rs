@@ -7,6 +7,16 @@ fn non_precipitation_warning_corpus_uses_vtec_event_body() {
     for case in fixture_cases("generic", "non_precipitation_warning") {
         let enrichment = enrich(&case);
         assert_vtec_body(&enrichment, &case);
+        if case.name == "NPWLOXCA.TXT" {
+            assert!(
+                enrichment
+                    .issues
+                    .iter()
+                    .all(|issue| issue.code != "vtec_segment_missing_required_polygon"),
+                "{} -> expected zone-only NPW product to skip missing polygon QC",
+                case.name
+            );
+        }
     }
 }
 

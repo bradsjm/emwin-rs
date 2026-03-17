@@ -55,6 +55,7 @@ pub enum TafForecastGroupKind {
     Tempo,
     Prob,
     Becmg,
+    Inter,
 }
 
 /// Forecast or change group contained within a TAF bulletin.
@@ -117,7 +118,8 @@ impl Preamble {
 /// Parses a TAF bulletin from text content.
 pub(crate) fn parse_taf_bulletin(text: &str) -> Option<TafBulletin> {
     let compact = compact_ascii_whitespace(text);
-    let compact = strip_leading_marker_line(&compact);
+    let compact = compact.trim().trim_end_matches('=');
+    let compact = strip_leading_marker_line(compact);
     let mut input = compact;
     let preamble = parse_taf_prefix(&mut input).or_else(|| {
         looks_like_station_led_taf_report(input).then_some(Preamble {
@@ -278,11 +280,46 @@ fn parse_forecast_groups(remainder: &str) -> (TafConditions, Vec<TafForecastGrou
         segments.push(current);
     }
 
-    let initial = segments
+    let mut merged_segments = Vec::<Vec<&str>>::new();
+    for segment in segments {
+        if segment.len() == 1
+            && segment[0].starts_with("PROB")
+            && merged_segments
+                .last()
+                .and_then(|previous| previous.first().copied())
+                .is_some_and(|token| matches!(token, "TEMPO" | "INTER" | "BECMG"))
+        {
+            merged_segments
+                .last_mut()
+                .expect("previous segment exists")
+                .push(segment[0]);
+            continue;
+        }
+        merged_segments.push(segment);
+    }
+
+    let mut index = 0;
+    while index + 1 < merged_segments.len() {
+        if merged_segments[index].len() == 1
+            && merged_segments[index][0].starts_with("PROB")
+            && merged_segments[index + 1]
+                .first()
+                .is_some_and(|token| matches!(*token, "TEMPO" | "INTER"))
+        {
+            let mut combined = vec![merged_segments[index][0]];
+            combined.extend(merged_segments[index + 1].iter().copied());
+            merged_segments[index] = combined;
+            merged_segments.remove(index + 1);
+            continue;
+        }
+        index += 1;
+    }
+
+    let initial = merged_segments
         .first()
         .map(|tokens| parse_conditions(tokens))
         .unwrap_or_default();
-    let groups = segments
+    let groups = merged_segments
         .into_iter()
         .skip(1)
         .filter_map(|segment| parse_group(&segment))
@@ -294,7 +331,7 @@ fn parse_forecast_groups(remainder: &str) -> (TafConditions, Vec<TafForecastGrou
 fn parse_group(tokens: &[&str]) -> Option<TafForecastGroup> {
     let first = *tokens.first()?;
     let mut index = 1;
-    let (change_kind, valid_from, valid_to, probability_percent) =
+    let (change_kind, valid_from, valid_to, probability_percent, body_end) =
         if let Some(from) = first.strip_prefix("FM") {
             if from.len() != 6 || !from.chars().all(|ch| ch.is_ascii_digit()) {
                 return None;
@@ -304,43 +341,75 @@ fn parse_group(tokens: &[&str]) -> Option<TafForecastGroup> {
                 Some(from[..4].to_string()),
                 None,
                 None,
+                tokens.len(),
             )
-        } else if first == "TEMPO" || first == "BECMG" {
+        } else if matches!(first, "TEMPO" | "BECMG" | "INTER") {
             let validity = *tokens.get(index)?;
             let (from, to) = parse_validity_range(validity)?;
             index += 1;
+            let mut body_end = tokens.len();
+            let probability_percent = tokens
+                .last()
+                .and_then(|token| token.strip_prefix("PROB"))
+                .and_then(|token| token.parse::<u8>().ok())
+                .filter(|_| body_end > index)
+                .inspect(|_| body_end -= 1);
             (
-                if first == "TEMPO" {
-                    TafForecastGroupKind::Tempo
-                } else {
-                    TafForecastGroupKind::Becmg
+                match first {
+                    "TEMPO" => TafForecastGroupKind::Tempo,
+                    "BECMG" => TafForecastGroupKind::Becmg,
+                    "INTER" => TafForecastGroupKind::Inter,
+                    _ => unreachable!("matched TAF group marker"),
                 },
                 Some(from.to_string()),
                 Some(to.to_string()),
-                None,
+                probability_percent,
+                body_end,
             )
         } else if let Some(probability) = first.strip_prefix("PROB") {
             let probability_percent = probability.parse::<u8>().ok()?;
-            let validity = *tokens.get(index)?;
-            let (from, to) = parse_validity_range(validity)?;
-            index += 1;
+            let next = *tokens.get(index)?;
+            let (change_kind, valid_from, valid_to) = if matches!(next, "TEMPO" | "INTER") {
+                index += 1;
+                let validity = *tokens.get(index)?;
+                let (from, to) = parse_validity_range(validity)?;
+                index += 1;
+                (
+                    if next == "TEMPO" {
+                        TafForecastGroupKind::Tempo
+                    } else {
+                        TafForecastGroupKind::Inter
+                    },
+                    Some(from.to_string()),
+                    Some(to.to_string()),
+                )
+            } else {
+                let (from, to) = parse_validity_range(next)?;
+                index += 1;
+                (
+                    TafForecastGroupKind::Prob,
+                    Some(from.to_string()),
+                    Some(to.to_string()),
+                )
+            };
             (
-                TafForecastGroupKind::Prob,
-                Some(from.to_string()),
-                Some(to.to_string()),
+                change_kind,
+                valid_from,
+                valid_to,
                 Some(probability_percent),
+                tokens.len(),
             )
         } else {
             return None;
         };
 
-    let body = tokens[index..].join(" ");
+    let body = tokens[index..body_end].join(" ");
     Some(TafForecastGroup {
         change_kind,
         valid_from,
         valid_to,
         probability_percent,
-        conditions: parse_conditions(&tokens[index..]),
+        conditions: parse_conditions(&tokens[index..body_end]),
         raw: body,
     })
 }
@@ -381,6 +450,7 @@ fn is_group_marker(token: &str) -> bool {
     token.starts_with("FM")
         || token == "TEMPO"
         || token == "BECMG"
+        || token == "INTER"
         || token.starts_with("PROB30")
         || token.starts_with("PROB40")
 }
@@ -592,5 +662,39 @@ mod tests {
         assert_eq!(taf.issue_time, "061900Z");
         assert_eq!(taf.valid_from.as_deref(), Some("0619"));
         assert_eq!(taf.valid_to.as_deref(), Some("0801"));
+    }
+
+    #[test]
+    fn parses_inter_group_and_trailing_probability_tempo() {
+        let text = "TAF\nTAF YWLM 172013Z 1721/1818 17006KT 9999 -SHRA SCT010 BKN020\n     FM180200 15012KT 9999 -SHRA SCT012 BKN025\n      INTER 1721/1807 3000 SHRA BKN008 FEW025TCU\n      TEMPO 1807/1818 3000 SHRA BKN008 FEW025TCU PROB30=\n";
+        let taf = parse_taf_bulletin(text).expect("expected INTER TAF parsing to succeed");
+
+        assert_eq!(taf.station, "YWLM");
+        assert_eq!(taf.groups.len(), 3);
+        assert_eq!(taf.groups[0].change_kind, TafForecastGroupKind::Fm);
+        assert_eq!(taf.groups[1].change_kind, TafForecastGroupKind::Inter);
+        assert_eq!(taf.groups[1].valid_from.as_deref(), Some("1721"));
+        assert_eq!(taf.groups[1].valid_to.as_deref(), Some("1807"));
+        assert_eq!(taf.groups[2].change_kind, TafForecastGroupKind::Tempo);
+        assert_eq!(taf.groups[2].probability_percent, Some(30));
+        assert!(
+            taf.groups[2]
+                .conditions
+                .weather
+                .contains(&"SHRA".to_string())
+        );
+    }
+
+    #[test]
+    fn parses_probability_prefixed_tempo_group() {
+        let text = "TAF EGDG 011206Z 0112/0212 04012KT 9999 FEW015 BKN040 PROB30 TEMPO 0200/0206 7000 HZ SCT010=";
+        let taf = parse_taf_bulletin(text)
+            .expect("expected probability-prefixed TEMPO parsing to succeed");
+
+        assert_eq!(taf.groups.len(), 1);
+        assert_eq!(taf.groups[0].change_kind, TafForecastGroupKind::Tempo);
+        assert_eq!(taf.groups[0].probability_percent, Some(30));
+        assert_eq!(taf.groups[0].valid_from.as_deref(), Some("0200"));
+        assert_eq!(taf.groups[0].valid_to.as_deref(), Some("0206"));
     }
 }

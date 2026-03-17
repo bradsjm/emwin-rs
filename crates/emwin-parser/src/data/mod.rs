@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn noisy_generic_ugc_families_can_disable_body_extraction() {
-        for pil in ["FFG", "REC", "RVM"] {
+        for pil in ["FFG", "OPU", "REC", "RVM", "RWR", "SFT"] {
             let entry = text_product_catalog_entry(pil).expect("expected generated catalog entry");
             assert_eq!(entry.routing, TextProductRouting::Generic);
             assert_eq!(entry.body_behavior, TextProductBodyBehavior::Never);

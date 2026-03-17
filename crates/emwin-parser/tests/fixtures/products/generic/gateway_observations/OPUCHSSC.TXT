@@ -1,74 +1,73 @@
-108 
-FPUS82 KCHS 112010
+FPUS82 KCHS 172025
 OPUCHS
 
 TEST...KCHS/KSAV Gateway Observations...TEST
 National Weather Service Charleston SC
-400 PM EDT WED MAR 11 2026
+400 PM EDT TUE MAR 17 2026
 
 NOTE: "fair" indicates few or no clouds below 12,000 feet with no
 significant weather and/or obstructions to visibility.
 
 SCZ050-WAZ558-NCZ071-TXZ119-213-PAZ071-DCZ001-FLZ074-172-MI076-
-NYZ176-178-MAZ016-IL014-TNZ027-NJZ106-GAZ044-MD014-112100-
+NYZ176-178-MAZ016-IL014-TNZ027-NJZ106-GAZ044-MD014-172100-
 
 ...Gateway Observations for Charleston International...
-  
+
 CITY           SKY/WX    TMP DP  RH WIND       PRES   REMARKS
-Chas Airport   PTSUNNY   87  63  44 S16G25    30.01F                  
-Seattle        LGT RAIN  42  40  92 SE12      30.07F FOG              
-Charlotte      PTSUNNY   85  51  31 SW14G30   29.93F                  
-Dallas DFW     MOSUNNY   74  55  51 N24G32    29.94R                  
-Dallas Love    PTSUNNY   72  57  59 N20G31    29.94R                  
-Philladelphia  PTSUNNY   80  61  52 S7        29.76F                  
-Wash National  PTSUNNY   83  58  42 S17G23    29.74F                  
-Baltimore      PTSUNNY   83  58  42 SW10      29.74F                  
-Miami          MOSUNNY   82  68  62 SE12      30.10F                  
-Detroit        CLOUDY    52  48  86 NW15      29.57R                  
-Newark         PTSUNNY   79  58  48 S13G29    29.75F                  
-Laguardia      PTSUNNY   63  49  60 S13       29.77F                  
-J F K          PTSUNNY   59  51  75 S14       29.79F                  
-Boston Logan   PTSUNNY   43  39  87 E10       29.90F                  
-Ft. Lauderdale MOSUNNY   82  69  64 SE14G21   30.10F                  
-Chicago O'Hare CLOUDY    35  29  78 NW18G28   29.87R WCI  24          
-Chicago Midway CLOUDY    36  30  79 NW16G30   29.88R WCI  26          
-Houston Bush   TSTM      65  64  97 SW6       29.87F FOG              
-Houston Hobby  CLOUDY    68  62  81 NW12      29.88R                  
-Nashville      TSTM      66  61  84 W15G29    29.89R FOG              
-Atlanta        MOSUNNY   81  58  45 SW16G29   30.01F                  
-London Heathrw   N/A     48  36  61 W15       30.03R                  
+Chas Airport   PTSUNNY   52  20  28 W6        30.09S
+Seattle        LGT RAIN  50  48  93 S10       30.04F
+Charlotte      MOSUNNY   47  16  29 N8G22     30.06S
+Dallas DFW     PTSUNNY   62  18  18 S21G29    30.18F
+Dallas Love    PTSUNNY   60  16  18 S15G23    30.20F
+Philladelphia  PTSUNNY   41  13  31 W18G29    29.95R
+Wash National  PTSUNNY   40  14  34 W15       30.00R WCI  32
+Baltimore      MOSUNNY   42  13  30 W15G28    29.99R
+Miami          CLOUDY    64  54  69 NW10      30.05S
+Detroit     FLURRIES  26   4  38 W15       30.09R WCI  14
+Newark         MOSUNNY   39   7  26 W25G38    29.90R WCI  28
+Laguardia      PTSUNNY   41   9  26 W15G32    29.88R
+J F K          MOSUNNY   41  10  28 W22G36    29.89R
+Boston Logan   MOSUNNY   43  14  31 W17G33    29.74R
+Ft. Lauderdale CLOUDY    66  56  70 N10       30.03F
+Chicago O'Hare PTSUNNY   22   0  38 W14G22    30.18S WCI   9
+Chicago Midway PTSUNNY   23   2  40 W7G20     30.20R WCI  15
+Houston Bush   MOSUNNY   58  15  18 S8        30.32F
+Houston Hobby  MOSUNNY   57  13  17 SE8       30.33F
+Nashville      MOSUNNY   39   6  25 W10G17    30.25F WCI  32
+Atlanta        MOSUNNY   47  18  31 W14G28    30.14F
+London Heathrw   N/A     48  43  81 SE7       29.97S
 
 $$
- 
+
 GAZ044-118-TXZ119-213-NCZ071-DCZ001-MDZ014-506-PAZ021-071-NJZ106-
 NYZ176-178-MAZ106-OHZ011-021-055-MIZ076-KYZ091-ILZ014-INZ047-
-MNZ060-ONZ431-112100-
+MNZ060-ONZ431-172100-
 
 ...Gateway Observations for Savannah International...
-  
+
 CITY           SKY/WX    TMP DP  RH WIND       PRES   REMARKS
-Savannah Arpt  PTSUNNY   91  61  36 W13G28    30.02F HX  91           
-Atlanta        MOSUNNY   81  58  45 SW16G29   30.01F                  
-Charlotte      PTSUNNY   85  51  31 SW14G30   29.93F                  
-Dallas DFW     MOSUNNY   74  55  51 N24G32    29.94R                  
-Houston Bush   TSTM      65  64  97 SW6       29.87F FOG              
-Wash National  PTSUNNY   83  58  42 S17G23    29.74F                  
-Wash Dulles    PTSUNNY   85  59  41 S15G24    29.74F                  
-Baltimore      PTSUNNY   83  58  42 SW10      29.74F                  
-Philadelphia   PTSUNNY   80  61  52 S7        29.76F                  
-Newark         PTSUNNY   79  58  48 S13G29    29.75F                  
-Laguardia      PTSUNNY   63  49  60 S13       29.77F                  
-J F K          PTSUNNY   59  51  75 S14       29.79F                  
-Boston         PTSUNNY   43  39  87 E10       29.90F                  
-Pittsburg      CLOUDY    68  61  78 SW14G28   29.68F                  
-Akron          CLOUDY    69  56  62 W17G36    29.63R                  
-Cleveland      PTSUNNY   69  57  65 SW23G33   29.57R                  
-Cincinnati     CLOUDY    71  62  73 SW18G25   29.67F                  
-Columbus       HVY RAIN  65  62  89 W17G28    29.69S                  
-Detroit        CLOUDY    52  48  86 NW15      29.57R                  
-Chicago O'Hare CLOUDY    35  29  78 NW18G28   29.87R WCI  24          
-Minneapolis    SUNNY     40  19  43 NW13      30.12F WCI  32          
-Indianapolis   LGT RAIN  46  44  93 NW14G23   29.78R                  
-Toronto Canada CLOUDY    39  37  93 CALM      29.45F FOG              
+SavannahArpt  PTSUNNY   53  18  25 W7G22     30.11F
+Atlanta        MOSUNNY   47  18  31 W14G28    30.14F
+Charlotte      MOSUNNY   47  16  29 N8G22     30.06S
+Dallas DFW     PTSUNNY   62  18  18 S21G29    30.18F
+Houston Bush   MOSUNNY   58  15  18 S8        30.32F
+Wash National  PTSUNNY   40  14  34 W15       30.00R WCI  32
+Wash Dulles    PTSUNNY   37  16  42 NW15G24   30.01R WCI  28
+Baltimore      MOSUNNY   42  13  30 W15G28    29.99R
+Philadelphia   PTSUNNY   41  13  31 W18G29    29.95R
+Newark         MOSUNNY   39   7  26 W25G38    29.90R WCI  28
+Laguardia      PTSUNNY   41   9  26 W15G32    29.88R
+J F K          MOSUNNY   41  10  28 W22G36    29.89R
+Boston         MOSUNNY   43  14  31 W17G33    29.74R
+Pittsburg      LGT SNOW  25  11  55 W20G37    30.03R VSB 1   WCI  11
+Akron          PTSUNNY   24   5  44 W21G30    30.05R WCI   9
+Cleveland      LGT SNOW  24  14  65 W16G25    30.08R BLWGSNOWWCI  11
+Cincinnati     CLOUDY    25   8  48 NW10G22   30.21R WCI  15
+Columbus       FLURRIES  25  12  56 W13G24   30.17R WCI  14
+Detroit        FLURRIES  26   4  38 W15       30.09R WCI  14
+Chicago O'Hare PTSUNNY   22   0  38 W14G22    30.18S WCI   9
+Minneapolis    CLOUDY    16  -2  45 SE13      30.03F WCI   2
+Indianapolis   PTSUNNY   22  10  60 W10       30.23R WCI  11
+Toronto Canada PTSUNNY   25  14  63 W17G28    29.97  WCI  11
 
 $$

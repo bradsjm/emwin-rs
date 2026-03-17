@@ -1,0 +1,139 @@
+WWUS76 KLOX 172021
+NPWLOX
+
+URGENT - WEATHER MESSAGE
+National Weather Service Los Angeles/Oxnard CA
+121 PM PDT Tue Mar 17 2026
+
+CAZ088-342-345-351>353-356>358-368>376-378>380-548-180830-
+/O.CON.KLOX.XH.W.0001.000000T0000Z-260321T0300Z/
+Santa Clarita Valley-Santa Lucia Mountains-San Luis Obispo County
+Mountains-Santa Ynez Mountains Western Range-Santa Ynez Mountains
+Eastern Range-Santa Barbara County Interior Mountains-Lake
+Casitas-Ojai Valley-Central Ventura County Valleys-Los Angeles
+County Inland Coast including Downtown Los Angeles-Western Santa
+Monica Mountains Recreational Area-Eastern Santa Monica Mountains
+Recreational Area-Calabasas and Agoura Hills-Western San Fernando
+Valley-Eastern San Fernando Valley-Southeastern Ventura County
+Valleys-Santa Susana Mountains-Southern Ventura County Mountains-
+Interstate 5 Corridor-Western San Gabriel Mountains and Highway
+14 Corridor-Eastern San Gabriel Mountains-Los Angeles County San
+Gabriel Valley-
+Including the cities of Newbury Park, Glendale, Figueroa
+Mountain, Culver City, Wrightwood, Warm Springs, Santa Paula,
+Northridge, Hearst Castle, Irish Hills, Moorpark, Rose Valley,
+San Rafael Mountain, Fillmore, Westlake Village, Hollywood,
+Gorman, Mount Wilson, Downey, Acton, San Gabriel, Oak View, Santa
+Margarita Lake, La Canada Flintridge, La Panza Range, Topanga,
+Malibu Lake, Woodland Hills, Pyramid Lake, Chatsworth, Matilija,
+Big Pine Mountain, The Angeles Crest Highway, Thousand Oaks,
+Tejon Pass, Compton, Mill Creek, Van Nuys, Montecito Hills,
+Valencia, Meiners Oaks, San Marcos Pass, Norwalk, Topatopa
+Mountains, Simi Valley, Mount Baldy, East Los Angeles, Ojai,
+Santa Clarita, Universal City, Malibu Bowl, El Monte, Burbank,
+Beverly Hills, Sunland, Caliente Range, Lake Castaic, Oat
+Mountain, Pasadena, Pomona, Newhall, and Piru
+121 PM PDT Tue Mar 17 2026
+
+...EXTREME HEAT WARNING REMAINS IN EFFECT UNTIL 8 PM PDT FRIDAY...
+
+* WHAT...Dangerously hot conditions with high temperatures between
+  96 and 104 expected.
+
+* WHERE...Most valley, lower mountain, and inland coastal areas of
+  southwest California.
+
+* WHEN...Until 8 PM PDT Friday.
+
+* IMPACTS...There is a high risk for dangerous heat illness for
+  anyone, especially for the very young, the very old, those without
+  air conditioning, and those active outdoors.
+
+* ADDITIONAL DETAILS...Warm overnight low temperatures will
+  contribute to the heat risk, especially in the mountain and
+  foothill locations.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Drink plenty of fluids, stay in an air-conditioned room, stay out of
+the sun, and check up on relatives and neighbors.
+
+&&
+
+$$
+
+CAZ038-343-344-180830-
+/O.EXA.KLOX.HT.Y.0004.000000T0000Z-260321T0300Z/
+Cuyama Valley-Southern Salinas Valley-San Luis Obispo County
+Interior Valleys-
+Including the cities of Lake Nacimiento, Atascadero, Paso Robles,
+New Cuyama, San Miguel, Shandon, Templeton, Creston, and Carrizo
+Plain
+121 PM PDT Tue Mar 17 2026
+
+...HEAT ADVISORY IN EFFECT UNTIL 8 PM PDT FRIDAY...
+
+* WHAT...Hot conditions with high temperatures between 87 and 97
+  expected.
+
+* WHERE...Cuyama Valley, San Luis Obispo County Interior Valleys,
+  and Southern Salinas Valley.
+
+* WHEN...Until 8 PM PDT Friday.
+
+* IMPACTS...There is a high risk for heat illness for sensitive
+  populations including the very young, the very old, those without
+  air conditioning, and those active outdoors.
+
+* ADDITIONAL DETAILS...Warm overnight low temperatures will
+  contribute to the heat risk, especially in the foothill locations.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Drink plenty of fluids, stay in an air-conditioned room, stay out of
+the sun, and check up on relatives and neighbors.
+
+&&
+
+$$
+
+CAZ087-340-341-346>350-354-355-362-366-367-180830-
+/O.CON.KLOX.HT.Y.0003.000000T0000Z-260321T0300Z/
+Catalina and Santa Barbara Islands-San Luis Obispo County Beaches-
+San Luis Obispo County Inland Central Coast-Santa Barbara County
+Central Coast Beaches-Santa Barbara County Inland Central Coast-
+Santa Ynez Valley-Santa Barbara County Southwestern Coast-Santa
+Barbara County Southeastern Coast-Ventura County Beaches-Ventura
+County Inland Coast-Malibu Coast-Los Angeles County Beaches-Palos
+Verdes Hills-
+Including the cities of Arroyo Grande, Point Mugu, Los Olivos, El
+Capitan State Beach, Redondo Beach, Lompoc, Pismo Beach,
+Torrance, Santa Barbara, Ventura, Santa Monica, Lopez Lake,
+Vandenberg Space Force Base, Santa Ynez, Jalama Beach,
+Carpinteria, Pacific Palisades, Avila Beach, Buellton, Santa
+Maria, Avalon, Gaviota, Malibu, LAX, Refugio State Beach, Oxnard,
+Cambria, Lake Cachuma, Goleta, Camarillo, Nipomo, San Luis
+Obispo, Rancho Palos Verdes, Montecito, Morro Bay, Solvang, Long
+Beach, East Ventura, and Port Hueneme
+121 PM PDT Tue Mar 17 2026
+
+...HEAT ADVISORY REMAINS IN EFFECT UNTIL 8 PM PDT FRIDAY...
+
+* WHAT...Hot conditions with high temperatures between 87 and 97
+  expected.
+
+* WHERE...For most coastal areas of southwest California.
+
+* WHEN...Until 8 PM PDT Friday.
+
+* IMPACTS...There is a high risk for heat illness for sensitive
+  populations including the very young, the very old, those without
+  air conditioning, and those active outdoors.
+
+* ADDITIONAL DETAILS...Warm overnight low temperatures will
+  contribute to the heat risk, especially in the foothill locations.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Drink plenty of fluids, stay in an air-conditioned room, stay out of
+the sun, and check up on relatives and neighbors.

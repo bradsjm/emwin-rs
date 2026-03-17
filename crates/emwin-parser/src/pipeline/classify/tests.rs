@@ -957,10 +957,11 @@ fn wmo_sigmet_strategy_returns_sigmet_candidate() {
         b"WVID21 WAAA 090100\nWAAF SIGMET 05 VALID 090100/090700 WAAA-\nWAAF UJUNG PANDANG FIR VA ERUPTION MT IBU=\n",
     ));
 
-    assert!(matches!(
-        classify(&envelope),
-        ClassificationCandidate::Sigmet(_)
-    ));
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.code, "unsupported_international_sigmet_bulletin");
 }
 
 #[test]
@@ -1000,6 +1001,20 @@ fn wmo_surface_observation_returns_unsupported_candidate() {
         classify(&envelope),
         ClassificationCandidate::UnsupportedWmo(_)
     ));
+}
+
+#[test]
+fn wmo_international_pirep_returns_unsupported_candidate() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "PIREP.TXT",
+        b"UAJP71 RJFF 171210\n\nPIREP MOD TURB OBSD AT 1210 SANOR F340 REPORTED BY A320\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.code, "unsupported_international_pirep_bulletin");
 }
 
 #[test]

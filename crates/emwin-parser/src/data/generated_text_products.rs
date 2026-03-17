@@ -6,7 +6,7 @@
 use super::{TextProductBodyBehavior, TextProductCatalogEntry, TextProductRouting};
 use crate::body::BodyExtractorId;
 
-pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-16T23:05:58Z";
+pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-17T21:13:48Z";
 pub const TEXT_PRODUCT_ENTRY_COUNT: usize = 512;
 
 pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_COUNT] = [
@@ -2505,8 +2505,8 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         wmo_prefix: "FP",
         title: "Other Public Products",
         routing: TextProductRouting::Generic,
-        body_behavior: TextProductBodyBehavior::Catalog,
-        extractors: &[BodyExtractorId::Ugc],
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
     },
     TextProductCatalogEntry {
         pil: "OSB",
@@ -3065,8 +3065,8 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         wmo_prefix: "AS",
         title: "Weather Roundup",
         routing: TextProductRouting::Generic,
-        body_behavior: TextProductBodyBehavior::Catalog,
-        extractors: &[BodyExtractorId::Ugc],
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
     },
     TextProductCatalogEntry {
         pil: "RWS",
@@ -3257,8 +3257,8 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         wmo_prefix: "FP",
         title: "Tabular State Forecast",
         routing: TextProductRouting::Generic,
-        body_behavior: TextProductBodyBehavior::Catalog,
-        extractors: &[BodyExtractorId::Ugc],
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
     },
     TextProductCatalogEntry {
         pil: "SGL",

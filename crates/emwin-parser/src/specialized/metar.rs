@@ -279,12 +279,41 @@ fn parse_metar_body(
     kind: MetarReportKind,
     station: &str,
     body_tokens: &[&str],
-    correction: bool,
+    mut correction: bool,
     _raw: &str,
 ) -> Option<ParsedMetarRef> {
-    let observation_time = *body_tokens.first()?;
+    let normalized_tokens = expand_metar_body_tokens(body_tokens);
+    let mut index = 0;
+    if normalized_tokens
+        .get(index)
+        .is_some_and(|token| token == "COR")
+    {
+        correction = true;
+        index += 1;
+    }
+    let observation_time = normalized_tokens.get(index)?;
+    index += 1;
     if !is_metar_station(station) || !is_observation_time(observation_time) {
         return None;
+    }
+    if normalized_tokens
+        .get(index)
+        .is_some_and(|token| token == "NIL")
+    {
+        return Some(ParsedMetarRef {
+            kind,
+            station: station.to_string(),
+            observation_time: observation_time.to_string(),
+            correction,
+            wind: None,
+            visibility: None,
+            weather: Vec::new(),
+            sky_conditions: Vec::new(),
+            temperature_c: None,
+            dewpoint_c: None,
+            altimeter: None,
+            remarks: None,
+        });
     }
 
     let mut wind = None;
@@ -297,15 +326,15 @@ fn parse_metar_body(
     let mut remarks_tokens = Vec::new();
     let mut in_remarks = false;
 
-    for token in &body_tokens[1..] {
-        if *token == "COR" {
+    for token in &normalized_tokens[index..] {
+        if token == "COR" {
             continue;
         }
         if in_remarks {
-            remarks_tokens.push((*token).to_string());
+            remarks_tokens.push(token.to_string());
             continue;
         }
-        if *token == "RMK" {
+        if token == "RMK" {
             in_remarks = true;
             continue;
         }
@@ -316,7 +345,7 @@ fn parse_metar_body(
             continue;
         }
         if visibility.is_none() && is_visibility_token(token) {
-            visibility = Some((*token).to_string());
+            visibility = Some(token.to_string());
             continue;
         }
         if temperature_c.is_none()
@@ -328,7 +357,7 @@ fn parse_metar_body(
             continue;
         }
         if altimeter.is_none() && is_altimeter_token(token) {
-            altimeter = Some((*token).to_string());
+            altimeter = Some(token.to_string());
             continue;
         }
         if let Some(condition) = parse_sky_condition(token) {
@@ -336,7 +365,7 @@ fn parse_metar_body(
             continue;
         }
         if is_weather_token(token) {
-            weather.push((*token).to_string());
+            weather.push(token.to_string());
         }
     }
 
@@ -354,6 +383,29 @@ fn parse_metar_body(
         altimeter,
         remarks: (!remarks_tokens.is_empty()).then_some(remarks_tokens.join(" ")),
     })
+}
+
+fn expand_metar_body_tokens(tokens: &[&str]) -> Vec<String> {
+    let mut expanded = Vec::with_capacity(tokens.len());
+    for token in tokens {
+        if let Some((observation_time, suffix)) = split_observation_suffix(token) {
+            expanded.push(observation_time.to_string());
+            if !suffix.is_empty() {
+                expanded.push(suffix.to_string());
+            }
+        } else {
+            expanded.push((*token).to_string());
+        }
+    }
+    expanded
+}
+
+fn split_observation_suffix(token: &str) -> Option<(&str, &str)> {
+    let observation = token.get(..7)?;
+    if !is_observation_time(observation) || token.len() == 7 {
+        return None;
+    }
+    Some((observation, token.get(7..).unwrap_or_default()))
 }
 
 fn find_metar_start<'a>(
@@ -548,6 +600,48 @@ mod tests {
         assert_eq!(bulletin.reports[0].station, "KDSM");
         assert_eq!(bulletin.reports[0].altimeter.as_deref(), Some("A3017"));
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn parses_station_led_corrected_metar_report() {
+        let text = "METAR TBPB COR 172000Z 11021KT 9999 SCT020 28/20 Q1013 NOSIG=";
+        let (bulletin, issues) =
+            parse_metar_bulletin(text).expect("expected station-led corrected METAR report");
+
+        assert!(issues.is_empty());
+        assert_eq!(bulletin.report_count(), 1);
+        assert_eq!(bulletin.reports[0].station, "TBPB");
+        assert_eq!(bulletin.reports[0].observation_time, "172000Z");
+        assert!(bulletin.reports[0].correction);
+    }
+
+    #[test]
+    fn parses_fused_observation_suffix_token() {
+        let text = "METAR SBOI 171800ZAUTO 04011KT 360V080 9999 FEW021 SCT026 28/23 Q1009=";
+        let (bulletin, issues) =
+            parse_metar_bulletin(text).expect("expected fused observation suffix METAR report");
+
+        assert!(issues.is_empty());
+        assert_eq!(bulletin.report_count(), 1);
+        assert_eq!(bulletin.reports[0].station, "SBOI");
+        assert_eq!(bulletin.reports[0].observation_time, "171800Z");
+        assert_eq!(
+            bulletin.reports[0].wind.as_ref().map(|wind| wind.speed_kt),
+            Some(11)
+        );
+    }
+
+    #[test]
+    fn parses_nil_metar_report() {
+        let text = "METAR TGPY 281600Z NIL=";
+        let (bulletin, issues) = parse_metar_bulletin(text).expect("expected NIL METAR report");
+
+        assert!(issues.is_empty());
+        assert_eq!(bulletin.report_count(), 1);
+        assert_eq!(bulletin.reports[0].station, "TGPY");
+        assert_eq!(bulletin.reports[0].observation_time, "281600Z");
+        assert_eq!(bulletin.reports[0].raw, "METAR TGPY 281600Z NIL");
+        assert!(bulletin.reports[0].wind.is_none());
     }
 
     #[test]

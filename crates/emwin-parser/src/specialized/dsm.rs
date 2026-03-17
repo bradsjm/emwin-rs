@@ -80,7 +80,9 @@ fn parse_summary(token: &str, reference_time: DateTime<Utc>) -> Option<DsmSummar
         min_slp_time: time_or_missing(caps.name("slptime").map(|m| m.as_str()), date),
         precip_day_inches: precip_hundredths(caps.name("pday")?.as_str())?,
         hourly_precip_inches: hourly,
-        avg_wind_mph: number_f32(caps.name("avg_sped")?.as_str()),
+        avg_wind_mph: caps
+            .name("avg_sped")
+            .and_then(|value| number_f32(value.as_str())),
         max_wind_mph: number_f32_opt(caps.name("sped_max").map(|m| m.as_str())),
         max_wind_time: timestring("time_sped_max"),
         max_wind_dir_degrees: wind_dir(caps.name("drct_sped_max").map(|m| m.as_str())),
@@ -101,7 +103,7 @@ fn infer_year(reference_time: DateTime<Utc>, month: u32) -> i32 {
 fn dsm_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(
-        r"^(?P<station>[A-Z][A-Z0-9]{3})\s+DS\s+(?:COR\s+)?(?:\d{4}\s+)?(?P<day>\d\d)/(?P<month>\d\d)\s+(?:(?P<highmiss>M)|(?P<high>-?\d+)(?P<hightime>\d{4}))/\s*(?:(?P<lowmiss>M)|(?P<low>-?\d+)(?P<lowtime>\d{4}))//\s*(?P<coophigh>-?\d+|M)/\s*(?P<cooplow>-?\d+|M)//(?P<minslp>M|[-0-9]{3,4})(?P<slptime>\d{4})?/(?P<pday>T|M|[0-9]{1,4})/(?P<p01>T|M|-|[0-9]{1,4})/(?P<p02>T|M|-|[0-9]{1,4})/(?P<p03>T|M|-|[0-9]{1,4})/(?P<p04>T|M|-|[0-9]{1,4})/(?P<p05>T|M|-|[0-9]{1,4})/(?P<p06>T|M|-|[0-9]{1,4})/(?P<p07>T|M|-|[0-9]{1,4})/(?P<p08>T|M|-|[0-9]{1,4})/(?P<p09>T|M|-|[0-9]{1,4})/(?P<p10>T|M|-|[0-9]{1,4})/(?P<p11>T|M|-|[0-9]{1,4})/(?P<p12>T|M|-|[0-9]{1,4})/(?P<p13>T|M|-|[0-9]{1,4})/(?P<p14>T|M|-|[0-9]{1,4})/(?P<p15>T|M|-|[0-9]{1,4})/(?P<p16>T|M|-|[0-9]{1,4})/(?P<p17>T|M|-|[0-9]{1,4})/(?P<p18>T|M|-|[0-9]{1,4})/(?P<p19>T|M|-|[0-9]{1,4})/(?P<p20>T|M|-|[0-9]{1,4})/(?P<p21>T|M|-|[0-9]{1,4})/(?P<p22>T|M|-|[0-9]{1,4})/(?P<p23>T|M|-|[0-9]{1,4})/(?P<p24>T|M|-|[0-9]{1,4})/(?P<avg_sped>M|-|\d{2,3})/(?:(?P<drct_sped_max>\d{2})(?P<sped_max>\d{2,3})(?P<time_sped_max>\d{4})/(?P<drct_gust_max>\d{2})(?P<sped_gust_max>\d{2,3})(?P<time_sped_gust_max>\d{4}))?",
+        r"^(?P<station>[A-Z][A-Z0-9]{3})\s+DS\s+(?:COR\s+)?(?:\d{4}\s+)?(?P<day>\d\d)/(?P<month>\d\d)\s+(?:(?P<highmiss>M)|(?P<high>-?\d+)(?P<hightime>\d{4}))/\s*(?:(?P<lowmiss>M)|(?P<low>-?\d+)(?P<lowtime>\d{4}))//\s*(?P<coophigh>-?\d+|M)/\s*(?P<cooplow>-?\d+|M)//(?P<minslp>M|[-0-9]{3,4})(?P<slptime>\d{3,4})?/(?P<pday>T|M|[0-9]{1,4})/(?P<p01>T|M|-|[0-9]{1,4})/(?P<p02>T|M|-|[0-9]{1,4})/(?P<p03>T|M|-|[0-9]{1,4})/(?P<p04>T|M|-|[0-9]{1,4})/(?P<p05>T|M|-|[0-9]{1,4})/(?P<p06>T|M|-|[0-9]{1,4})/(?P<p07>T|M|-|[0-9]{1,4})/(?P<p08>T|M|-|[0-9]{1,4})/(?P<p09>T|M|-|[0-9]{1,4})/(?P<p10>T|M|-|[0-9]{1,4})/(?P<p11>T|M|-|[0-9]{1,4})/(?P<p12>T|M|-|[0-9]{1,4})/(?P<p13>T|M|-|[0-9]{1,4})/(?P<p14>T|M|-|[0-9]{1,4})/(?P<p15>T|M|-|[0-9]{1,4})/(?P<p16>T|M|-|[0-9]{1,4})/(?P<p17>T|M|-|[0-9]{1,4})/(?P<p18>T|M|-|[0-9]{1,4})/(?P<p19>T|M|-|[0-9]{1,4})/(?P<p20>T|M|-|[0-9]{1,4})/(?P<p21>T|M|-|[0-9]{1,4})/(?P<p22>T|M|-|[0-9]{1,4})/(?P<p23>T|M|-|[0-9]{1,4})/(?P<p24>T|M|-|[0-9]{1,4})(?:/(?P<avg_sped>M|-|\d{2,3})?)?/(?:(?P<drct_sped_max>\d{2})(?P<sped_max>\d{2,3})(?P<time_sped_max>\d{4})/(?P<drct_gust_max>\d{2})(?P<sped_gust_max>\d{2,3})(?P<time_sped_gust_max>\d{4}))?(?:/(?:[A-Z0-9-]{1,4}|M|T))*/*$",
     ).expect("valid DSM regex"))
 }
 
@@ -150,7 +152,12 @@ fn wind_dir(value: Option<&str>) -> Option<u16> {
 
 fn time_or_missing(value: Option<&str>, date: NaiveDate) -> Option<String> {
     let token = value?;
-    let time = NaiveTime::parse_from_str(token, "%H%M").ok()?;
+    let token = if token.len() == 3 {
+        format!("0{token}")
+    } else {
+        token.to_string()
+    };
+    let time = NaiveTime::parse_from_str(&token, "%H%M").ok()?;
     Some(date.and_time(time).and_utc().to_rfc3339())
 }
 

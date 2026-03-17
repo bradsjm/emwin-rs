@@ -1,6 +1,6 @@
 mod common;
 
-use common::{assert_supported_family, assert_wmo, enrich, fixture_cases};
+use common::{assert_supported_family, assert_wmo, enrich, fixture_cases, issue_codes};
 use emwin_parser::{TafForecastGroupKind, enrich_product};
 
 #[test]
@@ -105,8 +105,13 @@ fn taf_corpus_routes_to_wmo_bulletins() {
             );
             if let Some(probability_percent) = group.probability_percent {
                 assert!(
-                    matches!(group.change_kind, TafForecastGroupKind::Prob),
-                    "{} -> only PROB groups may carry probability",
+                    matches!(
+                        group.change_kind,
+                        TafForecastGroupKind::Prob
+                            | TafForecastGroupKind::Tempo
+                            | TafForecastGroupKind::Inter
+                    ),
+                    "{} -> only PROB, TEMPO, or INTER groups may carry probability",
                     case.name
                 );
                 assert!(
@@ -123,6 +128,15 @@ fn taf_corpus_routes_to_wmo_bulletins() {
 fn sigmet_corpus_routes_to_wmo_bulletins() {
     for case in fixture_cases("wmo", "sigmet_bulletin") {
         let enrichment = enrich(&case);
+        if enrichment.family == Some("unsupported_wmo_bulletin") {
+            assert!(
+                issue_codes(&enrichment.issues)
+                    .contains("unsupported_international_sigmet_bulletin"),
+                "{} -> expected unsupported international SIGMET issue",
+                case.name
+            );
+            continue;
+        }
         assert_supported_family(
             &enrichment,
             "sigmet_bulletin",

@@ -2311,10 +2311,8 @@
     "wmo_prefix": "FP",
     "title": "Other Public Products",
     "routing": "generic",
-    "body_behavior": "catalog",
-    "extractors": [
-      "ugc"
-    ]
+    "body_behavior": "never",
+    "extractors": []
   },
   "OSB": {
     "wmo_prefix": "AG",
@@ -2837,10 +2835,8 @@
     "wmo_prefix": "AS",
     "title": "Weather Roundup",
     "routing": "generic",
-    "body_behavior": "catalog",
-    "extractors": [
-      "ugc"
-    ]
+    "body_behavior": "never",
+    "extractors": []
   },
   "RWS": {
     "wmo_prefix": "AW",
@@ -3022,10 +3018,8 @@
     "wmo_prefix": "FP",
     "title": "Tabular State Forecast",
     "routing": "generic",
-    "body_behavior": "catalog",
-    "extractors": [
-      "ugc"
-    ]
+    "body_behavior": "never",
+    "extractors": []
   },
   "SGL": {
     "wmo_prefix": "UM",

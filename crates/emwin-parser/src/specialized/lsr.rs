@@ -100,42 +100,26 @@ fn parse_lsr_chunk(text: &str, reference_time: DateTime<Utc>) -> Option<LsrRepor
         .join(" ");
 
     let first_fields = parse_first_lsr_line(first)?;
-    let second_caps = second_line_re().captures(second)?;
+    let second_fields = parse_second_lsr_line(second)?;
     let valid = parse_lsr_datetime(
         &first_fields.time_token,
         &first_fields.ampm,
-        second.get(..10)?.trim(),
+        &second_fields.date,
         reference_time,
     )?;
     let (latitude, longitude) = parse_lat_lon(&first_fields.lat_token, &first_fields.lon_token)?;
-    let magnitude = second_caps
-        .name("mag")
-        .map(|m| m.as_str())
-        .unwrap_or("")
-        .trim();
-    let county = second_caps
-        .name("county")
-        .map(|m| m.as_str().trim())
-        .and_then(empty_to_none);
-    let state = second_caps
-        .name("state")
-        .map(|m| m.as_str().trim())
-        .and_then(empty_to_none);
-    let source = second_caps
-        .name("source")
-        .map(|m| m.as_str().trim())
-        .and_then(empty_to_none);
-    let (magnitude_value, magnitude_units, magnitude_qualifier) = parse_magnitude(magnitude);
+    let (magnitude_value, magnitude_units, magnitude_qualifier) =
+        parse_magnitude(&second_fields.magnitude);
 
     Some(LsrReport {
         valid: valid.to_rfc3339(),
         event_text: first_fields.event_text,
         city: first_fields.city,
-        county,
-        state,
+        county: empty_to_none(second_fields.county.trim()),
+        state: empty_to_none(second_fields.state.trim()),
         latitude,
         longitude,
-        source,
+        source: empty_to_none(second_fields.source.trim()),
         remark: empty_to_none(remarks.trim()),
         magnitude_value,
         magnitude_units,
@@ -191,18 +175,11 @@ fn parse_first_lsr_line(line: &str) -> Option<ParsedLsrFirstLine> {
     let lat_token = tail.next()?.trim().to_string();
     let middle = tail.next()?.trim_end();
 
-    let split_at = middle
-        .char_indices()
-        .nth(17)
-        .map(|(index, _)| index)
-        .unwrap_or(middle.len());
-
-    if !is_lsr_lat_token(&lat_token) || !is_lsr_lon_token(&lon_token) || split_at == middle.len() {
+    if !is_lsr_lat_token(&lat_token) || !is_lsr_lon_token(&lon_token) {
         return None;
     }
 
-    let event_text = middle.get(..split_at)?.trim().to_string();
-    let city = middle.get(split_at..)?.trim().to_string();
+    let (event_text, city) = split_first_line_middle(middle)?;
     if event_text.is_empty() || city.is_empty() {
         return None;
     }
@@ -215,6 +192,26 @@ fn parse_first_lsr_line(line: &str) -> Option<ParsedLsrFirstLine> {
         lat_token,
         lon_token,
     })
+}
+
+fn split_first_line_middle(middle: &str) -> Option<(String, String)> {
+    let field_split = middle
+        .char_indices()
+        .nth(17)
+        .map(|(index, _)| index)
+        .unwrap_or(middle.len());
+    if field_split < middle.len() {
+        let event_text = middle.get(..field_split)?.trim().to_string();
+        let city = middle.get(field_split..)?.trim().to_string();
+        if !event_text.is_empty() && !city.is_empty() {
+            return Some((event_text, city));
+        }
+    }
+
+    let split_at = middle.find("  ")?;
+    let event_text = middle.get(..split_at)?.trim().to_string();
+    let city = middle.get(split_at..)?.trim().to_string();
+    (!event_text.is_empty() && !city.is_empty()).then_some((event_text, city))
 }
 
 fn is_lsr_lat_token(token: &str) -> bool {
@@ -237,13 +234,42 @@ fn is_lsr_lon_token(token: &str) -> bool {
             .all(|character| character.is_ascii_digit() || character == '.')
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedLsrSecondLine {
+    date: String,
+    magnitude: String,
+    county: String,
+    state: String,
+    source: String,
+}
+
+fn parse_second_lsr_line(line: &str) -> Option<ParsedLsrSecondLine> {
+    let captures = second_line_re().captures(line)?;
+    let date = captures.name("date")?.as_str().trim();
+    let magnitude = captures
+        .name("mag")
+        .map(|value| value.as_str().trim())
+        .unwrap_or_default();
+    let county = captures.name("county")?.as_str().trim();
+    let state = captures.name("state")?.as_str().trim();
+    let source = captures.name("source")?.as_str().trim();
+
+    Some(ParsedLsrSecondLine {
+        date: date.to_string(),
+        magnitude: magnitude.to_string(),
+        county: county.to_string(),
+        state: state.to_string(),
+        source: source.to_string(),
+    })
+}
+
 fn second_line_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"^(?P<date>\d{2}/\d{2}/\d{4})\s+(?P<mag>.{0,17}?)\s{2,}(?P<county>.{1,19}?)\s{2,}(?P<state>[A-Z]{2})\s{2,}(?P<source>.+?)\s*$",
+            r"^(?P<date>\d{2}/\d{2}/\d{4})\s+(?P<mag>.{0,17}?)\s{2,}(?P<county>.*?)\s+(?P<state>[A-Z]{2})\s{2,}(?P<source>.+?)\s*$",
         )
-        .expect("valid LSR second line regex")
+        .expect("valid LSR second-line regex")
     })
 }
 

@@ -1,6 +1,7 @@
 mod common;
 
 use common::{assert_specialized, assert_supported_family, enrich, fixture_cases};
+use emwin_parser::SpcOutlookFormat;
 
 #[test]
 fn cf6_corpus_routes_to_structured_bulletins() {
@@ -152,10 +153,13 @@ fn spc_outlook_corpus_routes_to_structured_bulletins() {
             "{} -> expected SPC days",
             case.name
         );
-        assert!(
-            bulletin.days.iter().all(|day| !day.outlooks.is_empty()),
-            "{} -> expected day outlooks",
-            case.name
-        );
+        match bulletin.format {
+            SpcOutlookFormat::Points => assert!(
+                bulletin.days.iter().all(|day| !day.outlooks.is_empty()),
+                "{} -> expected day outlooks",
+                case.name
+            ),
+            SpcOutlookFormat::ArealOutline => {}
+        }
     }
 }

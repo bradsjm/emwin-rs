@@ -245,6 +245,7 @@ fn validate_vtec_segment(
     }
 
     if segment.polygons.is_empty()
+        && segment_has_polygon_required_ugc(segment)
         && !segment_has_marine_only_ugc(segment)
         && !segment_is_watch_only(segment)
     {
@@ -339,6 +340,13 @@ fn segment_has_marine_only_ugc(segment: &VtecEventSegment) -> bool {
                 && section.fire_zones.is_empty()
                 && !section.marine_zones.is_empty()
         })
+}
+
+fn segment_has_polygon_required_ugc(segment: &VtecEventSegment) -> bool {
+    segment
+        .ugc_sections
+        .iter()
+        .any(|section| !section.counties.is_empty() || !section.fire_zones.is_empty())
 }
 
 fn segment_is_watch_only(segment: &VtecEventSegment) -> bool {

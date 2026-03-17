@@ -802,7 +802,8 @@ pub(super) fn looks_like_wwp_text_product(afos: &str, body_text: &str) -> bool {
     afos.starts_with("WWP")
         && body_text.contains("PROBABILITY TABLE:")
         && (body_text.contains("ATTRIBUTE TABLE:")
-            || body_text.contains("WATCH PROBABILITIES FOR WT"))
+            || body_text.contains("WATCH PROBABILITIES FOR WT")
+            || body_text.contains("WATCH PROBABILITIES FOR WS"))
 }
 
 pub(super) fn looks_like_saw_text_product(afos: &str, body_text: &str) -> bool {

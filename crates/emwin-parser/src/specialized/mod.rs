@@ -34,7 +34,9 @@ pub use pirep::{PirepBulletin, PirepKind, PirepReport};
 pub use saw::{SawAction, SawBulletin};
 pub use sel::SelBulletin;
 pub use sigmet::{SigmetBulletin, SigmetSection};
-pub use spc_outlook::{SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookKind};
+pub use spc_outlook::{
+    SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookFormat, SpcOutlookKind,
+};
 pub use taf::{
     TafBulletin, TafConditions, TafForecastGroup, TafForecastGroupKind, TafSkyCondition, TafWind,
     TafWindShear,

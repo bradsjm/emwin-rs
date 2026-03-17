@@ -78,7 +78,7 @@ pub use specialized::{
     McdBulletin, McdCenter, McdMostProbableTags, MetarBulletin, MetarReport, MetarReportKind,
     MetarSkyCondition, MetarWind, MosBulletin, MosForecastRow, MosSection, PirepBulletin,
     PirepKind, PirepReport, SawAction, SawBulletin, SelBulletin, SigmetBulletin, SigmetSection,
-    SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookKind, SpcWatchType, TafBulletin,
-    TafConditions, TafForecastGroup, TafForecastGroupKind, TafSkyCondition, TafWind, TafWindShear,
-    WwpBulletin,
+    SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookFormat, SpcOutlookKind,
+    SpcWatchType, TafBulletin, TafConditions, TafForecastGroup, TafForecastGroupKind,
+    TafSkyCondition, TafWind, TafWindShear, WwpBulletin,
 };

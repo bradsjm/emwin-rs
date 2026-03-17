@@ -580,16 +580,30 @@ mod tests {
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("sigmet_bulletin"));
+        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
         assert_eq!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_sigmet)
-                .map(|value| value.sections.len()),
-            Some(1)
+            enrichment.issues.first().map(|issue| issue.code),
+            Some("unsupported_international_sigmet_bulletin")
         );
-        assert!(enrichment.issues.is_empty());
+        assert!(enrichment.parsed.is_none());
+        assert!(enrichment.wmo_header.is_some());
+    }
+
+    #[test]
+    fn international_pirep_bulletins_use_wmo_unsupported_source() {
+        let enrichment = enrich_product(
+            "PIREP.TXT",
+            b"UAJP71 RJFF 171210\n\nPIREP MOD TURB OBSD AT 1210 SANOR F340 REPORTED BY A320\n",
+        );
+
+        assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
+        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(
+            enrichment.issues.first().map(|issue| issue.code),
+            Some("unsupported_international_pirep_bulletin")
+        );
+        assert!(enrichment.parsed.is_none());
+        assert!(enrichment.wmo_header.is_some());
     }
 
     #[test]

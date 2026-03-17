@@ -62,7 +62,7 @@ fn header_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"(?m)^(?P<typ>TORNADO|SEVERE THUNDERSTORM) WATCH PROBABILITIES FOR WT (?P<num>\d{4})$",
+            r"(?m)^(?P<typ>TORNADO|SEVERE THUNDERSTORM) WATCH PROBABILITIES FOR W[TS] (?P<num>\d{4})$",
         )
         .expect("valid WWP header regex")
     })
@@ -118,5 +118,30 @@ PARTICULARLY DANGEROUS SITUATION : NO";
         assert_eq!(bulletin.watch_type, SpcWatchType::Tornado);
         assert_eq!(bulletin.watch_number, 31);
         assert_eq!(bulletin.prob_combined_hail_wind_6_or_more, 95);
+    }
+
+    #[test]
+    fn parses_watch_probabilities_with_ws_header() {
+        let text = "\
+SEVERE THUNDERSTORM WATCH PROBABILITIES FOR WS 0071
+
+PROB OF 2 OR MORE TORNADOES                        :  20%
+PROB OF 1 OR MORE STRONG /EF2-EF5/ TORNADOES       :  05%
+PROB OF 10 OR MORE SEVERE WIND EVENTS              :  50%
+PROB OF 1 OR MORE WIND EVENTS >= 65 KNOTS          :  20%
+PROB OF 10 OR MORE SEVERE HAIL EVENTS              : <05%
+PROB OF 1 OR MORE HAIL EVENTS >= 2 INCHES          : <05%
+PROB OF 6 OR MORE COMBINED SEVERE HAIL/WIND EVENTS :  70%
+
+MAX HAIL /INCHES/                            : 0.0
+MAX WIND GUSTS SURFACE /KNOTS/               : 60
+MAX TOPS /X 100 FEET/                        : 200
+MEAN STORM MOTION VECTOR /DEGREES AND KNOTS/ : 25040
+PARTICULARLY DANGEROUS SITUATION             : NO";
+        let bulletin = parse_wwp_bulletin(text).expect("wwp bulletin");
+
+        assert_eq!(bulletin.watch_type, SpcWatchType::SevereThunderstorm);
+        assert_eq!(bulletin.watch_number, 71);
+        assert_eq!(bulletin.prob_severe_wind_10_or_more, 50);
     }
 }

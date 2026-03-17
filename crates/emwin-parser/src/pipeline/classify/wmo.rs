@@ -17,7 +17,8 @@ use crate::specialized::sigmet::parse_sigmet_bulletin;
 use crate::specialized::taf::parse_taf_bulletin;
 
 use super::common::{
-    filename_stem, first_nonempty_line, malformed_supported_family, unsupported_wmo_candidate,
+    filename_stem, first_nonempty_line, malformed_supported_family, starts_with_icao_sigmet_line,
+    unsupported_wmo_candidate,
 };
 use super::context::WmoClassificationContext;
 use super::text::{
@@ -195,6 +196,14 @@ pub(super) fn classify_wmo_dsm(
 pub(super) fn classify_wmo_pirep(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
+    if looks_like_international_pirep_bulletin(context.body_text) {
+        return Some(unsupported_wmo_candidate(
+            context.header,
+            "unsupported_international_pirep_bulletin",
+            "recognized international PIREP bulletin, but this parser only supports domestic slash-tag PIREP structure",
+            context.body_text,
+        ));
+    }
     if !looks_like_pirep_text_product("", context.body_text) {
         return None;
     }
@@ -243,6 +252,16 @@ pub(super) fn classify_wmo_sigmet(
     if !looks_like_sigmet_wmo_bulletin(context.body_text) {
         return None;
     }
+    if first_nonempty_line(context.body_text)
+        .is_some_and(|line| starts_with_icao_sigmet_line(line) && !line.starts_with("KZAK SIGMET "))
+    {
+        return Some(unsupported_wmo_candidate(
+            context.header,
+            "unsupported_international_sigmet_bulletin",
+            "recognized international SIGMET bulletin, but this parser only supports domestic SIGMET structure",
+            context.body_text,
+        ));
+    }
     let Some(bulletin) = parse_sigmet_bulletin(context.body_text) else {
         return Some(malformed_supported_family(
             ProductEnrichmentSource::WmoBulletin,
@@ -270,6 +289,13 @@ pub(super) fn classify_wmo_sigmet(
         bulletin,
         issues: Vec::new(),
     }))
+}
+
+fn looks_like_international_pirep_bulletin(body_text: &str) -> bool {
+    first_nonempty_line(body_text).is_some_and(|line| {
+        let upper = line.to_ascii_uppercase();
+        upper == "PIREP" || (upper.starts_with("PIREP ") && upper.contains(" OBSD AT "))
+    })
 }
 
 pub(super) fn classify_wmo_cwa(

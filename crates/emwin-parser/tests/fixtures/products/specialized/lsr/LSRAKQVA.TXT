@@ -1,0 +1,22 @@
+NWUS51 KAKQ 171816
+LSRAKQ
+
+Preliminary Local Storm Report
+National Weather Service Wakefield VA
+216 PM EDT Tue Mar 17 2026
+
+..TIME...   ...EVENT...      ...CITY LOCATION...     ...LAT.LON...
+..DATE...   ....MAG....      ..COUNTY LOCATION..ST.. ...SOURCE....
+            ..REMARKS..
+
+1000 PM     Tstm Wnd Dmg     2 WNW Downtown Portsmou 36.85N 76.33W
+03/16/2026                   City of Portsmouth VA   Public
+
+            Numerous trees down along Maryland Ave.
+
+
+&&
+
+$$
+
+jo

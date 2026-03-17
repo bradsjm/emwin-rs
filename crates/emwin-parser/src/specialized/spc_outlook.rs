@@ -12,9 +12,17 @@ pub enum SpcOutlookKind {
     FireWeather,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpcOutlookFormat {
+    Points,
+    ArealOutline,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SpcOutlookBulletin {
     pub product_kind: SpcOutlookKind,
+    pub format: SpcOutlookFormat,
     pub days: Vec<SpcOutlookDay>,
     pub raw: String,
 }
@@ -51,6 +59,11 @@ pub(crate) fn parse_spc_outlook_bulletin(
         SpcOutlookKind::Convective
     };
     let days = day_numbers_for_afos(afos)?;
+    let format = if compact.to_ascii_uppercase().contains("AREAL OUTLINE") {
+        SpcOutlookFormat::ArealOutline
+    } else {
+        SpcOutlookFormat::Points
+    };
     let (valid_from, valid_to) = valid_re()
         .captures(&compact)
         .map(|captures| {
@@ -64,12 +77,13 @@ pub(crate) fn parse_spc_outlook_bulletin(
         .unwrap_or((None, None));
 
     let outlooks = parse_outlook_areas(&compact);
-    if outlooks.is_empty() {
+    if outlooks.is_empty() && !matches!(format, SpcOutlookFormat::ArealOutline) {
         return None;
     }
 
     Some(SpcOutlookBulletin {
         product_kind,
+        format,
         days: days
             .into_iter()
             .map(|day| SpcOutlookDay {
@@ -229,7 +243,7 @@ fn threshold_re() -> &'static Regex {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpcOutlookKind, parse_spc_outlook_bulletin};
+    use super::{SpcOutlookFormat, SpcOutlookKind, parse_spc_outlook_bulletin};
 
     #[test]
     fn parses_convective_points_product() {
@@ -247,6 +261,7 @@ MRGL 49061987 48451952 47761927 49061987";
         let bulletin =
             parse_spc_outlook_bulletin(text, Some("PTSDY1")).expect("spc outlook bulletin");
         assert_eq!(bulletin.product_kind, SpcOutlookKind::Convective);
+        assert_eq!(bulletin.format, SpcOutlookFormat::Points);
         assert_eq!(bulletin.days.len(), 1);
         assert_eq!(bulletin.days[0].outlooks.len(), 2);
         assert_eq!(bulletin.days[0].outlooks[0].polygons.len(), 1);
@@ -266,5 +281,23 @@ MRGL 49061987 48451952 47761927 49061987";
             bulletin.days.iter().map(|day| day.day).collect::<Vec<_>>(),
             vec![4, 5, 6, 7, 8]
         );
+    }
+
+    #[test]
+    fn parses_areal_outline_without_point_geometry() {
+        let text = "\
+DAY 1 CONVECTIVE OUTLOOK AREAL OUTLINE
+VALID TIME 071300Z - 081200Z
+
+... TORNADO ...
+
+&&
+";
+        let bulletin =
+            parse_spc_outlook_bulletin(text, Some("PTSDY1")).expect("spc areal outline bulletin");
+
+        assert_eq!(bulletin.format, SpcOutlookFormat::ArealOutline);
+        assert_eq!(bulletin.days.len(), 1);
+        assert!(bulletin.days[0].outlooks.is_empty());
     }
 }
