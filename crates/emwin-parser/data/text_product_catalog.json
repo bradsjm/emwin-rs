@@ -571,6 +571,13 @@
       "ugc"
     ]
   },
+  "ECS": {
+    "wmo_prefix": "FO",
+    "title": "ECM MOS Guidance",
+    "routing": "mos",
+    "body_behavior": "never",
+    "extractors": []
+  },
   "EET": {
     "wmo_prefix": "SD",
     "title": "135 Radar Enhanced Echo Tops",
@@ -1360,6 +1367,13 @@
       "ugc"
     ]
   },
+  "LAV": {
+    "wmo_prefix": "FO",
+    "title": "GFS LAMP Guidance",
+    "routing": "mos",
+    "body_behavior": "never",
+    "extractors": []
+  },
   "LAW": {
     "wmo_prefix": "SM",
     "title": "Great Lakes Weather Observation",
@@ -1371,6 +1385,13 @@
     "wmo_prefix": "SX",
     "title": "Local Cooperative Observation",
     "routing": "generic",
+    "body_behavior": "never",
+    "extractors": []
+  },
+  "LEV": {
+    "wmo_prefix": "FE",
+    "title": "GFS LAMP Guidance",
+    "routing": "mos",
     "body_behavior": "never",
     "extractors": []
   },
@@ -1925,6 +1946,13 @@
     "body_behavior": "never",
     "extractors": []
   },
+  "NBE": {
+    "wmo_prefix": "FE",
+    "title": "NBM NBE Guidance",
+    "routing": "mos",
+    "body_behavior": "never",
+    "extractors": []
+  },
   "NBH": {
     "wmo_prefix": "SD",
     "title": "165 RADAR 1.7-2.0 HYDROMETEOR CLASS .13NM RES ID 165/DHC        DS.165hb",
@@ -1943,6 +1971,13 @@
     "wmo_prefix": "SD",
     "title": "166 RADAR 1.7-2.0 MELTING LAYER ID 166/ML  DS.166mb",
     "routing": "generic",
+    "body_behavior": "never",
+    "extractors": []
+  },
+  "NBS": {
+    "wmo_prefix": "FO",
+    "title": "NBM NBS Guidance",
+    "routing": "mos",
     "body_behavior": "never",
     "extractors": []
   },

@@ -40,7 +40,7 @@ The crate currently supports:
   - CF6 climate bulletins
   - DSM collectives
   - HML bulletins
-  - MOS guidance bulletins for `MET`, `MAV`, `MEX`, `FRH`, and `FTP`
+  - MOS guidance bulletins for `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and exact-AFOS `NBXUSA`
   - CLI daily climate bulletins
   - MCD/MPD bulletins
   - ERO bulletins
@@ -124,7 +124,12 @@ crates/emwin-parser/src
 +-- pipeline/
 |   +-- normalize.rs # single-buffer input normalization
 |   +-- envelope.rs  # parseable envelope construction
-|   +-- classify.rs  # ordered strategy registry
+|   +-- classify/
+|   |   +-- mod.rs     # ordered strategy registry and entrypoints
+|   |   +-- context.rs # shared AFOS/WMO classifier inputs
+|   |   +-- common.rs  # shared malformed/body-request helpers
+|   |   +-- text.rs    # AFOS specialized strategies and guards
+|   |   +-- wmo.rs     # WMO-only strategies and unsupported routing
 |   +-- candidate.rs # parsed intermediate candidates
 |   +-- assemble.rs  # ProductEnrichment conversion
 |
@@ -246,10 +251,10 @@ Text AFOS envelope
     +--> generic text fallback
 ```
 
-Current repo truth is encoded directly in the catalog:
+Current repo truth is encoded directly in the catalog and exact-AFOS override data:
 
-- `FD*`, `PIR`, `SIG`, `LSR`, `CWA`, `WWP`, `CF6`, `DSM`, `HML`, `MET`, `MAV`, `MEX`, `FRH`, `FTP`, and `CLI` route to specialized parsers and use `body_behavior = never`
-- exact-AFOS overrides also route `SWOMCD`, `FFGMPD`, `RBG94E`, `RBG98E`, `RBG99E`, `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized parsers
+- `FD*`, `PIR`, `SIG`, `LSR`, `CWA`, `WWP`, `CF6`, `DSM`, `HML`, `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and `CLI` are catalog-authorized AFOS families; classification now requires the matching `routing` value before any specialized parser can run
+- exact-AFOS overrides also route `PRCUS` to specialized PIREP parsing, `NBXUSA` to specialized MOS parsing, and `SWOMCD`, `FFGMPD`, `RBG94E`, `RBG98E`, `RBG99E`, `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized parsers
 - generic warning products such as `SVR`, `TOR`, and `FFW` route as `generic`
   and use `body_behavior = catalog`
 

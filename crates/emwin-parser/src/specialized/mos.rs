@@ -68,11 +68,7 @@ fn parse_section(section: &str) -> Option<MosSection> {
     } else if model == "GFSX" {
         model = "MEX".to_string();
     } else if model == "NBM" {
-        model = if mos_name == "NBX" {
-            "NBE".to_string()
-        } else {
-            mos_name.clone()
-        };
+        model = mos_name.clone();
     }
     let runtime = format!(
         "{}-{:02}-{:02}T{}:00:00Z",
@@ -201,7 +197,9 @@ fn parse_hour_axis<'a>(
         .collect::<Vec<_>>();
     let mut times: Vec<DateTime<Utc>> = Vec::new();
     for (idx, hour) in hours.iter().enumerate() {
-        let ts = if axis.0 != "UTC" && (model == "LAV" || matches!(model, "MEX" | "NBE" | "NBS")) {
+        let ts = if axis.0 != "UTC"
+            && (model == "LAV" || matches!(model, "MEX" | "NBE" | "NBS" | "NBX"))
+        {
             init + TimeDelta::hours(i64::from(hour.parse::<u32>().ok()?))
         } else if hour == "00" && idx > 0 {
             let prev: DateTime<Utc> = *times.last()?;
@@ -334,11 +332,9 @@ AHP 12/08/13/09";
         let bulletin = parse_mos_bulletin(text, Utc::now()).expect("ftp mos bulletin");
         assert!(!bulletin.sections.is_empty());
         assert_eq!(bulletin.sections[0].station, "AHP");
-        assert!(
-            bulletin.sections[0].forecasts[0]
-                .values
-                .contains_key("TAIFBX")
-        );
+        assert!(bulletin.sections[0].forecasts[0]
+            .values
+            .contains_key("TAIFBX"));
     }
 
     #[test]
@@ -363,5 +359,21 @@ AHP 12/08/13/09";
         assert_eq!(bulletin.sections[0].station, "PAOR");
         assert_eq!(bulletin.sections[0].model, "MEX");
         assert!(!bulletin.sections[0].forecasts.is_empty());
+    }
+
+    #[test]
+    fn preserves_nbx_model_identity() {
+        let text = include_str!("../../tests/fixtures/products/specialized/mos/MOS-NBXUSA.txt")
+            .lines()
+            .skip(3)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let bulletin = parse_mos_bulletin(&text, Utc::now()).expect("nbx bulletin");
+
+        assert!(!bulletin.sections.is_empty());
+        assert!(bulletin
+            .sections
+            .iter()
+            .all(|section| section.model == "NBX"));
     }
 }

@@ -4,6 +4,11 @@
     "routing": "mcd",
     "body_behavior": "never"
   },
+  "NBXUSA": {
+    "title": "NBM NBX Guidance",
+    "routing": "mos",
+    "body_behavior": "never"
+  },
   "PFWFD1": {
     "title": "Day 1 fire weather outlook points",
     "routing": "spc_outlook",
@@ -17,6 +22,10 @@
   "PFWF38": {
     "title": "Days 3-8 fire weather outlook points",
     "routing": "spc_outlook",
+    "body_behavior": "never"
+  },
+  "PRCUS": {
+    "routing": "pirep",
     "body_behavior": "never"
   },
   "RBG94E": {

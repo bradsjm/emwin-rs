@@ -6,8 +6,8 @@
 use super::{TextProductBodyBehavior, TextProductCatalogEntry, TextProductRouting};
 use crate::body::BodyExtractorId;
 
-pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-16T13:55:34Z";
-pub const TEXT_PRODUCT_ENTRY_COUNT: usize = 507;
+pub const TEXT_PRODUCT_GENERATED_AT_UTC: &str = "2026-03-16T23:05:58Z";
+pub const TEXT_PRODUCT_ENTRY_COUNT: usize = 512;
 
 pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_COUNT] = [
     TextProductCatalogEntry {
@@ -611,6 +611,14 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         routing: TextProductRouting::Generic,
         body_behavior: TextProductBodyBehavior::Catalog,
         extractors: &[BodyExtractorId::Ugc],
+    },
+    TextProductCatalogEntry {
+        pil: "ECS",
+        wmo_prefix: "FO",
+        title: "ECM MOS Guidance",
+        routing: TextProductRouting::Mos,
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
     },
     TextProductCatalogEntry {
         pil: "EET",
@@ -1453,6 +1461,14 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         extractors: &[BodyExtractorId::Ugc],
     },
     TextProductCatalogEntry {
+        pil: "LAV",
+        wmo_prefix: "FO",
+        title: "GFS LAMP Guidance",
+        routing: TextProductRouting::Mos,
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
+    },
+    TextProductCatalogEntry {
         pil: "LAW",
         wmo_prefix: "SM",
         title: "Great Lakes Weather Observation",
@@ -1465,6 +1481,14 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         wmo_prefix: "SX",
         title: "Local Cooperative Observation",
         routing: TextProductRouting::Generic,
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
+    },
+    TextProductCatalogEntry {
+        pil: "LEV",
+        wmo_prefix: "FE",
+        title: "GFS LAMP Guidance",
+        routing: TextProductRouting::Mos,
         body_behavior: TextProductBodyBehavior::Never,
         extractors: &[],
     },
@@ -2085,6 +2109,14 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         extractors: &[],
     },
     TextProductCatalogEntry {
+        pil: "NBE",
+        wmo_prefix: "FE",
+        title: "NBM NBE Guidance",
+        routing: TextProductRouting::Mos,
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
+    },
+    TextProductCatalogEntry {
         pil: "NBH",
         wmo_prefix: "SD",
         title: "165 RADAR 1.7-2.0 HYDROMETEOR CLASS .13NM RES ID 165/DHC        DS.165hb",
@@ -2113,6 +2145,14 @@ pub static TEXT_PRODUCT_CATALOG: [TextProductCatalogEntry; TEXT_PRODUCT_ENTRY_CO
         wmo_prefix: "SD",
         title: "94 RADAR 1.7-2.0 REFLECTIVITY .54NM RES 256 LEVELS ID 94/DR  Add  No   11K  6-14/hr  RPCCDS & SBN  DS.p94rb",
         routing: TextProductRouting::Generic,
+        body_behavior: TextProductBodyBehavior::Never,
+        extractors: &[],
+    },
+    TextProductCatalogEntry {
+        pil: "NBS",
+        wmo_prefix: "FO",
+        title: "NBM NBS Guidance",
+        routing: TextProductRouting::Mos,
         body_behavior: TextProductBodyBehavior::Never,
         extractors: &[],
     },

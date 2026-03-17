@@ -9,14 +9,21 @@ use super::{AfosRoutingOverride, TextProductBodyBehavior, TextProductRouting};
 use crate::body::BodyExtractorId;
 
 #[allow(dead_code)]
-pub const AFOS_ROUTING_GENERATED_AT_UTC: &str = "2026-03-16T13:55:34Z";
-pub const AFOS_ROUTING_OVERRIDE_COUNT: usize = 8;
+pub const AFOS_ROUTING_GENERATED_AT_UTC: &str = "2026-03-16T23:05:58Z";
+pub const AFOS_ROUTING_OVERRIDE_COUNT: usize = 10;
 
 pub static AFOS_ROUTING_OVERRIDES: [AfosRoutingOverride; AFOS_ROUTING_OVERRIDE_COUNT] = [
     AfosRoutingOverride {
         afos: "FFGMPD",
         title: Some("Mesoscale precipitation discussion"),
         routing: Some(TextProductRouting::Mcd),
+        body_behavior: Some(TextProductBodyBehavior::Never),
+        extractors: None,
+    },
+    AfosRoutingOverride {
+        afos: "NBXUSA",
+        title: Some("NBM NBX Guidance"),
+        routing: Some(TextProductRouting::Mos),
         body_behavior: Some(TextProductBodyBehavior::Never),
         extractors: None,
     },
@@ -38,6 +45,13 @@ pub static AFOS_ROUTING_OVERRIDES: [AfosRoutingOverride; AFOS_ROUTING_OVERRIDE_C
         afos: "PFWFD2",
         title: Some("Day 2 fire weather outlook points"),
         routing: Some(TextProductRouting::SpcOutlook),
+        body_behavior: Some(TextProductBodyBehavior::Never),
+        extractors: None,
+    },
+    AfosRoutingOverride {
+        afos: "PRCUS",
+        title: None,
+        routing: Some(TextProductRouting::Pirep),
         body_behavior: Some(TextProductBodyBehavior::Never),
         extractors: None,
     },

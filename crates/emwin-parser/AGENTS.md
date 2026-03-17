@@ -19,7 +19,11 @@ The current architecture is defined by these files:
 - [README.md](./README.md)
 - [src/pipeline/normalize.rs](./src/pipeline/normalize.rs)
 - [src/pipeline/envelope.rs](./src/pipeline/envelope.rs)
-- [src/pipeline/classify.rs](./src/pipeline/classify.rs)
+- [src/pipeline/classify/mod.rs](./src/pipeline/classify/mod.rs)
+- [src/pipeline/classify/context.rs](./src/pipeline/classify/context.rs)
+- [src/pipeline/classify/common.rs](./src/pipeline/classify/common.rs)
+- [src/pipeline/classify/text.rs](./src/pipeline/classify/text.rs)
+- [src/pipeline/classify/wmo.rs](./src/pipeline/classify/wmo.rs)
 - [src/pipeline/candidate.rs](./src/pipeline/candidate.rs)
 - [src/pipeline/assemble.rs](./src/pipeline/assemble.rs)
 - [src/data/mod.rs](./src/data/mod.rs)
@@ -57,7 +61,7 @@ bytes + filename
   - owns container detection and single-buffer text normalization
 - `envelope.rs`
   - owns AFOS/WMO envelope construction and parse error preservation
-- `classify.rs`
+- `classify/mod.rs` and its submodules
   - owns parser selection and creation of fully parsed candidates
 - `assemble.rs`
   - owns conversion from candidate to public `ProductEnrichment`
@@ -117,7 +121,7 @@ If you add a new specialized AFOS family, do all of the following together:
 1. extend `TextProductRouting`
 2. extend the JSON schema and generator
 3. update the generated catalog
-4. add a new strategy in `classify.rs`
+4. add a new strategy in `src/pipeline/classify/text.rs` or `src/pipeline/classify/wmo.rs`
 5. add candidate and assembly support if required
 6. add regression tests
 7. update `README.md`
@@ -143,7 +147,7 @@ TextProductCatalogEntry
 ### Rules
 
 1. `assemble.rs` may consume a `BodyContributionRequest`, but it must not decide extractor policy itself.
-2. `classify.rs` may build a `BodyContributionRequest`, but it must not parse body content itself.
+2. `classify/mod.rs` and its helpers may build a `BodyContributionRequest`, but they must not parse body content themselves.
 3. `body/enrich.rs` is the only place allowed to map extractor lists to QC rules.
 4. Extractor order is semantically significant. Preserve it unless intentionally changing output behavior.
 
@@ -186,13 +190,15 @@ At the time of writing:
 - `CF6` routes to specialized parsing and `body_behavior = never`
 - `DSM` routes to specialized parsing and `body_behavior = never`
 - `HML` routes to specialized parsing and `body_behavior = never`
-- `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, `NBS`, and `NBX` route to specialized parsing and `body_behavior = never`
+- `MET`, `MAV`, `MEX`, `FRH`, `FTP`, `ECS`, `LAV`, `LEV`, `NBE`, and `NBS` route to specialized parsing and `body_behavior = never`
 - `CLI` routes to specialized parsing and `body_behavior = never`
 
 That means current specialized AFOS families remain bodyless by catalog policy.
 
 Exact-AFOS overrides also route:
 
+- `PRCUS` to specialized PIREP parsing
+- `NBXUSA` to specialized MOS parsing
 - `SWOMCD` and `FFGMPD` to specialized MCD/MPD parsing
 - `RBG94E`, `RBG98E`, and `RBG99E` to specialized ERO parsing
 - `PTSDY1`, `PTSDY2`, `PTSDY3`, `PTSD48`, `PFWFD1`, `PFWFD2`, and `PFWF38` to specialized SPC outlook parsing
@@ -496,7 +502,7 @@ Reject changes that do any of the following:
 2. Add routing enum value.
 3. Update JSON schema and generator validation.
 4. Update catalog entries.
-5. Extend `classify.rs` strategy registry.
+5. Extend the `classify/mod.rs` strategy registry and the appropriate classifier submodule.
 6. Add candidate + assembly support if needed.
 7. Add tests.
 8. Update docs.

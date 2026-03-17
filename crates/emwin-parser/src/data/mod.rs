@@ -432,6 +432,7 @@ mod tests {
     #[test]
     fn new_specialized_entries_expose_specialized_routing_and_never_body_behavior() {
         for (pil, routing) in [
+            ("ECS", TextProductRouting::Mos),
             ("LSR", TextProductRouting::Lsr),
             ("CWA", TextProductRouting::Cwa),
             ("WWP", TextProductRouting::Wwp),
@@ -440,9 +441,13 @@ mod tests {
             ("CF6", TextProductRouting::Cf6),
             ("DSM", TextProductRouting::Dsm),
             ("HML", TextProductRouting::Hml),
+            ("LAV", TextProductRouting::Mos),
+            ("LEV", TextProductRouting::Mos),
             ("MET", TextProductRouting::Mos),
             ("MAV", TextProductRouting::Mos),
             ("MEX", TextProductRouting::Mos),
+            ("NBE", TextProductRouting::Mos),
+            ("NBS", TextProductRouting::Mos),
             ("FRH", TextProductRouting::Mos),
             ("FTP", TextProductRouting::Mos),
             ("PTS", TextProductRouting::SpcOutlook),
@@ -511,6 +516,12 @@ mod tests {
                 "PFWFD1",
                 "Day 1 fire weather outlook points",
                 TextProductRouting::SpcOutlook,
+            ),
+            ("NBXUSA", "NBM NBX Guidance", TextProductRouting::Mos),
+            (
+                "PRCUS",
+                "State Pilot Report Collective",
+                TextProductRouting::Pirep,
             ),
         ] {
             let policy = resolved_text_product_policy(afos).expect("expected resolved policy");
