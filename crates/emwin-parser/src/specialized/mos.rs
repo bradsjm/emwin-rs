@@ -346,13 +346,13 @@ PAOR GFSX MEX GUIDANCE 03/10/2026 0000 UTC
 UTC 00 06 12
 TMP 10 12 14
 WND 05 06 07";
-        let normalized = strip_control_chars(&text);
+        let normalized = strip_control_chars(text);
         let sections = split_sections(&normalized).expect("mexafg sections");
         let lines = sections[0].lines().collect::<Vec<_>>();
         let header = parse_section_header(lines[0]).expect("mexafg header");
         let (_, data_lines) = parse_hour_axis(&lines, "MEX", Utc::now()).expect("mexafg axis");
         let section = parse_section(&sections[0]).expect("mexafg section");
-        let bulletin = parse_mos_bulletin(&text, Utc::now()).expect("mexafg bulletin");
+        let bulletin = parse_mos_bulletin(text, Utc::now()).expect("mexafg bulletin");
 
         assert_eq!(header.station, "PAOR");
         assert!(!data_lines.is_empty());
@@ -371,7 +371,7 @@ UTC 00 12
 FHR 202 214
 TMP 83 61
 WSP 09 06";
-        let bulletin = parse_mos_bulletin(&text, Utc::now()).expect("nbx bulletin");
+        let bulletin = parse_mos_bulletin(text, Utc::now()).expect("nbx bulletin");
 
         assert!(!bulletin.sections.is_empty());
         assert!(

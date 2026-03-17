@@ -18,6 +18,7 @@ Contract:
 - command payloads are written to `stdout`
 - diagnostics and warnings are written to `stderr`
 - diagnostics use canonical `tracing-subscriber` formatting (configure via `RUST_LOG`; ANSI style via `RUST_LOG_STYLE=auto|always|never`)
+- startup diagnostics include the crate version and selected subcommand
 
 ## Live mode options
 
@@ -53,6 +54,7 @@ Persistence behavior when `--output-dir` is set:
 - Postgres outages no longer abort server startup; the server stays online and background persistence retries with backoff until the database is reachable again
 - S3 persistence attempts to auto-create the target bucket when missing; if S3 is unavailable or bucket creation/checks fail transiently, the server stays online and background persistence retries with backoff
 - transient filesystem write failures, including disk-full conditions, and transient S3 request failures are retried in the background with throttled warnings so live ingest and connected clients keep running
+- persistence failure logs identify the failing backend and target, such as filesystem root, S3 bucket/prefix, or database target
 - if the persistence queue fills, the oldest queued item is evicted so the newest product can still be accepted
 - `.ZIP` and `.ZIS` products are extracted before parsing, filtering, and persistence by default; the extracted entry filename replaces the archive filename
 - corrupt archives are logged as `Corrupt Zip File Received` and dropped when post-processing is enabled

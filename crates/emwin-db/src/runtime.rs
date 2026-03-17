@@ -73,6 +73,16 @@ pub struct PersistedRequest<M> {
 pub trait MetadataSink<M>: Send + Sync + 'static {
     /// Commits metadata and blob references for one completed request.
     fn persist<'a>(&'a self, request: PersistedRequest<M>) -> BoxFuture<'a, PersistResult<()>>;
+
+    /// Stable backend label for diagnostics.
+    fn backend_name(&self) -> &'static str {
+        "metadata"
+    }
+
+    /// Human-readable target description for diagnostics.
+    fn target_description(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Metadata sink that intentionally discards metadata writes.
@@ -82,6 +92,10 @@ pub struct NoopMetadataSink;
 impl<M: Send + 'static> MetadataSink<M> for NoopMetadataSink {
     fn persist<'a>(&'a self, _request: PersistedRequest<M>) -> BoxFuture<'a, PersistResult<()>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "noop"
     }
 }
 
@@ -319,14 +333,21 @@ where
                 guard.stats.persisted_total = guard.stats.persisted_total.saturating_add(1);
                 info!(request_key = %request_key, "persistence request completed");
             }
-            Err((request_key, err)) => {
+            Err((request_key, context, err)) => {
                 let mut guard = producer
                     .shared
                     .state
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 guard.stats.failed_total = guard.stats.failed_total.saturating_add(1);
-                warn!(request_key = %request_key, error = %err, "persistence request failed");
+                warn!(
+                    request_key = %request_key,
+                    stage = context.stage,
+                    backend = context.backend,
+                    target = %context.target,
+                    error = %err,
+                    "persistence request failed"
+                );
             }
         }
     }
@@ -400,7 +421,7 @@ async fn persist_request_with_retry<M, W, S>(
     request: PersistRequest<M>,
     config: &PersistenceConfig,
     backend_health: &mut BackendHealth,
-) -> Result<String, (String, PersistError)>
+) -> Result<String, (String, FailureContext, PersistError)>
 where
     M: Clone + Send + 'static,
     W: BlobWriter,
@@ -408,6 +429,11 @@ where
 {
     let request_key = request.request_key.clone();
     let mut attempt: u32 = 0;
+    let blob_context = FailureContext {
+        stage: "blob_write",
+        backend: writer.backend_name(),
+        target: writer.target_description(),
+    };
     let stored_blobs = loop {
         match write_blobs(writer, &request.blobs).await {
             Ok(stored_blobs) => break stored_blobs,
@@ -415,6 +441,7 @@ where
                 let delay = retry_delay(config, attempt);
                 backend_health.note_retryable_failure(
                     &request_key,
+                    &blob_context,
                     &err,
                     delay,
                     attempt + 1,
@@ -423,11 +450,18 @@ where
                 tokio::time::sleep(delay).await;
                 attempt = attempt.saturating_add(1);
             }
-            Err(err) => return Err((request_key, err)),
+            Err(err) => return Err((request_key, blob_context.clone(), err)),
         }
     };
 
     attempt = 0;
+    let metadata_context = FailureContext {
+        stage: "metadata_persist",
+        backend: sink.backend_name(),
+        target: sink
+            .target_description()
+            .unwrap_or_else(|| "unavailable".to_string()),
+    };
     loop {
         match persist_metadata(
             sink,
@@ -445,6 +479,7 @@ where
                 let delay = retry_delay(config, attempt);
                 backend_health.note_retryable_failure(
                     &request_key,
+                    &metadata_context,
                     &err,
                     delay,
                     attempt + 1,
@@ -454,7 +489,7 @@ where
                 attempt = attempt.saturating_add(1);
             }
             Err(err) => {
-                return Err((request_key, err));
+                return Err((request_key, metadata_context.clone(), err));
             }
         }
     }
@@ -484,16 +519,27 @@ struct BackendHealth {
 
 #[derive(Debug)]
 struct DegradedBackend {
+    stage: &'static str,
+    backend: &'static str,
+    target: String,
     failure_class: &'static str,
     last_error: String,
     last_logged_at: Instant,
     suppressed_failures: u64,
 }
 
+#[derive(Debug, Clone)]
+struct FailureContext {
+    stage: &'static str,
+    backend: &'static str,
+    target: String,
+}
+
 impl BackendHealth {
     fn note_retryable_failure(
         &mut self,
         request_key: &str,
+        context: &FailureContext,
         err: &PersistError,
         retry_delay: Duration,
         attempt: u32,
@@ -505,6 +551,9 @@ impl BackendHealth {
         match self.degraded.as_mut() {
             Some(current)
                 if current.failure_class == failure_class
+                    && current.stage == context.stage
+                    && current.backend == context.backend
+                    && current.target == context.target
                     && current.last_error == error_text
                     && now.duration_since(current.last_logged_at) < failure_log_cooldown =>
             {
@@ -513,6 +562,9 @@ impl BackendHealth {
             Some(current) => {
                 warn!(
                     request_key = %request_key,
+                    stage = context.stage,
+                    backend = context.backend,
+                    target = %context.target,
                     failure_class,
                     error = %err,
                     retry_delay_secs = retry_delay.as_secs(),
@@ -521,6 +573,9 @@ impl BackendHealth {
                     "persistence backend unavailable; retrying"
                 );
                 *current = DegradedBackend {
+                    stage: context.stage,
+                    backend: context.backend,
+                    target: context.target.clone(),
                     failure_class,
                     last_error: error_text,
                     last_logged_at: now,
@@ -530,6 +585,9 @@ impl BackendHealth {
             None => {
                 warn!(
                     request_key = %request_key,
+                    stage = context.stage,
+                    backend = context.backend,
+                    target = %context.target,
                     failure_class,
                     error = %err,
                     retry_delay_secs = retry_delay.as_secs(),
@@ -537,6 +595,9 @@ impl BackendHealth {
                     "persistence backend unavailable; retrying"
                 );
                 self.degraded = Some(DegradedBackend {
+                    stage: context.stage,
+                    backend: context.backend,
+                    target: context.target.clone(),
                     failure_class,
                     last_error: error_text,
                     last_logged_at: now,
@@ -552,6 +613,9 @@ impl BackendHealth {
         };
         info!(
             request_key = %request_key,
+            stage = degraded.stage,
+            backend = degraded.backend,
+            target = %degraded.target,
             failure_class = degraded.failure_class,
             suppressed_failures = degraded.suppressed_failures,
             "persistence backend recovered"
@@ -570,11 +634,13 @@ mod tests {
     use crate::writer::{BlobRole, BlobStorageKind, BlobWriter, BoxFuture, FilesystemBlobWriter};
     use std::collections::VecDeque;
     use std::io::ErrorKind;
+    use std::io::Write;
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
     use tokio::sync::Semaphore;
     use tokio::sync::oneshot;
     use tokio::time::Duration;
+    use tracing_subscriber::fmt::MakeWriter;
 
     #[derive(Debug, Default)]
     struct RecordingWriter {
@@ -843,6 +909,100 @@ mod tests {
             _blob: &'a crate::writer::StoredBlob,
         ) -> BoxFuture<'a, PersistResult<()>> {
             Box::pin(async { Ok(()) })
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct S3FailingWriter;
+
+    impl BlobWriter for S3FailingWriter {
+        fn write<'a>(
+            &'a self,
+            _entry: &'a BlobEntry,
+        ) -> BoxFuture<'a, PersistResult<crate::writer::StoredBlob>> {
+            Box::pin(async {
+                Err(PersistError::s3_response(
+                    "put_object",
+                    503,
+                    "service unavailable",
+                ))
+            })
+        }
+
+        fn delete<'a>(
+            &'a self,
+            _blob: &'a crate::writer::StoredBlob,
+        ) -> BoxFuture<'a, PersistResult<()>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn backend_name(&self) -> &'static str {
+            "s3"
+        }
+
+        fn target_description(&self) -> String {
+            "s3://example-bucket/archive".to_string()
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct DatabaseFailingSink;
+
+    impl MetadataSink<String> for DatabaseFailingSink {
+        fn persist<'a>(
+            &'a self,
+            _request: PersistedRequest<String>,
+        ) -> BoxFuture<'a, PersistResult<()>> {
+            Box::pin(async { Err(PersistError::InvalidRequest("sink failed".to_string())) })
+        }
+
+        fn backend_name(&self) -> &'static str {
+            "database"
+        }
+
+        fn target_description(&self) -> Option<String> {
+            Some("127.0.0.1/emwin".to_string())
+        }
+    }
+
+    #[derive(Clone, Debug, Default)]
+    struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl SharedLogBuffer {
+        fn contents(&self) -> String {
+            String::from_utf8(
+                self.0
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone(),
+            )
+            .expect("logs should be utf-8")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct LogWriter(SharedLogBuffer);
+
+    impl Write for LogWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedLogBuffer {
+        type Writer = LogWriter;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            LogWriter(self.clone())
         }
     }
 
@@ -1218,5 +1378,60 @@ mod tests {
                 .as_slice(),
             &["one"]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn retry_logs_include_s3_backend_context() {
+        let buffer = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(buffer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let config = PersistenceConfig::new(4)
+            .with_retry_delays(Duration::from_millis(1), Duration::from_millis(1))
+            .with_failure_log_cooldown(Duration::from_millis(1));
+        let runtime = PersistenceRuntime::spawn(config, S3FailingWriter, NoopMetadataSink);
+        let producer = runtime.producer();
+
+        assert!(producer.enqueue(request("broken-s3")).accepted);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let _ = runtime.shutdown().await.expect("shutdown should succeed");
+        let logs = buffer.contents();
+        assert!(logs.contains("persistence backend unavailable; retrying"));
+        assert!(logs.contains("blob_write"));
+        assert!(logs.contains("s3"));
+        assert!(logs.contains("target=s3://example-bucket/archive"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn final_failure_logs_include_database_context() {
+        let buffer = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(buffer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let runtime = PersistenceRuntime::spawn(
+            PersistenceConfig::new(4),
+            RecordingWriter::default(),
+            DatabaseFailingSink,
+        );
+        let producer = runtime.producer();
+
+        assert!(producer.enqueue(request("broken-db")).accepted);
+        wait_for_stats(&runtime, |stats| stats.failed_total == 1).await;
+
+        let _ = runtime.shutdown().await.expect("shutdown should succeed");
+        let logs = buffer.contents();
+        assert!(logs.contains("persistence request failed"));
+        assert!(logs.contains("metadata_persist"));
+        assert!(logs.contains("database"));
+        assert!(logs.contains("target=127.0.0.1/emwin"));
     }
 }

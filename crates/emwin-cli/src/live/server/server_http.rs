@@ -28,7 +28,7 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
         .route("/", get(root_handler))
         .route("/events", get(events_handler))
         .route("/files", get(files_handler))
-        .route("/files/*filename", get(file_download_handler))
+        .route("/files/{*filename}", get(file_download_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .layer(cors)
@@ -56,7 +56,7 @@ pub(super) async fn root_handler() -> Json<RootResponse> {
             },
             EndpointDoc {
                 method: "GET",
-                path: "/files/*filename",
+                path: "/files/{*filename}",
                 description: "Download retained file by URL-encoded filename path",
             },
             EndpointDoc {

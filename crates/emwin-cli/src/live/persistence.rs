@@ -182,11 +182,22 @@ pub(crate) async fn run_incident_cleanup_loop(
                 match sink.expire_active_incidents(chrono::Utc::now()).await {
                     Ok(IncidentCleanupResult { expired_count }) => {
                         if expired_count > 0 {
-                            tracing::info!(expired_count, "expired stale incidents");
+                            tracing::info!(
+                                backend = "database",
+                                target = %sink.describe_target(),
+                                expired_count,
+                                "expired stale incidents"
+                            );
                         }
                     }
                     Err(err) => {
-                        tracing::warn!(error = %err, "incident cleanup pass failed");
+                        tracing::warn!(
+                            backend = "database",
+                            target = %sink.describe_target(),
+                            stage = "incident_cleanup",
+                            error = %err,
+                            "incident cleanup pass failed"
+                        );
                     }
                 }
             }

@@ -1,5 +1,4 @@
 Phase 1:
-2. Add startup version information and improve persistence logging details/failure
 3. Fix existing parsing issues identified
 4. Redesign /files endpoint
 

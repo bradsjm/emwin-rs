@@ -85,13 +85,21 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         match postgres_sink.expire_active_incidents(Utc::now()).await {
             Ok(result) if result.expired_count > 0 => {
                 info!(
+                    backend = "database",
+                    target = %postgres_sink.describe_target(),
                     expired_count = result.expired_count,
                     "expired stale incidents during startup"
                 );
             }
             Ok(_) => {}
             Err(err) => {
-                tracing::warn!(error = %err, "startup incident cleanup skipped; will retry in background");
+                tracing::warn!(
+                    backend = "database",
+                    target = %postgres_sink.describe_target(),
+                    stage = "incident_cleanup",
+                    error = %err,
+                    "startup incident cleanup skipped; will retry in background"
+                );
             }
         }
     }

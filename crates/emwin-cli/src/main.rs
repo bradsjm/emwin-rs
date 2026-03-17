@@ -11,6 +11,7 @@ mod relay;
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use std::io::IsTerminal;
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 /// Supported upstream receiver backends.
@@ -88,6 +89,15 @@ enum Commands {
     },
 }
 
+impl Commands {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Server { .. } => "server",
+            Self::Relay { .. } => "relay",
+        }
+    }
+}
+
 /// CLI argument parser for emwin.
 #[derive(Debug, Parser)]
 #[command(name = "emwin")]
@@ -103,6 +113,7 @@ async fn main() -> crate::error::CliResult<()> {
     let _ = dotenvy::dotenv();
     let cli = Cli::parse();
     init_logging();
+    log_startup(&cli.command);
 
     match cli.command {
         Commands::Server {
@@ -145,6 +156,15 @@ async fn main() -> crate::error::CliResult<()> {
         }
         Commands::Relay { options } => relay::runtime::run(options).await,
     }
+}
+
+fn log_startup(command: &Commands) {
+    info!(
+        package = env!("CARGO_PKG_NAME"),
+        version = env!("CARGO_PKG_VERSION"),
+        subcommand = command.name(),
+        "starting emwin CLI"
+    );
 }
 
 fn init_logging() {
@@ -256,5 +276,17 @@ mod tests {
         };
 
         assert_eq!(output_dir.as_deref(), Some("s3://bucket/prefix"));
+    }
+
+    #[test]
+    fn command_name_matches_subcommand() {
+        let server = Cli::try_parse_from(["emwin", "server", "--username", "test@example.com"])
+            .expect("server args should parse");
+        let relay = Cli::try_parse_from(["emwin", "relay", "--username", "test@example.com"])
+            .expect("relay args should parse");
+
+        assert_eq!(server.command.name(), "server");
+        assert_eq!(relay.command.name(), "relay");
+        assert!(!env!("CARGO_PKG_VERSION").is_empty());
     }
 }

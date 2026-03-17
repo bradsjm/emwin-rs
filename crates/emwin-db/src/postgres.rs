@@ -90,6 +90,11 @@ impl PostgresMetadataSink {
             .expect("postgres pool is not initialized")
     }
 
+    pub fn describe_target(&self) -> String {
+        connection_target(&self.config)
+            .unwrap_or_else(|_| "postgres target unavailable".to_string())
+    }
+
     async fn ensure_pool(&self) -> PersistResult<PgPool> {
         {
             let guard = self
@@ -201,6 +206,14 @@ impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
                 }
             }
         })
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "database"
+    }
+
+    fn target_description(&self) -> Option<String> {
+        Some(self.describe_target())
     }
 }
 

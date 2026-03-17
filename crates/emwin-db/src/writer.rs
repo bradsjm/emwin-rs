@@ -55,6 +55,15 @@ pub enum BlobStorageKind {
     S3,
 }
 
+impl BlobStorageKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Filesystem => "filesystem",
+            Self::S3 => "s3",
+        }
+    }
+}
+
 /// Stable reference returned after a blob has been persisted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredBlob {
@@ -77,6 +86,16 @@ pub trait BlobWriter: Send + Sync + 'static {
 
     /// Deletes a previously persisted blob when storage-level cleanup is required.
     fn delete<'a>(&'a self, blob: &'a StoredBlob) -> BoxFuture<'a, PersistResult<()>>;
+
+    /// Stable backend label for diagnostics.
+    fn backend_name(&self) -> &'static str {
+        "blob"
+    }
+
+    /// Human-readable target description for diagnostics.
+    fn target_description(&self) -> String {
+        "unavailable".to_string()
+    }
 }
 
 impl<T> BlobWriter for Box<T>
@@ -90,6 +109,14 @@ where
     fn delete<'a>(&'a self, blob: &'a StoredBlob) -> BoxFuture<'a, PersistResult<()>> {
         (**self).delete(blob)
     }
+
+    fn backend_name(&self) -> &'static str {
+        (**self).backend_name()
+    }
+
+    fn target_description(&self) -> String {
+        (**self).target_description()
+    }
 }
 
 /// Filesystem-backed blob writer rooted at a configured directory.
@@ -102,6 +129,10 @@ impl FilesystemBlobWriter {
     /// Creates a filesystem writer rooted at the provided directory.
     pub fn new(root: PathBuf) -> Self {
         Self { root }
+    }
+
+    fn describe_target(&self) -> String {
+        self.root.display().to_string()
     }
 }
 
@@ -232,6 +263,13 @@ impl S3BlobWriter {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = S3BucketReadiness::Unknown;
     }
+
+    fn describe_target(&self) -> String {
+        match self.prefix.as_deref() {
+            Some(prefix) => format!("s3://{}/{}", self.state.config.bucket_name, prefix),
+            None => format!("s3://{}", self.state.config.bucket_name),
+        }
+    }
 }
 
 impl S3Environment {
@@ -291,6 +329,14 @@ impl BlobWriter for FilesystemBlobWriter {
             Ok(())
         })
     }
+
+    fn backend_name(&self) -> &'static str {
+        BlobStorageKind::Filesystem.as_str()
+    }
+
+    fn target_description(&self) -> String {
+        self.describe_target()
+    }
 }
 
 impl BlobWriter for S3BlobWriter {
@@ -346,6 +392,14 @@ impl BlobWriter for S3BlobWriter {
                 Err(err) => Err(PersistError::s3_client("delete_object", &err)),
             }
         })
+    }
+
+    fn backend_name(&self) -> &'static str {
+        BlobStorageKind::S3.as_str()
+    }
+
+    fn target_description(&self) -> String {
+        self.describe_target()
     }
 }
 
