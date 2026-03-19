@@ -754,18 +754,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_latlon_ignores_inline_dollar_terminator() {
-        let text = "LAT...LON 4076 7784 4078 7792 4084 7797 $$";
-        let polygons = parse_latlon_polygons(text);
-
-        assert_eq!(polygons.len(), 1);
-    }
-
-    #[test]
-    fn parse_latlon_ignores_inline_ampersand_terminator() {
-        let text = "LAT...LON 4076 7784 4078 7792 4084 7797 &&";
-        let polygons = parse_latlon_polygons(text);
-
-        assert_eq!(polygons.len(), 1);
+    fn parse_latlon_ignores_inline_terminators() {
+        for text in [
+            "LAT...LON 4076 7784 4078 7792 4084 7797 $$",
+            "LAT...LON 4076 7784 4078 7792 4084 7797 &&",
+        ] {
+            let polygons = parse_latlon_polygons(text);
+            assert_eq!(polygons.len(), 1, "text={text}");
+        }
     }
 }

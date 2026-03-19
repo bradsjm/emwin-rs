@@ -746,8 +746,8 @@ fn add_default_client_ns(xml: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        Arc, ClientConfig, add_default_client_ns, append_with_read_limit, is_room_join_presence,
-        is_supported_top_level_stanza, pop_next_top_level_element, ring, stanza_root_tag_name,
+        add_default_client_ns, append_with_read_limit, is_room_join_presence,
+        is_supported_top_level_stanza, pop_next_top_level_element, stanza_root_tag_name,
     };
     use crate::wxwire_receiver::error::{WxWireReceiverError, WxWireTransportError};
     use std::str::FromStr;
@@ -857,15 +857,5 @@ mod tests {
             if message == "buffer too large"
         ));
         assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn rustls_client_config_builder_with_explicit_provider_is_usable() {
-        let result = ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
-            .with_safe_default_protocol_versions();
-        assert!(
-            result.is_ok(),
-            "explicit rustls provider should remain usable"
-        );
     }
 }

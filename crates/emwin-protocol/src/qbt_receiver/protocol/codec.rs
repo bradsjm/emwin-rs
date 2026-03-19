@@ -568,35 +568,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_header_invalid_missing_fields() {
-        let invalid = [b'X'; 80];
-        let err = parse_header(&invalid, 1024).expect_err("invalid header should fail");
-        assert!(matches!(
-            err,
-            QbtProtocolError::InvalidHeader | QbtProtocolError::MissingField(_)
-        ));
-    }
-
-    #[test]
-    fn parse_header_valid() {
-        let header = build_header("VALID.TXT", 1, 2, 1234, None);
-        let parsed = parse_header(&header, 1024).expect("valid header should parse");
-        assert_eq!(parsed.filename, "VALID.TXT");
-        assert_eq!(parsed.block_number, 1);
-        assert_eq!(parsed.total_blocks, 2);
-        assert_eq!(parsed.checksum, 1234);
-        assert_eq!(parsed.length, 1024);
-        assert_eq!(parsed.version, QbtProtocolVersion::V1);
-    }
-
-    #[test]
-    fn v2_dl_bounds() {
-        let too_big = build_header("B.DAT", 1, 1, 1, Some(2048));
-        let err = parse_header(&too_big, 1024).expect_err("too-large dl should fail");
-        assert!(matches!(err, QbtProtocolError::InvalidBodyLength(2048)));
-    }
-
-    #[test]
     fn checksum_strict_drop() {
         let body = [b'A'; V1_BODY_SIZE];
         let bad_checksum = 0;

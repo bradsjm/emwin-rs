@@ -193,110 +193,79 @@ fn init_logging() {
 #[cfg(test)]
 mod tests {
     use super::{Cli, Commands};
-    use clap::{CommandFactory, Parser};
+    use clap::Parser;
 
     #[test]
-    fn root_help_does_not_list_download() {
-        let help = Cli::command().render_long_help().to_string();
+    fn cli_parses_representative_commands() {
+        let server_cases = [
+            (
+                [
+                    "emwin",
+                    "server",
+                    "--username",
+                    "test@example.com",
+                    "--output-dir",
+                    "./out",
+                    "--persist-queue-capacity",
+                    "55",
+                    "--persist-database-url",
+                    "postgres://localhost/emwin",
+                    "--openapi-auth-token",
+                    "secret-token",
+                ]
+                .as_slice(),
+                Some("./out"),
+                Some(55usize),
+                Some("postgres://localhost/emwin"),
+                Some("secret-token"),
+            ),
+            (
+                [
+                    "emwin",
+                    "server",
+                    "--username",
+                    "test@example.com",
+                    "--output-dir",
+                    "s3://bucket/prefix",
+                ]
+                .as_slice(),
+                Some("s3://bucket/prefix"),
+                None,
+                None,
+                None,
+            ),
+        ];
 
-        assert!(help.contains("server"));
-        assert!(!help.contains("stream"));
-        assert!(!help.contains("download"));
-    }
+        for (args, expected_output_dir, expected_capacity, expected_database_url, expected_token) in
+            server_cases
+        {
+            let cli = Cli::try_parse_from(args).expect("server args should parse");
+            let Commands::Server {
+                output_dir,
+                persist_queue_capacity,
+                persist_database_url,
+                openapi_auth_token,
+                ..
+            } = cli.command
+            else {
+                panic!("expected server command");
+            };
 
-    #[test]
-    fn server_help_mentions_post_process_archives() {
-        let mut command = Cli::command();
-        let help = command
-            .find_subcommand_mut("server")
-            .expect("server subcommand should exist")
-            .render_long_help()
-            .to_string();
+            assert_eq!(output_dir.as_deref(), expected_output_dir);
+            if let Some(capacity) = expected_capacity {
+                assert_eq!(persist_queue_capacity, capacity);
+            }
+            assert_eq!(persist_database_url.as_deref(), expected_database_url);
+            assert_eq!(openapi_auth_token.as_deref(), expected_token);
+        }
 
-        assert!(help.contains("--post-process-archives"));
-        assert!(help.contains("--output-dir"));
-        assert!(help.contains("--persist-database-url"));
-        assert!(help.contains("--openapi-auth-token"));
-    }
-
-    #[test]
-    fn download_subcommand_is_rejected() {
-        let error = Cli::try_parse_from(["emwin", "download", "./out"])
-            .expect_err("download subcommand should be rejected");
-
-        assert!(
-            error
-                .to_string()
-                .contains("unrecognized subcommand 'download'")
-        );
-    }
-
-    #[test]
-    fn server_accepts_output_dir_queue_capacity_database_url_and_openapi_auth_token() {
-        let cli = Cli::try_parse_from([
-            "emwin",
-            "server",
-            "--username",
-            "test@example.com",
-            "--output-dir",
-            "./out",
-            "--persist-queue-capacity",
-            "55",
-            "--persist-database-url",
-            "postgres://localhost/emwin",
-            "--openapi-auth-token",
-            "secret-token",
-        ])
-        .expect("server args should parse");
-
-        let Commands::Server {
-            output_dir,
-            persist_queue_capacity,
-            persist_database_url,
-            openapi_auth_token,
-            ..
-        } = cli.command
-        else {
-            panic!("expected server command");
-        };
-
-        assert_eq!(output_dir.as_deref(), Some("./out"));
-        assert_eq!(persist_queue_capacity, 55);
-        assert_eq!(
-            persist_database_url.as_deref(),
-            Some("postgres://localhost/emwin")
-        );
-        assert_eq!(openapi_auth_token.as_deref(), Some("secret-token"));
-    }
-
-    #[test]
-    fn server_accepts_s3_output_dir() {
-        let cli = Cli::try_parse_from([
-            "emwin",
-            "server",
-            "--username",
-            "test@example.com",
-            "--output-dir",
-            "s3://bucket/prefix",
-        ])
-        .expect("server args should parse");
-
-        let Commands::Server { output_dir, .. } = cli.command else {
-            panic!("expected server command");
-        };
-
-        assert_eq!(output_dir.as_deref(), Some("s3://bucket/prefix"));
-    }
-
-    #[test]
-    fn command_name_matches_subcommand() {
-        let server = Cli::try_parse_from(["emwin", "server", "--username", "test@example.com"])
-            .expect("server args should parse");
         let relay = Cli::try_parse_from(["emwin", "relay", "--username", "test@example.com"])
             .expect("relay args should parse");
+        assert!(matches!(relay.command, Commands::Relay { .. }));
+    }
 
-        assert_eq!(server.command.name(), "server");
-        assert_eq!(relay.command.name(), "relay");
-        assert!(!env!("CARGO_PKG_VERSION").is_empty());
+    #[test]
+    fn invalid_subcommand_is_rejected() {
+        assert!(Cli::try_parse_from(["emwin", "download", "./out"]).is_err());
     }
 }

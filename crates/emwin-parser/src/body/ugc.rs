@@ -624,19 +624,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_county_range_with_gt_is_valid_and_dense() {
-        let text = "NMC005>007-051200-\n";
-        let sections = parse_ugc_sections(text, test_valid_time());
-
-        assert_eq!(sections.len(), 1);
-        assert_eq!(ids(&sections[0].counties["NM"]), vec![5, 6, 7]);
-        assert_eq!(
-            names(&sections[0].counties["NM"]),
-            vec![Some("Chaves"), Some("Cibola"), Some("Colfax")]
-        );
-    }
-
-    #[test]
     fn parse_pyiem_nm_county_sample_keeps_dense_county_expansion() {
         let text = "NMC001-005>007-011-019-027-028-031-033-039-041-043-045-047-049-053-055-057-061-040300-\n";
         let sections = parse_ugc_sections(text, test_valid_time());

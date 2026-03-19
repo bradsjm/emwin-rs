@@ -283,15 +283,11 @@ mod tests {
     }
 
     #[test]
-    fn metadata_sidecar_replaces_extension() {
-        let path = metadata_sidecar_path(Path::new("/tmp/out"), "nested/AFDBOX.TXT");
-        assert_eq!(path, PathBuf::from("/tmp/out/nested/AFDBOX.JSON"));
-    }
-
-    #[test]
-    fn metadata_sidecar_appends_when_no_extension_exists() {
-        let path = metadata_sidecar_path(Path::new("/tmp/out"), "nested/AFDBOX");
-        assert_eq!(path, PathBuf::from("/tmp/out/nested/AFDBOX.JSON"));
+    fn metadata_sidecar_paths_use_json_suffix() {
+        for filename in ["nested/AFDBOX.TXT", "nested/AFDBOX"] {
+            let path = metadata_sidecar_path(Path::new("/tmp/out"), filename);
+            assert_eq!(path, PathBuf::from("/tmp/out/nested/AFDBOX.JSON"));
+        }
     }
 
     #[test]

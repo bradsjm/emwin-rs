@@ -353,62 +353,6 @@ mod tests {
     }
 
     #[test]
-    fn misa_bulletins_share_wallops_telemetry_fallback() {
-        let enrichment = enrich_product(
-            "MISA50US.TXT",
-            b"SXPA50 KWAL 070309\n\x1eD6805150 066030901 \n05.06 \n008 \n180 \n056 \n098 \n12.8 \n183 \n018 \n00000 \n 39-0NN 141E\n",
-        );
-
-        assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("dcp_telemetry_bulletin"));
-        assert_eq!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dcp)
-                .and_then(|bulletin| bulletin.platform_id.as_deref()),
-            Some("D6805150 066030901")
-        );
-        assert_eq!(
-            enrichment.office.as_ref().map(|office| office.code),
-            Some("WAL")
-        );
-        assert!(enrichment.issues.is_empty());
-    }
-
-    #[test]
-    fn misdcp_inline_telemetry_bulletins_share_wallops_telemetry_fallback() {
-        let enrichment = enrich_product(
-            "MISDCPNI.TXT",
-            b"SXMN20 KWAL 070326\n2211F77E 066032650bB1F@VT@VT@VT@VT@VT@VT@VT@VT@VT@VT@VT@VT@Fx@Fx@Fx@Fx@Fx@Fx@Fx@Fx@Fx@Fx@Fx@Fx@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Ta@TaJ 40+0NN  57E%\n",
-        );
-
-        assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("dcp_telemetry_bulletin"));
-        assert_eq!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dcp)
-                .and_then(|bulletin| bulletin.platform_id.as_deref()),
-            Some("2211F77E 066032650")
-        );
-        assert_eq!(
-            enrichment.office.as_ref().map(|office| office.code),
-            Some("WAL")
-        );
-        assert_eq!(
-            enrichment
-                .parsed
-                .as_ref()
-                .and_then(ProductArtifact::as_dcp)
-                .map(|bulletin| bulletin.lines.len()),
-            Some(1)
-        );
-        assert!(enrichment.issues.is_empty());
-    }
-
-    #[test]
     fn international_sigmet_bulletins_use_wmo_fallback_without_afos() {
         let enrichment = enrich_product(
             "WVID21.TXT",

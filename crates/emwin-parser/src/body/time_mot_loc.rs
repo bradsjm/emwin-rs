@@ -679,28 +679,20 @@ mod tests {
     }
 
     #[test]
-    fn parse_time_mot_loc_invalid_deg_token_reports_invalid_format() {
-        let text = "TIME...MOT...LOC 2310Z 238XYZ 39KT 3221 08853";
-        let (entries, issues) = parse_time_mot_loc_entries_with_issues(text, reference_time());
+    fn parse_time_mot_loc_invalid_motion_tokens_report_invalid_format() {
+        for text in [
+            "TIME...MOT...LOC 2310Z 238XYZ 39KT 3221 08853",
+            "TIME...MOT...LOC 2310Z 238DEG 39MPH 3221 08853",
+        ] {
+            let (entries, issues) = parse_time_mot_loc_entries_with_issues(text, reference_time());
 
-        assert!(entries.is_empty());
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.code == "time_mot_loc_regex_failed_after_marker")
-        );
-    }
-
-    #[test]
-    fn parse_time_mot_loc_invalid_kt_token_reports_invalid_format() {
-        let text = "TIME...MOT...LOC 2310Z 238DEG 39MPH 3221 08853";
-        let (entries, issues) = parse_time_mot_loc_entries_with_issues(text, reference_time());
-
-        assert!(entries.is_empty());
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.code == "time_mot_loc_regex_failed_after_marker")
-        );
+            assert!(entries.is_empty(), "text={text}");
+            assert!(
+                issues
+                    .iter()
+                    .any(|issue| issue.code == "time_mot_loc_regex_failed_after_marker"),
+                "text={text}"
+            );
+        }
     }
 }

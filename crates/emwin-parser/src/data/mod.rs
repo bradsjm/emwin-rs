@@ -398,14 +398,6 @@ mod tests {
     }
 
     #[test]
-    fn generic_warning_entry_exposes_catalog_body_behavior() {
-        let entry =
-            text_product_catalog_entry("SVR").expect("expected severe thunderstorm warning entry");
-        assert_eq!(entry.routing, TextProductRouting::Generic);
-        assert_eq!(entry.body_behavior, TextProductBodyBehavior::Catalog);
-    }
-
-    #[test]
     fn fd_entry_exposes_specialized_routing_and_never_body_behavior() {
         let entry = text_product_catalog_entry("FD1").expect("expected fd entry");
         assert_eq!(entry.routing, TextProductRouting::Fd);

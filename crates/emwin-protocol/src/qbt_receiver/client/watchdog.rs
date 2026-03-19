@@ -84,18 +84,13 @@ mod tests {
     use tokio::time::{Duration, Instant};
 
     #[test]
-    fn watchdog_timeout_trigger() {
+    fn watchdog_timeout_and_data_reset() {
         let w = Watchdog::new(2, 10);
         let now = Instant::now();
         assert!(!w.should_close_at(now + Duration::from_secs(1)));
         assert!(w.should_close_at(now + Duration::from_secs(3)));
-    }
 
-    #[test]
-    fn watchdog_resets_on_data() {
-        let w = Watchdog::new(2, 10);
         w.on_data_received();
-        let now = Instant::now();
         assert!(!w.should_close_at(now + Duration::from_secs(1)));
         assert!(w.should_close_at(now + Duration::from_secs(3)));
     }

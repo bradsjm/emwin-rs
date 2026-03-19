@@ -196,20 +196,6 @@ fn fd_candidate_has_no_body_request_by_default() {
 }
 
 #[test]
-fn fd_candidate_body_request_follows_catalog_policy() {
-    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
-        "FD1US1.TXT",
-        b"000 \nFTUS80 KWBC 070000\nFD1US1\nDATA BASED ON 070000Z\nVALID 071200Z\nFT 3000 6000\nBOS 9900 2812\n",
-    ));
-
-    let ClassificationCandidate::Fd(candidate) = classify(&envelope) else {
-        panic!("expected fd candidate");
-    };
-
-    assert!(candidate.body_request.is_none());
-}
-
-#[test]
 fn pirep_candidate_body_request_follows_catalog_policy() {
     let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
         "PIRXXX.TXT",

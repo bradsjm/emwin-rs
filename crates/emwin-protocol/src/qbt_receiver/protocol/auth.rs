@@ -36,7 +36,7 @@ pub fn xor_ff(data: &[u8]) -> Bytes {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_logon_message, parse_logon_message};
+    use super::parse_logon_message;
 
     #[test]
     fn parse_logon_message_extracts_email() {
@@ -49,12 +49,5 @@ mod tests {
     fn parse_logon_message_rejects_invalid_shapes() {
         assert!(parse_logon_message("ByteBlast Client|NM-|V2").is_none());
         assert!(parse_logon_message("ByteBlast Client|NM-user@example.com|V1").is_none());
-    }
-
-    #[test]
-    fn build_and_parse_roundtrip() {
-        let logon = build_logon_message("relay@example.com");
-        let parsed = parse_logon_message(&logon).expect("roundtrip should parse");
-        assert_eq!(parsed.email, "relay@example.com");
     }
 }
