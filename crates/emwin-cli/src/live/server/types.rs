@@ -7,7 +7,10 @@ use crate::cmd::event_output::{frame_event_name, frame_event_to_json};
 use crate::live::filter::{FileEventFilter, FileFilterInput};
 use crate::live::persistence::FilePersistenceProducer;
 use crate::live::server_support::{RetainedFiles, file_download_url};
-use emwin_db::{CompletedFileMetadata, PersistenceStats};
+use emwin_db::{
+    ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata, IncidentDetail,
+    IncidentSummary, PaginatedResponse, PersistenceStats, PostgresMetadataSink,
+};
 use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
 use emwin_protocol::wxwire_receiver::{WxWireReceiverFrameEvent, WxWireReceiverTelemetrySnapshot};
 use serde::ser::{SerializeMap, SerializeStruct};
@@ -254,6 +257,7 @@ pub(crate) struct AppState {
     pub(crate) retained_files: Mutex<RetainedFiles>,
     pub(crate) telemetry: Mutex<TelemetryPayload>,
     pub(crate) persistence: Option<FilePersistenceProducer>,
+    pub(crate) archive: Option<PostgresMetadataSink>,
     pub(crate) connected_clients: AtomicUsize,
     pub(crate) max_clients: usize,
     pub(crate) next_event_id: AtomicU64,
@@ -263,6 +267,26 @@ pub(crate) struct AppState {
     pub(crate) started_at: Instant,
     pub(crate) upstream_endpoint: Mutex<Option<String>>,
     pub(crate) quiet: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct IncidentsQuery {
+    pub(crate) office: Option<String>,
+    pub(crate) phenomena: Option<String>,
+    pub(crate) significance: Option<String>,
+    pub(crate) etn: Option<i64>,
+    pub(crate) status: Option<String>,
+    pub(crate) updated_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) updated_before: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) active_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) limit: Option<usize>,
+    pub(crate) cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct IncidentProductsQuery {
+    pub(crate) limit: Option<usize>,
+    pub(crate) cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -373,6 +397,108 @@ pub(crate) struct FilesResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct IncidentSummaryPayload {
+    #[serde(flatten)]
+    pub(crate) incident: IncidentSummary,
+    pub(crate) detail_url: String,
+    pub(crate) products_url: String,
+    pub(crate) latest_product_url: String,
+}
+
+impl IncidentSummaryPayload {
+    pub(crate) fn from_incident(incident: IncidentSummary) -> Self {
+        let detail_url = incident_detail_url(&incident);
+        let products_url = incident_products_url(&incident);
+        let latest_product_url = archive_product_url(incident.latest_product_id);
+        Self {
+            incident,
+            detail_url,
+            products_url,
+            latest_product_url,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct IncidentDetailPayload {
+    #[serde(flatten)]
+    pub(crate) incident: IncidentDetail,
+    pub(crate) products_url: String,
+    pub(crate) first_product_url: String,
+    pub(crate) latest_product_url: String,
+}
+
+impl IncidentDetailPayload {
+    pub(crate) fn from_incident(incident: IncidentDetail) -> Self {
+        let products_url = incident_products_url(&incident);
+        let first_product_url = archive_product_url(incident.first_product_id);
+        let latest_product_url = archive_product_url(incident.latest_product_id);
+        Self {
+            incident,
+            products_url,
+            first_product_url,
+            latest_product_url,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveProductSummaryPayload {
+    #[serde(flatten)]
+    pub(crate) product: ArchivedProductSummary,
+    pub(crate) detail_url: String,
+    pub(crate) raw_url: String,
+}
+
+impl ArchiveProductSummaryPayload {
+    pub(crate) fn from_product(product: ArchivedProductSummary) -> Self {
+        let detail_url = archive_product_url(product.product_id);
+        let raw_url = archive_product_raw_url(product.product_id);
+        Self {
+            product,
+            detail_url,
+            raw_url,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveProductDetailPayload {
+    #[serde(flatten)]
+    pub(crate) product: ArchivedProductDetail,
+    pub(crate) raw_url: String,
+}
+
+impl ArchiveProductDetailPayload {
+    pub(crate) fn from_product(product: ArchivedProductDetail) -> Self {
+        let raw_url = archive_product_raw_url(product.summary.product_id);
+        Self { product, raw_url }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct IncidentsResponse {
+    #[serde(flatten)]
+    pub(crate) page: PaginatedResponse<IncidentSummaryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct IncidentProductsResponse {
+    #[serde(flatten)]
+    pub(crate) page: PaginatedResponse<ArchiveProductSummaryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct IncidentResponse {
+    pub(crate) incident: IncidentDetailPayload,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveProductResponse {
+    pub(crate) product: ArchiveProductDetailPayload,
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct HealthResponse {
     pub(crate) status: &'static str,
     pub(crate) connected_clients: usize,
@@ -392,6 +518,28 @@ pub(crate) struct EndpointDoc {
 pub(crate) struct RootResponse {
     pub(crate) service: &'static str,
     pub(crate) endpoints: Vec<EndpointDoc>,
+}
+
+pub(crate) fn incident_detail_url(incident: &IncidentSummary) -> String {
+    format!(
+        "/incidents/{}/{}/{}/{}",
+        incident.office, incident.phenomena, incident.significance, incident.etn
+    )
+}
+
+pub(crate) fn incident_products_url(incident: &IncidentSummary) -> String {
+    format!(
+        "/incidents/{}/{}/{}/{}/products",
+        incident.office, incident.phenomena, incident.significance, incident.etn
+    )
+}
+
+pub(crate) fn archive_product_url(product_id: i64) -> String {
+    format!("/archive/products/{product_id}")
+}
+
+pub(crate) fn archive_product_raw_url(product_id: i64) -> String {
+    format!("/archive/products/{product_id}/raw")
 }
 
 #[derive(Debug, Clone)]

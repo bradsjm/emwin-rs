@@ -60,7 +60,12 @@ mod writer;
 
 pub use error::{PersistError, PersistResult};
 pub use metadata::CompletedFileMetadata;
-pub use postgres::{IncidentCleanupResult, PostgresConfig, PostgresMetadataSink};
+pub use postgres::{
+    ArchivedPayload, ArchivedProductDetail, ArchivedProductSummary, IncidentCleanupResult,
+    IncidentCursor, IncidentDetail, IncidentKey, IncidentListQuery, IncidentProductsCursor,
+    IncidentProductsQuery, IncidentSummary, PaginatedResponse, PostgresConfig,
+    PostgresMetadataSink,
+};
 pub use runtime::{
     EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest, PersistedRequest,
     PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,

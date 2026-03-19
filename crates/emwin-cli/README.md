@@ -61,6 +61,8 @@ Persistence behavior when `--output-dir` is set:
 - sidecar names replace the original extension within the canonical archival path, for example `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.TXT` -> `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.JSON`
 - ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/files`
 - `/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
+- when `--persist-database-url` is configured, the server also exposes `/incidents` plus `/archive/products/*` for incident-first archive reads
+- `/incidents` and `/archive/products/*` return `503` when Postgres-backed archive metadata is not configured
 
 If `--server` is omitted, built-in default endpoints are used.
 `--server` and `--server-list-path` are only supported for `--receiver qbt`.
@@ -123,6 +125,14 @@ When running `server`, `/events` supports parsed-location filters:
 `lat` and `lon` must be provided together. `distance_miles` is optional and defaults to `5.0`.
 Matches use parsed `LAT...LON` polygons for containment and parsed `TIME...MOT...LOC`, `UGC`,
 and `HVTEC` coordinates for radius checks.
+
+## Incident and archive endpoints
+
+- `/incidents` lists live incident projection rows from persisted Postgres metadata
+- `/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
+- `/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
+- `/archive/products/{product_id}` returns persisted product detail including `product_json`
+- `/archive/products/{product_id}/raw` proxies archived payload bytes for one product
 
 ## Text product parsing
 

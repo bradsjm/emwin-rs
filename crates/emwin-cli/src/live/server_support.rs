@@ -4,6 +4,7 @@
 //! handlers can stay focused on endpoint behavior.
 
 use crate::live::file_pipeline::build_completed_file_metadata;
+use axum::body::Body;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -199,6 +200,27 @@ pub(crate) fn build_file_download_response(file: RetainedFile) -> Response {
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
 
     (headers, file.data).into_response()
+}
+
+pub(crate) fn build_bytes_download_response(filename: &str, bytes: Vec<u8>) -> Response {
+    let content_type = content_type_for_filename(filename);
+    let disposition = format!("attachment; filename=\"{}\"", filename);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+    if let Ok(value) = HeaderValue::from_str(&disposition) {
+        headers.insert(CONTENT_DISPOSITION, value);
+    }
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(bytes))
+        .map(|mut response| {
+            *response.headers_mut() = headers;
+            response
+        })
+        .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, Vec::new()).into_response())
 }
 
 pub(crate) fn filename_request_or_400(raw: &str) -> Result<String, StatusCode> {

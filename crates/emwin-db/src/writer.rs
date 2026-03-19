@@ -79,6 +79,27 @@ pub struct StoredBlob {
     pub content_type: Option<String>,
 }
 
+/// Reads persisted blobs without exposing transport details to callers.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct StorageBlobReader;
+
+impl StorageBlobReader {
+    pub(crate) fn new() -> Self {
+        Self
+    }
+
+    pub(crate) async fn read(
+        &self,
+        kind: BlobStorageKind,
+        location: &str,
+    ) -> PersistResult<Vec<u8>> {
+        match kind {
+            BlobStorageKind::Filesystem => tokio::fs::read(location).await.map_err(Into::into),
+            BlobStorageKind::S3 => read_s3_object(location).await,
+        }
+    }
+}
+
 /// Writes raw payload blobs and returns stable references for metadata storage.
 pub trait BlobWriter: Send + Sync + 'static {
     /// Persists a blob entry and returns the resulting storage reference.
@@ -128,12 +149,24 @@ pub struct FilesystemBlobWriter {
 impl FilesystemBlobWriter {
     /// Creates a filesystem writer rooted at the provided directory.
     pub fn new(root: PathBuf) -> Self {
-        Self { root }
+        Self {
+            root: normalize_filesystem_root(root),
+        }
     }
 
     fn describe_target(&self) -> String {
         self.root.display().to_string()
     }
+}
+
+fn normalize_filesystem_root(root: PathBuf) -> PathBuf {
+    if root.is_absolute() {
+        return root;
+    }
+
+    std::env::current_dir()
+        .map(|cwd| cwd.join(&root))
+        .unwrap_or(root)
 }
 
 /// S3-backed blob writer rooted at a bucket and optional prefix.
@@ -157,7 +190,7 @@ enum S3BucketReadiness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct S3Environment {
+pub(crate) struct S3Environment {
     region: Option<String>,
     default_region: Option<String>,
     endpoint_url: Option<String>,
@@ -165,7 +198,7 @@ struct S3Environment {
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedS3Config {
+pub(crate) struct ResolvedS3Config {
     bucket_name: String,
     prefix: Option<String>,
     region: Region,
@@ -273,7 +306,7 @@ impl S3BlobWriter {
 }
 
 impl S3Environment {
-    fn from_process() -> Self {
+    pub(crate) fn from_process() -> Self {
         let vars = std::env::vars().collect::<BTreeMap<_, _>>();
         Self::from_map(&vars)
     }
@@ -403,7 +436,7 @@ impl BlobWriter for S3BlobWriter {
     }
 }
 
-fn resolve_s3_config(
+pub(crate) fn resolve_s3_config(
     bucket_name: String,
     prefix: Option<String>,
     env: &S3Environment,
@@ -457,7 +490,7 @@ fn resolve_s3_config(
     })
 }
 
-fn build_bucket(config: &ResolvedS3Config) -> PersistResult<Box<Bucket>> {
+pub(crate) fn build_bucket(config: &ResolvedS3Config) -> PersistResult<Box<Bucket>> {
     let credentials = Credentials::new(None, None, None, None, config.profile.as_deref())
         .map_err(|err| PersistError::InvalidConfig(format!("invalid S3 credentials: {err}")))?;
     let bucket = Bucket::new(&config.bucket_name, config.region.clone(), credentials)
@@ -470,7 +503,7 @@ fn build_bucket(config: &ResolvedS3Config) -> PersistResult<Box<Bucket>> {
     }
 }
 
-fn normalize_prefix(prefix: Option<String>) -> Option<String> {
+pub(crate) fn normalize_prefix(prefix: Option<String>) -> Option<String> {
     prefix.and_then(|value| {
         let trimmed = value.trim_matches('/');
         (!trimmed.is_empty()).then(|| trimmed.to_string())
@@ -491,7 +524,7 @@ fn s3_status_code_for_reset(err: &s3::error::S3Error) -> Option<u16> {
     }
 }
 
-fn build_object_key(prefix: Option<&str>, relative_path: &str) -> String {
+pub(crate) fn build_object_key(prefix: Option<&str>, relative_path: &str) -> String {
     let normalized_relative_path = normalize_relative_path(relative_path);
     match prefix {
         Some(prefix) if !prefix.is_empty() => format!("{prefix}/{normalized_relative_path}"),
@@ -499,17 +532,56 @@ fn build_object_key(prefix: Option<&str>, relative_path: &str) -> String {
     }
 }
 
-fn format_s3_location(bucket: &str, key: &str) -> String {
+pub(crate) fn format_s3_location(bucket: &str, key: &str) -> String {
     format!("s3://{bucket}/{key}")
 }
 
-fn parse_s3_location<'a>(location: &'a str, bucket: &str) -> PersistResult<&'a str> {
+pub(crate) fn parse_s3_location<'a>(location: &'a str, bucket: &str) -> PersistResult<&'a str> {
     let prefix = format!("s3://{bucket}/");
     location.strip_prefix(&prefix).ok_or_else(|| {
         PersistError::InvalidRequest(format!(
             "stored blob location `{location}` does not belong to bucket `{bucket}`"
         ))
     })
+}
+
+async fn read_s3_object(location: &str) -> PersistResult<Vec<u8>> {
+    let (bucket_name, _) = split_s3_location(location)?;
+    let config = resolve_s3_config(bucket_name.clone(), None, &S3Environment::from_process())?;
+    let bucket = build_bucket(&config)?;
+    let key = parse_s3_location(location, &bucket_name)?;
+    let response = bucket
+        .get_object(key)
+        .await
+        .map_err(|err| PersistError::s3_client("get_object", &err))?;
+
+    match response.status_code() {
+        200 => Ok(response.to_vec()),
+        404 => Err(PersistError::Io(std::io::Error::new(
+            ErrorKind::NotFound,
+            format!("stored blob `{location}` was not found"),
+        ))),
+        status => Err(PersistError::s3_response(
+            "get_object",
+            status,
+            format!("unexpected response while reading `{location}`"),
+        )),
+    }
+}
+
+fn split_s3_location(location: &str) -> PersistResult<(String, String)> {
+    let without_scheme = location.strip_prefix("s3://").ok_or_else(|| {
+        PersistError::InvalidRequest(format!("invalid stored S3 location `{location}`"))
+    })?;
+    let (bucket, key) = without_scheme.split_once('/').ok_or_else(|| {
+        PersistError::InvalidRequest(format!("invalid stored S3 location `{location}`"))
+    })?;
+    if bucket.is_empty() || key.is_empty() {
+        return Err(PersistError::InvalidRequest(format!(
+            "invalid stored S3 location `{location}`"
+        )));
+    }
+    Ok((bucket.to_string(), key.to_string()))
 }
 
 #[cfg(test)]
@@ -523,6 +595,7 @@ mod tests {
     use s3::Bucket;
     use s3::region::Region;
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -647,6 +720,42 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(temp.path().join(&entry.relative_path))
                 .expect("payload should exist"),
+            "payload"
+        );
+        assert!(
+            std::path::Path::new(&stored.location).is_absolute(),
+            "filesystem blob locations should be absolute"
+        );
+    }
+
+    #[tokio::test]
+    async fn filesystem_writer_normalizes_relative_roots_to_absolute_locations() {
+        let temp = tempfile::Builder::new()
+            .prefix("emwin-db-writer-relative-")
+            .tempdir_in(".")
+            .expect("tempdir in cwd should exist");
+        let root = PathBuf::from(
+            temp.path()
+                .file_name()
+                .expect("tempdir should have a file name"),
+        );
+        let writer = FilesystemBlobWriter::new(root.clone());
+        let entry = BlobEntry::new(
+            BlobRole::Payload,
+            "archive/payload.txt",
+            b"payload".to_vec(),
+            Some("text/plain"),
+        );
+
+        let stored = writer.write(&entry).await.expect("write should succeed");
+
+        assert!(
+            std::path::Path::new(&stored.location).is_absolute(),
+            "relative roots should be persisted as absolute blob locations"
+        );
+        assert_eq!(
+            std::fs::read_to_string(std::path::Path::new(&stored.location))
+                .expect("payload should exist at the stored location"),
             "payload"
         );
     }

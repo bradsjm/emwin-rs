@@ -1,16 +1,18 @@
 use crate::error::{PersistError, PersistResult};
 use crate::metadata::CompletedFileMetadata;
 use crate::runtime::{MetadataSink, PersistedRequest};
-use crate::writer::{BlobRole, BlobStorageKind, BoxFuture, StoredBlob};
+use crate::writer::{BlobRole, BlobStorageKind, BoxFuture, StorageBlobReader, StoredBlob};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use emwin_parser::{
     GenericBody, HvtecCode, ProductBody, ProductHeaderV2, TimeMotLocEntry, UgcArea, UgcSection,
     VtecCode, VtecEventBody,
 };
 use emwin_protocol::ingest::ProductOrigin;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use sqlx::{PgPool, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Row, Transaction};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -52,6 +54,7 @@ pub struct PostgresMetadataSink {
     config: PostgresConfig,
     pool: Arc<Mutex<Option<PgPool>>>,
     reconnect_pending: Arc<AtomicBool>,
+    blob_reader: Arc<StorageBlobReader>,
 }
 
 /// Result of expiring active incident rows whose end time has passed.
@@ -61,6 +64,162 @@ pub struct IncidentCleanupResult {
     pub expired_count: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct IncidentKey {
+    pub office: String,
+    pub phenomena: String,
+    pub significance: String,
+    pub etn: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IncidentCursor {
+    pub latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
+    pub office: String,
+    pub phenomena: String,
+    pub significance: String,
+    pub etn: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IncidentProductsCursor {
+    pub source_timestamp_utc: i64,
+    pub product_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncidentListQuery {
+    pub office: Option<String>,
+    pub phenomena: Option<String>,
+    pub significance: Option<String>,
+    pub etn: Option<i64>,
+    pub status: Option<String>,
+    pub updated_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_before: Option<chrono::DateTime<chrono::Utc>>,
+    pub active_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+
+impl Default for IncidentListQuery {
+    fn default() -> Self {
+        Self {
+            office: None,
+            phenomena: None,
+            significance: None,
+            etn: None,
+            status: None,
+            updated_after: None,
+            updated_before: None,
+            active_at: None,
+            limit: 100,
+            cursor: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncidentProductsQuery {
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+
+impl Default for IncidentProductsQuery {
+    fn default() -> Self {
+        Self {
+            limit: 100,
+            cursor: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PaginatedResponse<T> {
+    pub items: Vec<T>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct IncidentSummary {
+    pub office: String,
+    pub phenomena: String,
+    pub significance: String,
+    pub etn: i64,
+    pub current_status: String,
+    pub latest_vtec_action: String,
+    pub issued_at: chrono::DateTime<chrono::Utc>,
+    pub start_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub end_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_updated_at: chrono::DateTime<chrono::Utc>,
+    pub first_product_id: i64,
+    pub latest_product_id: i64,
+    pub latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
+}
+
+pub type IncidentDetail = IncidentSummary;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct ArchivedProductSummary {
+    pub product_id: i64,
+    pub filename: String,
+    pub source_timestamp_utc: i64,
+    pub ingested_at: chrono::DateTime<chrono::Utc>,
+    pub source_receiver: String,
+    pub source_message_id: Option<String>,
+    pub size_bytes: i64,
+    pub payload_storage_kind: String,
+    pub has_metadata_sidecar: bool,
+    pub source: String,
+    pub family: Option<String>,
+    pub artifact_kind: Option<String>,
+    pub title: Option<String>,
+    pub container: String,
+    pub pil: Option<String>,
+    pub wmo_prefix: Option<String>,
+    pub bbb_kind: Option<String>,
+    pub office_code: Option<String>,
+    pub office_city: Option<String>,
+    pub office_state: Option<String>,
+    pub header_kind: Option<String>,
+    pub ttaaii: Option<String>,
+    pub cccc: Option<String>,
+    pub ddhhmm: Option<String>,
+    pub bbb: Option<String>,
+    pub afos: Option<String>,
+    pub has_body: bool,
+    pub has_artifact: bool,
+    pub has_issues: bool,
+    pub has_vtec: bool,
+    pub has_ugc: bool,
+    pub has_hvtec: bool,
+    pub has_latlon: bool,
+    pub has_time_mot_loc: bool,
+    pub has_wind_hail: bool,
+    pub vtec_count: i32,
+    pub ugc_count: i32,
+    pub hvtec_count: i32,
+    pub latlon_count: i32,
+    pub time_mot_loc_count: i32,
+    pub wind_hail_count: i32,
+    pub issue_count: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ArchivedProductDetail {
+    #[serde(flatten)]
+    pub summary: ArchivedProductSummary,
+    pub payload_location: String,
+    pub metadata_location: Option<String>,
+    pub product_json: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedPayload {
+    pub filename: String,
+    pub bytes: Vec<u8>,
+    pub payload_storage_kind: String,
+}
+
 impl PostgresMetadataSink {
     /// Creates a sink that establishes the pool lazily on first use.
     pub fn new(config: PostgresConfig) -> Self {
@@ -68,6 +227,7 @@ impl PostgresMetadataSink {
             config,
             pool: Arc::new(Mutex::new(None)),
             reconnect_pending: Arc::new(AtomicBool::new(false)),
+            blob_reader: Arc::new(StorageBlobReader::new()),
         }
     }
 
@@ -159,6 +319,129 @@ impl PostgresMetadataSink {
         }
     }
 
+    pub async fn list_incidents(
+        &self,
+        query: IncidentListQuery,
+    ) -> PersistResult<PaginatedResponse<IncidentSummary>> {
+        let pool = self.ensure_pool().await?;
+        let result = list_incidents_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn get_incident(&self, key: &IncidentKey) -> PersistResult<Option<IncidentDetail>> {
+        let pool = self.ensure_pool().await?;
+        let mut builder = QueryBuilder::<Postgres>::new(incident_select_sql());
+        builder
+            .push(" WHERE office = ")
+            .push_bind(&key.office)
+            .push(" AND phenomena = ")
+            .push_bind(&key.phenomena)
+            .push(" AND significance = ")
+            .push_bind(&key.significance)
+            .push(" AND etn = ")
+            .push_bind(key.etn);
+        let result = builder
+            .build_query_as::<IncidentDetail>()
+            .fetch_optional(&pool)
+            .await
+            .map_err(PersistError::from);
+
+        match result {
+            Ok(incident) => Ok(incident),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn list_incident_products(
+        &self,
+        key: &IncidentKey,
+        query: IncidentProductsQuery,
+    ) -> PersistResult<PaginatedResponse<ArchivedProductSummary>> {
+        let pool = self.ensure_pool().await?;
+        let result = list_incident_products_query(&pool, key, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn get_archived_product(
+        &self,
+        product_id: i64,
+    ) -> PersistResult<Option<ArchivedProductDetail>> {
+        let pool = self.ensure_pool().await?;
+        let mut builder = QueryBuilder::<Postgres>::new(archived_product_detail_select_sql());
+        builder.push(" WHERE id = ").push_bind(product_id);
+        let result = builder
+            .build()
+            .fetch_optional(&pool)
+            .await
+            .map(|row| row.map(archived_product_detail_from_row))
+            .map_err(PersistError::from);
+
+        match result {
+            Ok(product) => Ok(product),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn read_archived_payload(
+        &self,
+        product_id: i64,
+    ) -> PersistResult<Option<ArchivedPayload>> {
+        let pool = self.ensure_pool().await?;
+        let mut builder = QueryBuilder::<Postgres>::new(
+            "SELECT filename, payload_storage_kind, payload_location FROM products WHERE id = ",
+        );
+        builder.push_bind(product_id);
+        let row = builder
+            .build()
+            .fetch_optional(&pool)
+            .await
+            .map_err(PersistError::from);
+
+        let Some(row) = (match row {
+            Ok(row) => row,
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                return Err(err);
+            }
+        }) else {
+            return Ok(None);
+        };
+
+        let filename = row.get::<String, _>("filename");
+        let payload_storage_kind = row.get::<String, _>("payload_storage_kind");
+        let payload_location = row.get::<String, _>("payload_location");
+        let bytes = self
+            .blob_reader
+            .read(
+                parse_blob_storage_kind(&payload_storage_kind)?,
+                &payload_location,
+            )
+            .await?;
+        Ok(Some(ArchivedPayload {
+            filename,
+            bytes,
+            payload_storage_kind,
+        }))
+    }
+
     async fn handle_runtime_error(&self, err: &PersistError) {
         if err.should_reset_postgres_pool() {
             let connect_target = connection_target(&self.config)
@@ -214,6 +497,359 @@ impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
 
     fn target_description(&self) -> Option<String> {
         Some(self.describe_target())
+    }
+}
+
+async fn list_incidents_query(
+    pool: &PgPool,
+    query: IncidentListQuery,
+) -> PersistResult<PaginatedResponse<IncidentSummary>> {
+    let limit = normalize_page_limit(query.limit);
+    let cursor = decode_optional_cursor::<IncidentCursor>(query.cursor.as_deref())?;
+    let mut builder = QueryBuilder::<Postgres>::new(incident_select_sql());
+    builder.push(" WHERE 1 = 1");
+
+    if let Some(office) = query.office.as_deref() {
+        builder
+            .push(" AND office = ")
+            .push_bind(office.trim().to_ascii_uppercase());
+    }
+    if let Some(phenomena) = query.phenomena.as_deref() {
+        builder
+            .push(" AND phenomena = ")
+            .push_bind(phenomena.trim().to_ascii_uppercase());
+    }
+    if let Some(significance) = query.significance.as_deref() {
+        builder
+            .push(" AND significance = ")
+            .push_bind(significance.trim().to_ascii_uppercase());
+    }
+    if let Some(etn) = query.etn {
+        builder.push(" AND etn = ").push_bind(etn);
+    }
+    if let Some(status) = query.status.as_deref() {
+        builder
+            .push(" AND current_status = ")
+            .push_bind(status.trim().to_ascii_lowercase());
+    }
+    if let Some(updated_after) = query.updated_after {
+        builder
+            .push(" AND last_updated_at >= ")
+            .push_bind(updated_after);
+    }
+    if let Some(updated_before) = query.updated_before {
+        builder
+            .push(" AND last_updated_at <= ")
+            .push_bind(updated_before);
+    }
+    if let Some(active_at) = query.active_at {
+        builder
+            .push(" AND issued_at <= ")
+            .push_bind(active_at)
+            .push(" AND (start_utc IS NULL OR start_utc <= ")
+            .push_bind(active_at)
+            .push(")")
+            .push(" AND (end_utc IS NULL OR end_utc >= ")
+            .push_bind(active_at)
+            .push(")");
+    }
+    if let Some(cursor) = cursor.as_ref() {
+        builder
+            .push(
+                " AND (
+                    latest_product_timestamp_utc < ",
+            )
+            .push_bind(cursor.latest_product_timestamp_utc)
+            .push(
+                " OR (
+                    latest_product_timestamp_utc = ",
+            )
+            .push_bind(cursor.latest_product_timestamp_utc)
+            .push(
+                " AND (
+                    office > ",
+            )
+            .push_bind(&cursor.office)
+            .push(
+                " OR (
+                    office = ",
+            )
+            .push_bind(&cursor.office)
+            .push(" AND phenomena > ")
+            .push_bind(&cursor.phenomena)
+            .push(
+                ") OR (
+                    office = ",
+            )
+            .push_bind(&cursor.office)
+            .push(" AND phenomena = ")
+            .push_bind(&cursor.phenomena)
+            .push(" AND significance > ")
+            .push_bind(&cursor.significance)
+            .push(
+                ") OR (
+                    office = ",
+            )
+            .push_bind(&cursor.office)
+            .push(" AND phenomena = ")
+            .push_bind(&cursor.phenomena)
+            .push(" AND significance = ")
+            .push_bind(&cursor.significance)
+            .push(" AND etn > ")
+            .push_bind(cursor.etn)
+            .push(")))");
+    }
+
+    builder.push(
+        " ORDER BY latest_product_timestamp_utc DESC, office ASC, phenomena ASC, significance ASC, etn ASC LIMIT ",
+    );
+    builder.push_bind(i64::try_from(limit + 1).expect("limit should fit in i64"));
+
+    let mut items = builder
+        .build_query_as::<IncidentSummary>()
+        .fetch_all(pool)
+        .await?;
+
+    let next_cursor = if items.len() > limit {
+        items.pop().expect("overflow item should exist");
+        let tail = items
+            .last()
+            .expect("page with next cursor should retain at least one item");
+        Some(encode_cursor(&IncidentCursor {
+            latest_product_timestamp_utc: tail.latest_product_timestamp_utc,
+            office: tail.office.clone(),
+            phenomena: tail.phenomena.clone(),
+            significance: tail.significance.clone(),
+            etn: tail.etn,
+        })?)
+    } else {
+        None
+    };
+
+    Ok(PaginatedResponse { items, next_cursor })
+}
+
+async fn list_incident_products_query(
+    pool: &PgPool,
+    key: &IncidentKey,
+    query: IncidentProductsQuery,
+) -> PersistResult<PaginatedResponse<ArchivedProductSummary>> {
+    let limit = normalize_page_limit(query.limit);
+    let cursor = decode_optional_cursor::<IncidentProductsCursor>(query.cursor.as_deref())?;
+    let mut builder = QueryBuilder::<Postgres>::new(archived_product_summary_select_sql());
+    builder.push(
+        " WHERE EXISTS (
+            SELECT 1
+            FROM product_vtec
+            WHERE product_vtec.product_id = products.id
+              AND office = ",
+    );
+    builder
+        .push_bind(&key.office)
+        .push(" AND phenomena = ")
+        .push_bind(&key.phenomena)
+        .push(" AND significance = ")
+        .push_bind(&key.significance)
+        .push(" AND etn = ")
+        .push_bind(key.etn)
+        .push(")");
+
+    if let Some(cursor) = cursor.as_ref() {
+        builder
+            .push(" AND (source_timestamp_utc > ")
+            .push_bind(cursor.source_timestamp_utc)
+            .push(" OR (source_timestamp_utc = ")
+            .push_bind(cursor.source_timestamp_utc)
+            .push(" AND id > ")
+            .push_bind(cursor.product_id)
+            .push("))");
+    }
+
+    builder.push(" ORDER BY source_timestamp_utc ASC, id ASC LIMIT ");
+    builder.push_bind(i64::try_from(limit + 1).expect("limit should fit in i64"));
+
+    let mut items = builder
+        .build_query_as::<ArchivedProductSummary>()
+        .fetch_all(pool)
+        .await?;
+
+    let next_cursor = if items.len() > limit {
+        items.pop().expect("overflow item should exist");
+        let tail = items
+            .last()
+            .expect("page with next cursor should retain at least one item");
+        Some(encode_cursor(&IncidentProductsCursor {
+            source_timestamp_utc: tail.source_timestamp_utc,
+            product_id: tail.product_id,
+        })?)
+    } else {
+        None
+    };
+
+    Ok(PaginatedResponse { items, next_cursor })
+}
+
+fn normalize_page_limit(limit: usize) -> usize {
+    limit.clamp(1, 500)
+}
+
+fn incident_select_sql() -> String {
+    String::from(
+        "SELECT
+            office,
+            phenomena,
+            significance,
+            etn,
+            current_status,
+            latest_vtec_action,
+            issued_at,
+            start_utc,
+            end_utc,
+            last_updated_at,
+            first_product_id,
+            latest_product_id,
+            latest_product_timestamp_utc
+         FROM incidents",
+    )
+}
+
+fn archived_product_summary_select_sql() -> String {
+    String::from(
+        "SELECT
+            id AS product_id,
+            filename,
+            source_timestamp_utc,
+            ingested_at,
+            source_receiver,
+            source_message_id,
+            size_bytes,
+            payload_storage_kind,
+            (metadata_location IS NOT NULL) AS has_metadata_sidecar,
+            source,
+            family,
+            artifact_kind,
+            title,
+            container,
+            pil,
+            wmo_prefix,
+            bbb_kind,
+            office_code,
+            office_city,
+            office_state,
+            header_kind,
+            ttaaii,
+            cccc,
+            ddhhmm,
+            bbb,
+            afos,
+            has_body,
+            has_artifact,
+            has_issues,
+            has_vtec,
+            has_ugc,
+            has_hvtec,
+            has_latlon,
+            has_time_mot_loc,
+            has_wind_hail,
+            vtec_count,
+            ugc_count,
+            hvtec_count,
+            latlon_count,
+            time_mot_loc_count,
+            wind_hail_count,
+            issue_count
+         FROM products",
+    )
+}
+
+fn archived_product_detail_select_sql() -> String {
+    let mut sql = archived_product_summary_select_sql();
+    sql.push_str(", payload_location, metadata_location, product_json");
+    sql
+}
+
+fn encode_cursor<T: Serialize>(cursor: &T) -> PersistResult<String> {
+    let bytes = serde_json::to_vec(cursor)?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_optional_cursor<T>(cursor: Option<&str>) -> PersistResult<Option<T>>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    cursor.map(decode_cursor).transpose()
+}
+
+fn decode_cursor<T>(cursor: &str) -> PersistResult<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|err| PersistError::InvalidRequest(format!("invalid cursor: {err}")))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|err| PersistError::InvalidRequest(format!("invalid cursor payload: {err}")))
+}
+
+fn parse_blob_storage_kind(storage_kind: &str) -> PersistResult<BlobStorageKind> {
+    match storage_kind {
+        "filesystem" => Ok(BlobStorageKind::Filesystem),
+        "s3" => Ok(BlobStorageKind::S3),
+        other => Err(PersistError::InvalidRequest(format!(
+            "unsupported payload storage kind `{other}`"
+        ))),
+    }
+}
+
+fn archived_product_detail_from_row(row: sqlx::postgres::PgRow) -> ArchivedProductDetail {
+    ArchivedProductDetail {
+        summary: ArchivedProductSummary {
+            product_id: row.get("product_id"),
+            filename: row.get("filename"),
+            source_timestamp_utc: row.get("source_timestamp_utc"),
+            ingested_at: row.get("ingested_at"),
+            source_receiver: row.get("source_receiver"),
+            source_message_id: row.get("source_message_id"),
+            size_bytes: row.get("size_bytes"),
+            payload_storage_kind: row.get("payload_storage_kind"),
+            has_metadata_sidecar: row.get("has_metadata_sidecar"),
+            source: row.get("source"),
+            family: row.get("family"),
+            artifact_kind: row.get("artifact_kind"),
+            title: row.get("title"),
+            container: row.get("container"),
+            pil: row.get("pil"),
+            wmo_prefix: row.get("wmo_prefix"),
+            bbb_kind: row.get("bbb_kind"),
+            office_code: row.get("office_code"),
+            office_city: row.get("office_city"),
+            office_state: row.get("office_state"),
+            header_kind: row.get("header_kind"),
+            ttaaii: row.get("ttaaii"),
+            cccc: row.get("cccc"),
+            ddhhmm: row.get("ddhhmm"),
+            bbb: row.get("bbb"),
+            afos: row.get("afos"),
+            has_body: row.get("has_body"),
+            has_artifact: row.get("has_artifact"),
+            has_issues: row.get("has_issues"),
+            has_vtec: row.get("has_vtec"),
+            has_ugc: row.get("has_ugc"),
+            has_hvtec: row.get("has_hvtec"),
+            has_latlon: row.get("has_latlon"),
+            has_time_mot_loc: row.get("has_time_mot_loc"),
+            has_wind_hail: row.get("has_wind_hail"),
+            vtec_count: row.get("vtec_count"),
+            ugc_count: row.get("ugc_count"),
+            hvtec_count: row.get("hvtec_count"),
+            latlon_count: row.get("latlon_count"),
+            time_mot_loc_count: row.get("time_mot_loc_count"),
+            wind_hail_count: row.get("wind_hail_count"),
+            issue_count: row.get("issue_count"),
+        },
+        payload_location: row.get("payload_location"),
+        metadata_location: row.get("metadata_location"),
+        product_json: row.get("product_json"),
     }
 }
 
@@ -366,14 +1002,6 @@ struct ProductVtecRow {
     etn: i64,
     begin_utc: Option<chrono::DateTime<chrono::Utc>>,
     end_utc: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct IncidentKey {
-    office: String,
-    phenomena: String,
-    significance: String,
-    etn: i64,
 }
 
 #[derive(Debug)]

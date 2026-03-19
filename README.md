@@ -128,11 +128,21 @@ Useful server flags:
 
 Server endpoints:
 
+- `GET /incidents` - live incident projection backed by persisted Postgres metadata
+- `GET /incidents/{office}/{phenomena}/{significance}/{etn}` - incident detail with related archive links
+- `GET /incidents/{office}/{phenomena}/{significance}/{etn}/products` - archived products linked to one incident
+- `GET /archive/products/{product_id}` - persisted archived product detail
+- `GET /archive/products/{product_id}/raw` - persisted archived payload bytes proxied through the CLI
 - `GET /events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5` - SSE event stream with optional live filters over event, file, product, header, and parsed location metadata
 - `GET /files` - retained completed-file payloads using the same shape as `file_complete` events, including parsed `product` metadata and `download_url`
 - `GET /files/{*filename}` - retained file download (URL-encoded path segment)
 - `GET /health` - server health summary
 - `GET /metrics` - JSON telemetry snapshot
+
+Archive/incident notes:
+
+- `/incidents` and `/archive/products/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
+- `/incidents` exposes the mutable incident projection from the `incidents` table; `/archive/products/*` exposes persisted product records and raw payload retrieval.
 
 `/events` filter parameters:
 

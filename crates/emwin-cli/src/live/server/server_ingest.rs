@@ -360,6 +360,7 @@ mod tests {
             retained_files: Mutex::new(RetainedFiles::new(16, Duration::from_secs(60))),
             telemetry: Mutex::new(TelemetryPayload::Unavailable),
             persistence: None,
+            archive: None,
             connected_clients: AtomicUsize::new(0),
             max_clients: 16,
             next_event_id: AtomicU64::new(1),

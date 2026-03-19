@@ -106,6 +106,9 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
     let cleanup_sink = started_persistence
         .as_ref()
         .and_then(|started| started.postgres_sink.clone());
+    let archive_sink = started_persistence
+        .as_ref()
+        .and_then(|started| started.postgres_sink.clone());
     let persistence_runtime = started_persistence.map(|started| started.runtime);
     let persistence_producer = persistence_runtime
         .as_ref()
@@ -120,6 +123,7 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         )),
         telemetry: Mutex::new(TelemetryPayload::Unavailable),
         persistence: persistence_producer.clone(),
+        archive: archive_sink,
         connected_clients: AtomicUsize::new(0),
         max_clients: max_clients.max(1),
         next_event_id: AtomicU64::new(1),
@@ -366,6 +370,7 @@ mod tests {
             retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
             telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
             persistence: None,
+            archive: None,
             connected_clients: AtomicUsize::new(0),
             max_clients,
             next_event_id: AtomicU64::new(1),
@@ -755,9 +760,49 @@ Body
             body_text
                 .contains("\"/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5\"")
         );
+        assert!(body_text.contains("\"/incidents\""));
+        assert!(body_text.contains("\"/archive/products/{product_id}\""));
         assert!(body_text.contains("\"/files\""));
         assert!(body_text.contains("\"/health\""));
         assert!(body_text.contains("\"/metrics\""));
+    }
+
+    #[tokio::test]
+    async fn incidents_endpoint_returns_service_unavailable_without_archive_database() {
+        let state = test_state(10);
+        let app = build_router(state, None).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/incidents")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn archive_product_raw_endpoint_returns_service_unavailable_without_archive_database() {
+        let state = test_state(10);
+        let app = build_router(state, None).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/archive/products/1/raw")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]
@@ -786,6 +831,7 @@ Body
             retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
             telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
             persistence: Some(producer),
+            archive: None,
             connected_clients: AtomicUsize::new(0),
             max_clients: 10,
             next_event_id: AtomicU64::new(1),

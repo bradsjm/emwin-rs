@@ -4,10 +4,14 @@
 //! filtering, and ingest coordination live in neighboring modules.
 
 use super::types::{
-    AppState, BroadcastEvent, ClientGuard, EndpointDoc, EventFilter, EventKind, EventsQuery,
-    FilesResponse, HealthResponse, RootResponse,
+    AppState, ArchiveProductDetailPayload, ArchiveProductResponse, BroadcastEvent, ClientGuard,
+    EndpointDoc, EventFilter, EventKind, EventsQuery, FilesResponse, HealthResponse,
+    IncidentDetailPayload, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
+    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, RootResponse,
 };
-use crate::live::server_support::{build_file_download_response, filename_request_or_400};
+use crate::live::server_support::{
+    build_bytes_download_response, build_file_download_response, filename_request_or_400,
+};
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
@@ -26,6 +30,23 @@ use std::time::Duration;
 pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLayer) -> Router {
     Router::new()
         .route("/", get(root_handler))
+        .route("/incidents", get(incidents_handler))
+        .route(
+            "/incidents/{office}/{phenomena}/{significance}/{etn}",
+            get(incident_handler),
+        )
+        .route(
+            "/incidents/{office}/{phenomena}/{significance}/{etn}/products",
+            get(incident_products_handler),
+        )
+        .route(
+            "/archive/products/{product_id}",
+            get(archive_product_handler),
+        )
+        .route(
+            "/archive/products/{product_id}/raw",
+            get(archive_product_raw_handler),
+        )
         .route("/events", get(events_handler))
         .route("/files", get(files_handler))
         .route("/files/{*filename}", get(file_download_handler))
@@ -43,6 +64,31 @@ pub(super) async fn root_handler() -> Json<RootResponse> {
                 method: "GET",
                 path: "/",
                 description: "API index with endpoint descriptions",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/incidents",
+                description: "List live incident projection rows backed by persisted Postgres metadata",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/incidents/{office}/{phenomena}/{significance}/{etn}",
+                description: "Fetch one live incident projection row and its archive links",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/incidents/{office}/{phenomena}/{significance}/{etn}/products",
+                description: "List archived products linked to one incident",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/archive/products/{product_id}",
+                description: "Fetch one archived product detail record",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/archive/products/{product_id}/raw",
+                description: "Download archived raw payload bytes for one product",
             },
             EndpointDoc {
                 method: "GET",
@@ -71,6 +117,125 @@ pub(super) async fn root_handler() -> Json<RootResponse> {
             },
         ],
     })
+}
+
+pub(super) async fn incidents_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<IncidentsQuery>,
+) -> Result<Json<IncidentsResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let page = archive
+        .list_incidents(emwin_db::IncidentListQuery {
+            office: query.office,
+            phenomena: query.phenomena,
+            significance: query.significance,
+            etn: query.etn,
+            status: query.status,
+            updated_after: query.updated_after,
+            updated_before: query.updated_before,
+            active_at: query.active_at,
+            limit: query.limit.unwrap_or(100),
+            cursor: query.cursor,
+        })
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(IncidentsResponse {
+        page: emwin_db::PaginatedResponse {
+            items: page
+                .items
+                .into_iter()
+                .map(IncidentSummaryPayload::from_incident)
+                .collect(),
+            next_cursor: page.next_cursor,
+        },
+    }))
+}
+
+pub(super) async fn incident_handler(
+    State(state): State<Arc<AppState>>,
+    Path((office, phenomena, significance, etn)): Path<(String, String, String, i64)>,
+) -> Result<Json<IncidentResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let key = normalize_incident_key(office, phenomena, significance, etn);
+    let incident = archive
+        .get_incident(&key)
+        .await
+        .map_err(map_archive_error)?
+        .ok_or((StatusCode::NOT_FOUND, "incident not found".to_string()))?;
+
+    Ok(Json(IncidentResponse {
+        incident: IncidentDetailPayload::from_incident(incident),
+    }))
+}
+
+pub(super) async fn incident_products_handler(
+    State(state): State<Arc<AppState>>,
+    Path((office, phenomena, significance, etn)): Path<(String, String, String, i64)>,
+    Query(query): Query<IncidentProductsQuery>,
+) -> Result<Json<IncidentProductsResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let key = normalize_incident_key(office, phenomena, significance, etn);
+    let page = archive
+        .list_incident_products(
+            &key,
+            emwin_db::IncidentProductsQuery {
+                limit: query.limit.unwrap_or(100),
+                cursor: query.cursor,
+            },
+        )
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(IncidentProductsResponse {
+        page: emwin_db::PaginatedResponse {
+            items: page
+                .items
+                .into_iter()
+                .map(super::types::ArchiveProductSummaryPayload::from_product)
+                .collect(),
+            next_cursor: page.next_cursor,
+        },
+    }))
+}
+
+pub(super) async fn archive_product_handler(
+    State(state): State<Arc<AppState>>,
+    Path(product_id): Path<i64>,
+) -> Result<Json<ArchiveProductResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let product = archive
+        .get_archived_product(product_id)
+        .await
+        .map_err(map_archive_error)?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            "archived product not found".to_string(),
+        ))?;
+
+    Ok(Json(ArchiveProductResponse {
+        product: ArchiveProductDetailPayload::from_product(product),
+    }))
+}
+
+pub(super) async fn archive_product_raw_handler(
+    State(state): State<Arc<AppState>>,
+    Path(product_id): Path<i64>,
+) -> Result<Response, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let payload = archive
+        .read_archived_payload(product_id)
+        .await
+        .map_err(map_archive_error)?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            "archived payload not found".to_string(),
+        ))?;
+
+    Ok(build_bytes_download_response(
+        &payload.filename,
+        payload.bytes,
+    ))
 }
 
 pub(super) async fn events_handler(
@@ -261,4 +426,38 @@ pub(super) struct StreamState {
     pub(super) shutdown_rx: tokio::sync::watch::Receiver<bool>,
     pub(super) peer: SocketAddr,
     pub(super) _guard: Option<ClientGuard>,
+}
+
+fn archive_service(
+    state: &Arc<AppState>,
+) -> Result<&emwin_db::PostgresMetadataSink, (StatusCode, String)> {
+    state.archive.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "archive database is not configured".to_string(),
+    ))
+}
+
+fn normalize_incident_key(
+    office: String,
+    phenomena: String,
+    significance: String,
+    etn: i64,
+) -> emwin_db::IncidentKey {
+    emwin_db::IncidentKey {
+        office: office.trim().to_ascii_uppercase(),
+        phenomena: phenomena.trim().to_ascii_uppercase(),
+        significance: significance.trim().to_ascii_uppercase(),
+        etn,
+    }
+}
+
+fn map_archive_error(err: emwin_db::PersistError) -> (StatusCode, String) {
+    match err {
+        emwin_db::PersistError::InvalidRequest(message)
+        | emwin_db::PersistError::InvalidConfig(message) => (StatusCode::BAD_REQUEST, message),
+        emwin_db::PersistError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+            (StatusCode::NOT_FOUND, io.to_string())
+        }
+        other => (StatusCode::BAD_GATEWAY, other.to_string()),
+    }
 }
