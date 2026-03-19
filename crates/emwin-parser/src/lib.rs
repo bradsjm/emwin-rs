@@ -31,6 +31,7 @@
 mod body;
 mod data;
 mod enrichment;
+mod enrichment_artifact;
 mod geo;
 mod header;
 mod issue;

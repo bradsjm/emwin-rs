@@ -227,3 +227,63 @@ pub(crate) fn build_bytes_download_response(filename: &str, bytes: Vec<u8>) -> R
 pub(crate) fn filename_request_or_400(raw: &str) -> Result<String, StatusCode> {
     sanitize_requested_filename(raw).ok_or(StatusCode::BAD_REQUEST)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{RetainedFiles, sanitize_requested_filename, wildcard_match};
+    use emwin_protocol::ingest::ProductOrigin;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn wildcard_patterns_match_case_insensitive() {
+        assert!(wildcard_match("*.TXT", "warn123.txt"));
+        assert!(wildcard_match("WARN*", "warn123.txt"));
+        assert!(wildcard_match("*orecast*", "FORecast_report.txt"));
+        assert!(!wildcard_match("*.ZIP", "warn123.txt"));
+    }
+
+    #[test]
+    fn sanitize_filename_rejects_bad_paths() {
+        assert_eq!(
+            sanitize_requested_filename("file.txt"),
+            Some("file.txt".to_string())
+        );
+        assert_eq!(
+            sanitize_requested_filename("/nested/file.txt"),
+            Some("nested/file.txt".to_string())
+        );
+        assert!(sanitize_requested_filename("../file.txt").is_none());
+        assert!(sanitize_requested_filename(" ").is_none());
+    }
+
+    #[test]
+    fn retained_files_evict_by_capacity_and_ttl() {
+        let mut files = RetainedFiles::new(2, Duration::from_secs(1));
+        files.insert(
+            "a.txt".to_string(),
+            vec![1],
+            1,
+            ProductOrigin::Qbt,
+            SystemTime::now(),
+        );
+        files.insert(
+            "b.txt".to_string(),
+            vec![2],
+            2,
+            ProductOrigin::Qbt,
+            SystemTime::now(),
+        );
+        files.insert(
+            "c.txt".to_string(),
+            vec![3],
+            3,
+            ProductOrigin::Qbt,
+            SystemTime::now() - Duration::from_secs(2),
+        );
+
+        assert!(files.get("a.txt").is_none());
+        assert!(files.get("b.txt").is_some());
+        assert!(files.get("c.txt").is_none());
+        assert_eq!(files.len(), 1);
+    }
+}

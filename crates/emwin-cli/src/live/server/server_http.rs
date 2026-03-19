@@ -700,3 +700,6 @@ fn map_archive_error(err: emwin_db::PersistError) -> (StatusCode, String) {
         other => (StatusCode::BAD_GATEWAY, other.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests;

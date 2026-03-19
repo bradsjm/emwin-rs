@@ -689,3 +689,6 @@ impl Drop for ClientGuard {
         );
     }
 }
+
+#[cfg(test)]
+mod tests;
