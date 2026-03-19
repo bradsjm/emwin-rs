@@ -19,8 +19,9 @@ EMWIN is protocol-compatible with EMWIN QBT payload semantics where practical, b
 Use this rule set:
 
 1. `docs/EMWIN QBT Satellite Broadcast Protocol draft v1.0.3.md` is a historical/reference input.
-2. `docs/protocol.md` is the implementation authority.
-3. When draft assumptions conflict with observed TCP behavior, this document wins.
+2. This document is the implementation authority for EMWIN/QBT TCP behavior.
+3. `docs/weather-wire.md` is the implementation authority for Weather Wire/XMPP behavior.
+4. When draft assumptions conflict with observed TCP behavior, this document wins.
 
 High-level mapping:
 

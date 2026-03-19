@@ -6,10 +6,11 @@ Use this file as the operational contract for automated coding agents.
 ## Scope
 
 - Repository type: Rust workspace (Edition 2024).
-- Toolchain target: stable Rust, workspace `rust-version = 1.88`.
+- Toolchain target: stable Rust, workspace `rust-version = 1.94`.
 - Workspace members:
   - `crates/emwin-protocol`
   - `crates/emwin-cli`
+  - `crates/emwin-db`
   - `crates/emwin-parser`
 - Protocol behavior authority:
   - `docs/EMWIN QBT TCP Protocol.md` (QBT/EMWIN)
@@ -22,7 +23,7 @@ Use this file as the operational contract for automated coding agents.
 - If protocol behavior changes, update all three:
   - implementation
   - tests
-  - corresponding protocol spec doc (`docs/protocol.md` or `docs/weather-wire.md`)
+  - corresponding protocol spec doc (`docs/EMWIN QBT TCP Protocol.md` or `docs/weather-wire.md`)
 
 ## Build, Lint, and Test Commands
 

@@ -7,7 +7,9 @@ This file defines crate-local expectations for automated coding agents.
 
 - Crate: `emwin-protocol` (library crate).
 - Role: protocol parsing/encoding, client runtime orchestration, stream/file assembly.
-- Normative protocol authority: `docs/protocol.md` at repository root.
+- Normative protocol authority:
+  - `docs/EMWIN QBT TCP Protocol.md` for QBT/EMWIN
+  - `docs/weather-wire.md` for Weather Wire/XMPP
 
 ## Before You Change Code
 
@@ -132,7 +134,7 @@ cargo test -p emwin-protocol <test_name> -- --nocapture
 
 - Treat decoder behavior as compatibility-sensitive.
 - For parser changes, test success and failure/corruption paths.
-- If protocol interpretation changes, update `docs/protocol.md`.
+- If protocol interpretation changes, update the relevant protocol spec doc.
 
 ## Testing Expectations
 
@@ -143,7 +145,7 @@ cargo test -p emwin-protocol <test_name> -- --nocapture
 
 ## Documentation and Spec Sync
 
-- Update `docs/protocol.md` for protocol behavior changes and requirement mappings.
+- Update `docs/EMWIN QBT TCP Protocol.md` or `docs/weather-wire.md` for protocol behavior changes and requirement mappings.
 - Keep root or crate README examples accurate when behavior changes.
 
 ## Cursor/Copilot Rules
