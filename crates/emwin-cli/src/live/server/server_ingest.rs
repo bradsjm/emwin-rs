@@ -530,7 +530,7 @@ mod tests {
         match published.kind {
             EventKind::FileComplete(file) => {
                 assert_eq!(file.metadata.filename, "nested/TAFPDKGA.TXT");
-                assert_eq!(file.download_url, "/files/nested%2FTAFPDKGA.TXT");
+                assert_eq!(file.download_url, "/v1/live/files/nested%2FTAFPDKGA.TXT");
             }
             _ => panic!("expected file_complete event"),
         }

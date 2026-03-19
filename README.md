@@ -97,7 +97,7 @@ Optional file persistence:
 - When `--persist-database-url` is also set, blob writes still succeed even if the Postgres metadata upsert fails.
 - When Postgres is unavailable at startup or during runtime, the server stays up, retries metadata persistence in the background with backoff, and resumes writing after connectivity returns.
 - When filesystem writes fail transiently, including `ENOSPC`, or S3 returns transient service/network failures, including bucket auto-create checks during startup/runtime, the background persistence worker retries with throttled warning logs while live ingest and connected clients remain online.
-- ZIP/ZIS archive entry directories are not preserved in persisted blob paths; the original delivered filename remains available in metadata and `/files` responses.
+- ZIP/ZIS archive entry directories are not preserved in persisted blob paths; the original delivered filename remains available in metadata and `/v1/live/files` responses.
 - `server` defaults to `--post-process-archives true`, which extracts the first entry from completed `.ZIP` and `.ZIS` products before parsing and downstream delivery.
 - Corrupt `.ZIP` and `.ZIS` payloads are logged as `Corrupt Zip File Received` and dropped when archive post-processing is enabled.
 - `server` serves retained payloads over HTTP from the in-memory retention cache while optionally persisting payloads and metadata asynchronously in the background.
@@ -128,31 +128,33 @@ Useful server flags:
 
 Server endpoints:
 
-- `GET /incidents` - live incident projection backed by persisted Postgres metadata
-- `GET /incidents/{office}/{phenomena}/{significance}/{etn}` - incident detail with related archive links
-- `GET /incidents/{office}/{phenomena}/{significance}/{etn}/products` - archived products linked to one incident
-- `GET /archive/products/{product_id}` - persisted archived product detail
-- `GET /archive/products/{product_id}/raw` - persisted archived payload bytes proxied through the CLI
-- `GET /events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5` - SSE event stream with optional live filters over event, file, product, header, and parsed location metadata
-- `GET /incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active` - SSE stream of persisted incident projection changes with incident-native filters
-- `GET /files` - retained completed-file payloads using the same shape as `file_complete` events, including parsed `product` metadata and `download_url`
-- `GET /files/{*filename}` - retained file download (URL-encoded path segment)
-- `GET /health` - server health summary
-- `GET /metrics` - JSON telemetry snapshot
+- `GET /` - Swagger UI for the server API
+- `GET /openapi.json` - generated OpenAPI document
+- `GET /v1/live/incidents` - live incident projection backed by persisted Postgres metadata
+- `GET /v1/live/incidents/{office}/{phenomena}/{significance}/{etn}` - incident detail with related archive links
+- `GET /v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products` - archived products linked to one incident
+- `GET /v1/archive/products/{product_id}` - persisted archived product detail
+- `GET /v1/archive/products/{product_id}/raw` - persisted archived payload bytes proxied through the CLI
+- `GET /v1/live/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5` - SSE event stream with optional live filters over event, file, product, header, and parsed location metadata
+- `GET /v1/live/incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active` - SSE stream of persisted incident projection changes with incident-native filters
+- `GET /v1/live/files` - retained completed-file payloads using the same shape as `file_complete` events, including parsed `product` metadata and `download_url`
+- `GET /v1/live/files/{*filename}` - retained file download (URL-encoded path segment)
+- `GET /v1/live/health` - server health summary
+- `GET /v1/live/metrics` - JSON telemetry snapshot
 
 Archive/incident notes:
 
-- `/incidents` and `/archive/products/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
-- `/incidents` exposes the mutable incident projection from the `incidents` table; `/archive/products/*` exposes persisted product records and raw payload retrieval.
-- `/incident-events` also requires `--persist-database-url`; it emits `incident_change` SSE frames only after incident projection writes or cleanup updates succeed in Postgres.
+- `/v1/live/incidents` and `/v1/archive/products/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
+- `/v1/live/incidents` exposes the mutable incident projection from the `incidents` table; `/v1/archive/products/*` exposes persisted product records and raw payload retrieval.
+- `/v1/live/incident-events` also requires `--persist-database-url`; it emits `incident_change` SSE frames only after incident projection writes or cleanup updates succeed in Postgres.
 
-`/incident-events` filter parameters:
+`/v1/live/incident-events` filter parameters:
 
 - `action` - comma-delimited incident mutation types: `created`, `updated`
 - `office`, `phenomena`, `significance`, `status` - incident identity and lifecycle filters using canonical values such as `KOAX`, `FF`, `W`, and `active`
 - `etn` - comma-delimited event tracking number filter such as `2001,2002`
 
-`/events` filter parameters:
+`/v1/live/events` filter parameters:
 
 - `event` - comma-delimited event names such as `file_complete`, `telemetry`, or `connected`
 - `filename` - wildcard filename match such as `*.TXT` or `A_*`
@@ -169,18 +171,18 @@ Archive/incident notes:
 
 Examples:
 
-- `GET /events?event=file_complete&pil=TAF,AFD`
-- `GET /events?event=file_complete&family=nws_text_product&container=raw`
-- `GET /events?event=file_complete&source=wmo_taf_bulletin&cccc=KWBC`
-- `GET /events?event=file_complete&office=FFC&office_state=GA`
-- `GET /events?event=file_complete&has_issues=true&issue_code=invalid_wmo_header`
-- `GET /events?event=file_complete&cccc=KBOX&ttaaii=FXUS61`
-- `GET /events?event=file_complete&county=IAC001&vtec_phenomena=TO&vtec_significance=W`
-- `GET /events?event=file_complete&has_hvtec=true&hvtec_cause=excessive_rainfall`
-- `GET /events?event=file_complete&has_wind_hail=true&min_wind_mph=50&min_hail_inches=1.00`
-- `GET /events?event=file_complete&state=NE&vtec_office=KOAX&vtec_action=NEW`
-- `GET /events?event=file_complete&lat=41.42&lon=-96.17`
-- `GET /events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=15`
+- `GET /v1/live/events?event=file_complete&pil=TAF,AFD`
+- `GET /v1/live/events?event=file_complete&family=nws_text_product&container=raw`
+- `GET /v1/live/events?event=file_complete&source=wmo_taf_bulletin&cccc=KWBC`
+- `GET /v1/live/events?event=file_complete&office=FFC&office_state=GA`
+- `GET /v1/live/events?event=file_complete&has_issues=true&issue_code=invalid_wmo_header`
+- `GET /v1/live/events?event=file_complete&cccc=KBOX&ttaaii=FXUS61`
+- `GET /v1/live/events?event=file_complete&county=IAC001&vtec_phenomena=TO&vtec_significance=W`
+- `GET /v1/live/events?event=file_complete&has_hvtec=true&hvtec_cause=excessive_rainfall`
+- `GET /v1/live/events?event=file_complete&has_wind_hail=true&min_wind_mph=50&min_hail_inches=1.00`
+- `GET /v1/live/events?event=file_complete&state=NE&vtec_office=KOAX&vtec_action=NEW`
+- `GET /v1/live/events?event=file_complete&lat=41.42&lon=-96.17`
+- `GET /v1/live/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=15`
 
 Optional live-mode endpoint/persistence overrides:
 

@@ -23,9 +23,10 @@ use tokio::sync::{broadcast, watch};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
+mod openapi;
 mod server_http;
 mod server_ingest;
-mod types;
+pub(crate) mod types;
 
 pub use types::ServerOptions;
 use types::{
@@ -755,7 +756,7 @@ AKC090-051300-
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/files/nested%2Fmy%20file.txt")
+                    .uri("/v1/live/files/nested%2Fmy%20file.txt")
                     .method("GET")
                     .body(Body::empty())
                     .expect("request should build"),
@@ -795,7 +796,7 @@ Body
         let Json(response) = files_handler(State(state)).await;
         let file = &response.files[0];
         assert_eq!(file.metadata.filename, "TAFPDKGA.TXT");
-        assert_eq!(file.download_url, "/files/TAFPDKGA.TXT");
+        assert_eq!(file.download_url, "/v1/live/files/TAFPDKGA.TXT");
         assert_eq!(file.metadata.product.pil.as_deref(), Some("TAF"));
         assert!(
             file.metadata
@@ -828,7 +829,7 @@ Body
     }
 
     #[tokio::test]
-    async fn root_endpoint_lists_available_routes() {
+    async fn root_endpoint_serves_swagger_ui() {
         let state = test_state(10);
         let app = build_router(state, None).expect("router should build");
 
@@ -844,20 +845,50 @@ Body
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| value.starts_with("text/html")),
+            Some(true)
+        );
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let body_text = String::from_utf8(body.to_vec()).expect("body should be utf8 html");
+        assert!(body_text.contains("swagger-ui"));
+    }
+
+    #[tokio::test]
+    async fn openapi_json_lists_versioned_routes() {
+        let state = test_state(10);
+        let app = build_router(state, None).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/openapi.json")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should read");
         let body_text = String::from_utf8(body.to_vec()).expect("body should be utf8 json");
-        assert!(
-            body_text
-                .contains("\"/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5\"")
-        );
-        assert!(body_text.contains("\"/incident-events"));
-        assert!(body_text.contains("\"/incidents\""));
-        assert!(body_text.contains("\"/archive/products/{product_id}\""));
-        assert!(body_text.contains("\"/files\""));
-        assert!(body_text.contains("\"/health\""));
-        assert!(body_text.contains("\"/metrics\""));
+        assert!(body_text.contains("\"/v1/live/events\""));
+        assert!(body_text.contains("\"/v1/live/incident-events\""));
+        assert!(body_text.contains("\"/v1/live/incidents\""));
+        assert!(body_text.contains("\"/v1/archive/products/{product_id}\""));
+        assert!(body_text.contains("\"/v1/live/files\""));
+        assert!(body_text.contains("\"/v1/live/health\""));
+        assert!(body_text.contains("\"/v1/live/metrics\""));
+        assert!(!body_text.contains("\"/events\""));
     }
 
     #[tokio::test]
@@ -868,7 +899,7 @@ Body
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/incidents")
+                    .uri("/v1/live/incidents")
                     .method("GET")
                     .body(Body::empty())
                     .expect("request should build"),
@@ -927,7 +958,10 @@ Body
         assert_eq!(json["action"], "created");
         assert_eq!(json["trigger"], "persist");
         assert_eq!(json["incident"]["office"], "KOAX");
-        assert_eq!(json["incident"]["detail_url"], "/incidents/KOAX/FF/W/2001");
+        assert_eq!(
+            json["incident"]["detail_url"],
+            "/v1/live/incidents/KOAX/FF/W/2001"
+        );
     }
 
     #[tokio::test]
@@ -938,7 +972,7 @@ Body
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/archive/products/1/raw")
+                    .uri("/v1/archive/products/1/raw")
                     .method("GET")
                     .body(Body::empty())
                     .expect("request should build"),
@@ -993,7 +1027,7 @@ Body
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/metrics")
+                    .uri("/v1/live/metrics")
                     .method("GET")
                     .body(Body::empty())
                     .expect("request should build"),
@@ -1411,7 +1445,10 @@ Body
     fn file_complete_event_includes_download_url() {
         let value = file_complete_event("nested/my file.txt").to_json();
 
-        assert_eq!(value["download_url"], "/files/nested%2Fmy%20file.txt");
+        assert_eq!(
+            value["download_url"],
+            "/v1/live/files/nested%2Fmy%20file.txt"
+        );
         assert_eq!(value["timestamp_utc"], 1);
         assert_eq!(value["product"]["schema_version"], 2);
         assert!(value["product"].get("facets").is_some());

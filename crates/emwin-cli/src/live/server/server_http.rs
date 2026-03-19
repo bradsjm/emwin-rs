@@ -4,11 +4,11 @@
 //! filtering, and ingest coordination live in neighboring modules.
 
 use super::types::{
-    AppState, ArchiveProductDetailPayload, ArchiveProductResponse, BroadcastEvent, ClientGuard,
-    EndpointDoc, EventFilter, EventKind, EventsQuery, FilesResponse, HealthResponse,
-    IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter, IncidentEventPayload,
-    IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
-    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, RootResponse,
+    ARCHIVE_API_PREFIX, AppState, ArchiveProductDetailPayload, ArchiveProductResponse,
+    BroadcastEvent, ClientGuard, EventFilter, EventKind, EventsQuery, FilesResponse,
+    HealthResponse, IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter,
+    IncidentEventPayload, IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse,
+    IncidentResponse, IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, LIVE_API_PREFIX,
 };
 use crate::live::server_support::{
     build_bytes_download_response, build_file_download_response, filename_request_or_400,
@@ -29,8 +29,7 @@ use std::time::Duration;
 
 /// Builds the Axum router for live server mode.
 pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLayer) -> Router {
-    Router::new()
-        .route("/", get(root_handler))
+    let live_router = Router::new()
         .route("/incidents", get(incidents_handler))
         .route(
             "/incidents/{office}/{phenomena}/{significance}/{etn}",
@@ -40,92 +39,37 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
             "/incidents/{office}/{phenomena}/{significance}/{etn}/products",
             get(incident_products_handler),
         )
-        .route(
-            "/archive/products/{product_id}",
-            get(archive_product_handler),
-        )
-        .route(
-            "/archive/products/{product_id}/raw",
-            get(archive_product_raw_handler),
-        )
         .route("/incident-events", get(incident_events_handler))
         .route("/events", get(events_handler))
         .route("/files", get(files_handler))
         .route("/files/{*filename}", get(file_download_handler))
         .route("/health", get(health_handler))
-        .route("/metrics", get(metrics_handler))
+        .route("/metrics", get(metrics_handler));
+    let archive_router = Router::new()
+        .route("/products/{product_id}", get(archive_product_handler))
+        .route(
+            "/products/{product_id}/raw",
+            get(archive_product_raw_handler),
+        );
+
+    Router::new()
+        .merge(super::openapi::swagger_ui_mount())
+        .nest(LIVE_API_PREFIX, live_router)
+        .nest(ARCHIVE_API_PREFIX, archive_router)
         .layer(cors)
         .with_state(state)
 }
 
-pub(super) async fn root_handler() -> Json<RootResponse> {
-    Json(RootResponse {
-        service: "emwin-cli server",
-        endpoints: vec![
-            EndpointDoc {
-                method: "GET",
-                path: "/",
-                description: "API index with endpoint descriptions",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/incidents",
-                description: "List live incident projection rows backed by persisted Postgres metadata",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/incidents/{office}/{phenomena}/{significance}/{etn}",
-                description: "Fetch one live incident projection row and its archive links",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/incidents/{office}/{phenomena}/{significance}/{etn}/products",
-                description: "List archived products linked to one incident",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/archive/products/{product_id}",
-                description: "Fetch one archived product detail record",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/archive/products/{product_id}/raw",
-                description: "Download archived raw payload bytes for one product",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5",
-                description: "SSE stream with optional structured live filters over event, file, product, header, geography, VTEC, and location metadata",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active",
-                description: "SSE stream of persisted incident projection changes with incident-native filters",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/files",
-                description: "List retained completed files",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/files/{*filename}",
-                description: "Download retained file by URL-encoded filename path",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/health",
-                description: "Server health summary",
-            },
-            EndpointDoc {
-                method: "GET",
-                path: "/metrics",
-                description: "JSON telemetry and persistence snapshot",
-            },
-        ],
-    })
-}
-
+#[utoipa::path(
+    get,
+    path = "/v1/live/incidents",
+    tag = "live",
+    params(IncidentsQuery),
+    responses(
+        (status = 200, description = "List live incident projection rows.", body = super::openapi::IncidentsResponseSchema),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn incidents_handler(
     State(state): State<Arc<AppState>>,
     Query(query): Query<IncidentsQuery>,
@@ -159,6 +103,22 @@ pub(super) async fn incidents_handler(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}",
+    tag = "live",
+    params(
+        ("office" = String, Path, description = "NWS office code"),
+        ("phenomena" = String, Path, description = "VTEC phenomena code"),
+        ("significance" = String, Path, description = "VTEC significance code"),
+        ("etn" = i64, Path, description = "Event tracking number")
+    ),
+    responses(
+        (status = 200, description = "Fetch one live incident projection row.", body = super::openapi::IncidentResponseSchema),
+        (status = 404, description = "Incident was not found.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn incident_handler(
     State(state): State<Arc<AppState>>,
     Path((office, phenomena, significance, etn)): Path<(String, String, String, i64)>,
@@ -176,6 +136,22 @@ pub(super) async fn incident_handler(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products",
+    tag = "live",
+    params(
+        ("office" = String, Path, description = "NWS office code"),
+        ("phenomena" = String, Path, description = "VTEC phenomena code"),
+        ("significance" = String, Path, description = "VTEC significance code"),
+        ("etn" = i64, Path, description = "Event tracking number"),
+        IncidentProductsQuery
+    ),
+    responses(
+        (status = 200, description = "List archived products linked to one incident.", body = super::openapi::IncidentProductsResponseSchema),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn incident_products_handler(
     State(state): State<Arc<AppState>>,
     Path((office, phenomena, significance, etn)): Path<(String, String, String, i64)>,
@@ -206,6 +182,17 @@ pub(super) async fn incident_products_handler(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/archive/products/{product_id}",
+    tag = "archive",
+    params(("product_id" = i64, Path, description = "Archived product id")),
+    responses(
+        (status = 200, description = "Fetch one archived product detail record.", body = super::openapi::ArchiveProductResponseSchema),
+        (status = 404, description = "Archived product was not found.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn archive_product_handler(
     State(state): State<Arc<AppState>>,
     Path(product_id): Path<i64>,
@@ -225,6 +212,17 @@ pub(super) async fn archive_product_handler(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/archive/products/{product_id}/raw",
+    tag = "archive",
+    params(("product_id" = i64, Path, description = "Archived product id")),
+    responses(
+        (status = 200, description = "Download archived raw payload bytes.", content_type = "application/octet-stream"),
+        (status = 404, description = "Archived payload was not found.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn archive_product_raw_handler(
     State(state): State<Arc<AppState>>,
     Path(product_id): Path<i64>,
@@ -245,6 +243,17 @@ pub(super) async fn archive_product_raw_handler(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/events",
+    tag = "live",
+    params(EventsQuery),
+    responses(
+        (status = 200, description = "Server-sent events stream of live feed activity.", body = super::openapi::SseEventEnvelope, content_type = "text/event-stream"),
+        (status = 400, description = "Event filter query validation failed.", body = String),
+        (status = 429, description = "Concurrent SSE client limit reached.", body = String)
+    )
+)]
 pub(super) async fn events_handler(
     State(state): State<Arc<AppState>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -336,6 +345,17 @@ pub(super) async fn events_handler(
     Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/incident-events",
+    tag = "live",
+    params(IncidentEventsQuery),
+    responses(
+        (status = 200, description = "Server-sent events stream of persisted incident projection changes.", body = super::openapi::SseEventEnvelope, content_type = "text/event-stream"),
+        (status = 429, description = "Concurrent SSE client limit reached.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
 pub(super) async fn incident_events_handler(
     State(state): State<Arc<AppState>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -417,6 +437,14 @@ pub(super) async fn incident_events_handler(
     Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/files",
+    tag = "live",
+    responses(
+        (status = 200, description = "List retained completed files.", body = super::openapi::FilesResponseSchema)
+    )
+)]
 pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<FilesResponse> {
     let files = state
         .retained_files
@@ -429,6 +457,17 @@ pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<Fi
     Json(FilesResponse { files })
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/files/{filename}",
+    tag = "live",
+    params(("filename" = String, Path, description = "URL-encoded retained file path")),
+    responses(
+        (status = 200, description = "Download retained file contents.", content_type = "application/octet-stream"),
+        (status = 400, description = "Requested filename is invalid.", body = String),
+        (status = 404, description = "Retained file was not found.", body = String)
+    )
+)]
 pub(super) async fn file_download_handler(
     State(state): State<Arc<AppState>>,
     Path(filename): Path<String>,
@@ -445,6 +484,14 @@ pub(super) async fn file_download_handler(
     Ok(build_file_download_response(file))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/health",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Live server health summary.", body = super::openapi::HealthResponseSchema)
+    )
+)]
 pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let connected_clients = state.connected_clients.load(Ordering::Relaxed);
     let retained_files = state
@@ -467,6 +514,14 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/live/metrics",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Live server telemetry snapshot.", body = serde_json::Value)
+    )
+)]
 pub(super) async fn metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<super::types::MetricsPayload> {

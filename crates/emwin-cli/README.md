@@ -6,7 +6,7 @@ CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `
 
 - `server`
   - Live command.
-  - Connects to EMWIN servers, exposes HTTP and SSE endpoints, and retains recent files for `/files` downloads.
+  - Connects to EMWIN servers, exposes versioned HTTP and SSE endpoints, and retains recent files for `/v1/live/files` downloads.
   - Optional `--output-dir <PATH|s3://bucket[/prefix]>` persists completed payloads asynchronously.
 
 ## Output formats
@@ -59,11 +59,11 @@ Persistence behavior when `--output-dir` is set:
 - `.ZIP` and `.ZIS` products are extracted before parsing, filtering, and persistence by default; the extracted entry filename replaces the archive filename
 - corrupt archives are logged as `Corrupt Zip File Received` and dropped when post-processing is enabled
 - sidecar names replace the original extension within the canonical archival path, for example `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.TXT` -> `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.JSON`
-- ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/files`
-- `/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
-- when `--persist-database-url` is configured, the server also exposes `/incidents` plus `/archive/products/*` for incident-first archive reads
-- `/incidents` and `/archive/products/*` return `503` when Postgres-backed archive metadata is not configured
-- when `--persist-database-url` is configured, the server also exposes `/incident-events` for SSE notifications when incident projection rows are created or updated
+- ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/v1/live/files`
+- `/v1/live/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
+- when `--persist-database-url` is configured, the server also exposes `/v1/live/incidents` plus `/v1/archive/products/*` for incident-first archive reads
+- `/v1/live/incidents` and `/v1/archive/products/*` return `503` when Postgres-backed archive metadata is not configured
+- when `--persist-database-url` is configured, the server also exposes `/v1/live/incident-events` for SSE notifications when incident projection rows are created or updated
 
 If `--server` is omitted, built-in default endpoints are used.
 `--server` and `--server-list-path` are only supported for `--receiver qbt`.
@@ -118,10 +118,10 @@ cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --
 
 ## Server filter examples
 
-When running `server`, `/events` supports parsed-location filters:
+When running `server`, `/v1/live/events` supports parsed-location filters:
 
-- `/events?event=file_complete&lat=41.42&lon=-96.17`
-- `/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=15`
+- `/v1/live/events?event=file_complete&lat=41.42&lon=-96.17`
+- `/v1/live/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=15`
 
 `lat` and `lon` must be provided together. `distance_miles` is optional and defaults to `5.0`.
 Matches use parsed `LAT...LON` polygons for containment and parsed `TIME...MOT...LOC`, `UGC`,
@@ -129,12 +129,13 @@ and `HVTEC` coordinates for radius checks.
 
 ## Incident and archive endpoints
 
-- `/incident-events` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
-- `/incidents` lists live incident projection rows from persisted Postgres metadata
-- `/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
-- `/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
-- `/archive/products/{product_id}` returns persisted product detail including `product_json`
-- `/archive/products/{product_id}/raw` proxies archived payload bytes for one product
+- `GET /` serves Swagger UI and `GET /openapi.json` serves the generated OpenAPI document
+- `/v1/live/incident-events` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
+- `/v1/live/incidents` lists live incident projection rows from persisted Postgres metadata
+- `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
+- `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
+- `/v1/archive/products/{product_id}` returns persisted product detail including `product_json`
+- `/v1/archive/products/{product_id}/raw` proxies archived payload bytes for one product
 
 ## Text product parsing
 

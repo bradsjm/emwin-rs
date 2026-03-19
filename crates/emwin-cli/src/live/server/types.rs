@@ -23,6 +23,11 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 use tokio::sync::{broadcast, watch};
+use utoipa::IntoParams;
+
+pub(crate) const LIVE_API_PREFIX: &str = "/v1/live";
+pub(crate) const ARCHIVE_API_PREFIX: &str = "/v1/archive";
+pub(crate) const OPENAPI_JSON_PATH: &str = "/openapi.json";
 
 /// Lightweight broadcast notification stored in the SSE ring buffer.
 #[derive(Debug, Clone)]
@@ -377,7 +382,7 @@ pub(crate) struct AppState {
     pub(crate) quiet: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IncidentsQuery {
     pub(crate) office: Option<String>,
     pub(crate) phenomena: Option<String>,
@@ -391,13 +396,13 @@ pub(crate) struct IncidentsQuery {
     pub(crate) cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IncidentProductsQuery {
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IncidentEventsQuery {
     pub(crate) action: Option<String>,
     pub(crate) office: Option<String>,
@@ -407,7 +412,7 @@ pub(crate) struct IncidentEventsQuery {
     pub(crate) etn: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct EventsQuery {
     pub(crate) event: Option<String>,
     pub(crate) filename: Option<String>,
@@ -625,39 +630,26 @@ pub(crate) struct HealthResponse {
     pub(crate) upstream_endpoint: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct EndpointDoc {
-    pub(crate) method: &'static str,
-    pub(crate) path: &'static str,
-    pub(crate) description: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct RootResponse {
-    pub(crate) service: &'static str,
-    pub(crate) endpoints: Vec<EndpointDoc>,
-}
-
 pub(crate) fn incident_detail_url(incident: &IncidentSummary) -> String {
     format!(
-        "/incidents/{}/{}/{}/{}",
+        "{LIVE_API_PREFIX}/incidents/{}/{}/{}/{}",
         incident.office, incident.phenomena, incident.significance, incident.etn
     )
 }
 
 pub(crate) fn incident_products_url(incident: &IncidentSummary) -> String {
     format!(
-        "/incidents/{}/{}/{}/{}/products",
+        "{LIVE_API_PREFIX}/incidents/{}/{}/{}/{}/products",
         incident.office, incident.phenomena, incident.significance, incident.etn
     )
 }
 
 pub(crate) fn archive_product_url(product_id: i64) -> String {
-    format!("/archive/products/{product_id}")
+    format!("{ARCHIVE_API_PREFIX}/products/{product_id}")
 }
 
 pub(crate) fn archive_product_raw_url(product_id: i64) -> String {
-    format!("/archive/products/{product_id}/raw")
+    format!("{ARCHIVE_API_PREFIX}/products/{product_id}/raw")
 }
 
 #[derive(Debug, Clone)]
