@@ -28,6 +28,7 @@ use utoipa::IntoParams;
 pub(crate) const LIVE_API_PREFIX: &str = "/v1/live";
 pub(crate) const ARCHIVE_API_PREFIX: &str = "/v1/archive";
 pub(crate) const OPENAPI_JSON_PATH: &str = "/openapi.json";
+pub(crate) const OPENAPI_AUTH_SCHEME_NAME: &str = "bearer_auth";
 
 /// Lightweight broadcast notification stored in the SSE ring buffer.
 #[derive(Debug, Clone)]
@@ -379,6 +380,7 @@ pub(crate) struct AppState {
     pub(crate) received_sat_servers: AtomicUsize,
     pub(crate) started_at: Instant,
     pub(crate) upstream_endpoint: Mutex<Option<String>>,
+    pub(crate) openapi_auth_token: Option<String>,
     pub(crate) quiet: bool,
 }
 
@@ -670,6 +672,7 @@ pub struct ServerOptions {
     pub quiet: bool,
     pub persistence_queue_capacity: usize,
     pub postgres_database_url: Option<String>,
+    pub openapi_auth_token: Option<String>,
 }
 
 pub(crate) struct ClientGuard {

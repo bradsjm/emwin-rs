@@ -15,6 +15,8 @@ Contract rules:
 - all live endpoints are under `/v1/live`
 - all archive endpoints are under `/v1/archive`
 - no unversioned compatibility routes are provided
+- when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, `/v1/live/*` and `/v1/archive/*` require `Authorization: Bearer <token>`
+- `GET /`, `GET /openapi.json`, and Swagger UI asset routes remain public when auth is enabled
 
 ## Endpoints
 
@@ -121,6 +123,7 @@ Common options:
 - `--stats-interval-secs <N>`
 - `--file-retention-secs <N>`
 - `--max-retained-files <N>`
+- `--openapi-auth-token <TOKEN>`
 - `--cors-origin "*"|"https://..."`
 
 ## Source of Truth

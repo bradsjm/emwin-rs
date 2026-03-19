@@ -42,6 +42,7 @@ Live command: `server`
 - `--file-retention-secs <SECONDS>`
 - `--max-retained-files <N>`
 - `--quiet`
+- `--openapi-auth-token <TOKEN>` (optional; requires `Authorization: Bearer <token>` on `/v1/live/*` and `/v1/archive/*`)
 - `--output-dir <PATH|s3://bucket[/prefix]>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar under canonical archival paths)
 
 Persistence behavior when `--output-dir` is set:
@@ -99,6 +100,7 @@ Supported environment variables include:
 - `EMWIN_OUTPUT_DIR`
 - `EMWIN_PERSIST_QUEUE_CAPACITY`
 - `EMWIN_PERSIST_DATABASE_URL`
+- `EMWIN_OPENAPI_AUTH_TOKEN`
 
 Filters are intentionally not configurable through environment variables.
 
@@ -130,12 +132,23 @@ and `HVTEC` coordinates for radius checks.
 ## Incident and archive endpoints
 
 - `GET /` serves Swagger UI and `GET /openapi.json` serves the generated OpenAPI document
+- when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, all `/v1/live/*` and `/v1/archive/*` requests require `Authorization: Bearer <token>`
+- `/openapi.json` advertises bearer auth only when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set
+- `GET /`, `GET /openapi.json`, and Swagger UI asset routes remain public when auth is enabled
 - `/v1/live/incident-events` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
 - `/v1/live/incidents` lists live incident projection rows from persisted Postgres metadata
 - `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
 - `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
 - `/v1/archive/products/{product_id}` returns persisted product detail including `product_json`
 - `/v1/archive/products/{product_id}/raw` proxies archived payload bytes for one product
+
+Authenticated example:
+
+```bash
+curl -H 'Authorization: Bearer secret-token' http://127.0.0.1:8080/v1/live/health
+```
+
+Cross-origin browser clients can combine `--cors-origin` with `--openapi-auth-token`; CORS preflights now allow the `Authorization` request header.
 
 ## Text product parsing
 

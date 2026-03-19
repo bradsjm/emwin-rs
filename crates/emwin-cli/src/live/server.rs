@@ -11,6 +11,7 @@ use crate::live::config::{LiveConfigRequest, LiveReceiverConfig, build_live_rece
 use crate::live::persistence::{run_incident_cleanup_loop, start_runtime_with_postgres};
 use crate::live::server_support::RetainedFiles;
 use axum::http::HeaderValue;
+use axum::http::header::AUTHORIZATION;
 use chrono::Utc;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -58,11 +59,20 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         quiet,
         persistence_queue_capacity,
         postgres_database_url,
+        openapi_auth_token,
     } = options;
 
     if postgres_database_url.is_some() && output_dir.is_none() {
         return Err(crate::error::CliError::invalid_argument(
             "--persist-database-url requires --output-dir for blob storage",
+        ));
+    }
+    if openapi_auth_token
+        .as_deref()
+        .is_some_and(|token| token.trim().is_empty())
+    {
+        return Err(crate::error::CliError::invalid_argument(
+            "--openapi-auth-token must not be empty",
         ));
     }
 
@@ -113,6 +123,7 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         received_sat_servers: AtomicUsize::new(0),
         started_at: Instant::now(),
         upstream_endpoint: Mutex::new(None),
+        openapi_auth_token,
         quiet,
     });
 
@@ -359,7 +370,10 @@ fn log_error(msg: &str) {
 fn build_cors_layer(cors_origin: Option<String>) -> crate::error::CliResult<CorsLayer> {
     if let Some(origin) = cors_origin {
         if origin == "*" {
-            return Ok(CorsLayer::new().allow_origin(Any).allow_methods(Any));
+            return Ok(CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers([AUTHORIZATION]));
         }
 
         let header_value = HeaderValue::from_str(&origin).map_err(|err| {
@@ -369,10 +383,13 @@ fn build_cors_layer(cors_origin: Option<String>) -> crate::error::CliResult<Cors
         })?;
         return Ok(CorsLayer::new()
             .allow_origin(header_value)
-            .allow_methods(Any));
+            .allow_methods(Any)
+            .allow_headers([AUTHORIZATION]));
     }
 
-    Ok(CorsLayer::new().allow_methods(Any))
+    Ok(CorsLayer::new()
+        .allow_methods(Any)
+        .allow_headers([AUTHORIZATION]))
 }
 
 #[cfg(test)]
@@ -390,8 +407,13 @@ mod tests {
     use crate::live::server_support::wildcard_match;
     use axum::Json;
     use axum::body::{Body, to_bytes};
+    use axum::extract::connect_info::MockConnectInfo;
     use axum::extract::{ConnectInfo, Query, State};
-    use axum::http::{HeaderMap, Request, StatusCode};
+    use axum::http::header::{
+        ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_REQUEST_HEADERS,
+        ACCESS_CONTROL_REQUEST_METHOD, ORIGIN,
+    };
+    use axum::http::{HeaderMap, Method, Request, StatusCode};
     use emwin_db::{
         CompletedFileMetadata, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary,
         NoopMetadataSink, PersistenceConfig, PersistenceRuntime,
@@ -423,6 +445,31 @@ mod tests {
             received_sat_servers: AtomicUsize::new(0),
             started_at: Instant::now(),
             upstream_endpoint: std::sync::Mutex::new(None),
+            openapi_auth_token: None,
+            quiet: true,
+        })
+    }
+
+    fn test_state_with_auth(max_clients: usize, token: &str) -> Arc<AppState> {
+        let (_, shutdown_rx) = watch::channel(false);
+        Arc::new(AppState {
+            event_tx: broadcast::channel(32).0,
+            incident_event_tx: broadcast::channel(32).0,
+            shutdown_rx,
+            retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
+            telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
+            persistence: None,
+            archive: None,
+            connected_clients: AtomicUsize::new(0),
+            max_clients,
+            next_event_id: AtomicU64::new(1),
+            next_incident_event_id: AtomicU64::new(1),
+            data_blocks_total: AtomicU64::new(0),
+            received_servers: AtomicUsize::new(0),
+            received_sat_servers: AtomicUsize::new(0),
+            started_at: Instant::now(),
+            upstream_endpoint: std::sync::Mutex::new(None),
+            openapi_auth_token: Some(token.to_string()),
             quiet: true,
         })
     }
@@ -448,6 +495,7 @@ mod tests {
             received_sat_servers: AtomicUsize::new(0),
             started_at: Instant::now(),
             upstream_endpoint: std::sync::Mutex::new(None),
+            openapi_auth_token: None,
             quiet: true,
         })
     }
@@ -892,6 +940,205 @@ Body
     }
 
     #[tokio::test]
+    async fn auth_enabled_keeps_docs_routes_public() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, None).expect("router should build");
+
+        for path in ["/", "/openapi.json", "/swagger-ui.css"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .method("GET")
+                        .body(Body::empty())
+                        .expect("request should build"),
+                )
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::OK, "path={path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn auth_enabled_rejects_missing_or_invalid_bearer_tokens() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, None).expect("router should build");
+
+        for header in [
+            None,
+            Some("Basic secret-token"),
+            Some("Bearer"),
+            Some("Bearer wrong-token"),
+        ] {
+            let mut request = Request::builder().uri("/v1/live/health").method("GET");
+            if let Some(value) = header {
+                request = request.header("authorization", value);
+            }
+            let response = app
+                .clone()
+                .oneshot(request.body(Body::empty()).expect("request should build"))
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[tokio::test]
+    async fn auth_enabled_allows_protected_routes_with_valid_bearer_token() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, None)
+            .expect("router should build")
+            .layer(MockConnectInfo(
+                "127.0.0.1:4000"
+                    .parse::<std::net::SocketAddr>()
+                    .expect("valid socket addr"),
+            ));
+
+        for path in ["/v1/live/health", "/v1/live/events"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .method("GET")
+                        .header("authorization", "Bearer secret-token")
+                        .body(Body::empty())
+                        .expect("request should build"),
+                )
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::OK, "path={path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn auth_enabled_accepts_case_insensitive_bearer_scheme_and_ascii_whitespace() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, None)
+            .expect("router should build")
+            .layer(MockConnectInfo(
+                "127.0.0.1:4000"
+                    .parse::<std::net::SocketAddr>()
+                    .expect("valid socket addr"),
+            ));
+
+        for header in [
+            "bearer secret-token",
+            "Bearer\tsecret-token",
+            "BEARER   secret-token",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/v1/live/health")
+                        .method("GET")
+                        .header("authorization", header)
+                        .body(Body::empty())
+                        .expect("request should build"),
+                )
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::OK, "header={header}");
+        }
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_allows_authorization_header() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, Some("*".to_string())).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/live/health")
+                    .method(Method::OPTIONS)
+                    .header(ORIGIN, "https://example.com")
+                    .header(ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "authorization")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let allow_headers = response
+            .headers()
+            .get(ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|value| value.to_str().ok())
+            .expect("cors should advertise allowed headers");
+        assert!(allow_headers.to_ascii_lowercase().contains("authorization"));
+    }
+
+    #[tokio::test]
+    async fn openapi_json_omits_bearer_security_when_auth_disabled() {
+        let state = test_state(10);
+        let app = build_router(state, None).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/openapi.json")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let body_json: serde_json::Value =
+            serde_json::from_slice(&body).expect("body should be utf8 json");
+        assert!(body_json["components"]["securitySchemes"]["bearer_auth"].is_null());
+        assert!(body_json["paths"]["/v1/live/health"]["get"]["security"].is_null());
+    }
+
+    #[tokio::test]
+    async fn openapi_json_declares_bearer_security_when_auth_enabled() {
+        let state = test_state_with_auth(10, "secret-token");
+        let app = build_router(state, None).expect("router should build");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/openapi.json")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let body_json: serde_json::Value =
+            serde_json::from_slice(&body).expect("body should be utf8 json");
+        assert_eq!(
+            body_json["components"]["securitySchemes"]["bearer_auth"]["type"],
+            "http"
+        );
+        assert_eq!(
+            body_json["components"]["securitySchemes"]["bearer_auth"]["scheme"],
+            "bearer"
+        );
+        assert_eq!(
+            body_json["paths"]["/v1/live/health"]["get"]["security"][0]["bearer_auth"],
+            serde_json::json!([])
+        );
+    }
+
+    #[tokio::test]
     async fn incidents_endpoint_returns_service_unavailable_without_archive_database() {
         let state = test_state(10);
         let app = build_router(state, None).expect("router should build");
@@ -1020,6 +1267,7 @@ Body
             received_sat_servers: AtomicUsize::new(0),
             started_at: Instant::now(),
             upstream_endpoint: std::sync::Mutex::new(None),
+            openapi_auth_token: None,
             quiet: true,
         });
         let app = build_router(state, None).expect("router should build");

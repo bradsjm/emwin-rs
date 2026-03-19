@@ -13,11 +13,13 @@ use super::types::{
 use crate::live::server_support::{
     build_bytes_download_response, build_file_download_response, filename_request_or_400,
 };
-use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
-use axum::response::Response;
+use axum::http::header::AUTHORIZATION;
+use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use futures::Stream;
@@ -29,6 +31,7 @@ use std::time::Duration;
 
 /// Builds the Axum router for live server mode.
 pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLayer) -> Router {
+    let auth_enabled = state.openapi_auth_token.is_some();
     let live_router = Router::new()
         .route("/incidents", get(incidents_handler))
         .route(
@@ -44,20 +47,73 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
         .route("/files", get(files_handler))
         .route("/files/{*filename}", get(file_download_handler))
         .route("/health", get(health_handler))
-        .route("/metrics", get(metrics_handler));
+        .route("/metrics", get(metrics_handler))
+        .route_layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_bearer_auth,
+        ));
     let archive_router = Router::new()
         .route("/products/{product_id}", get(archive_product_handler))
         .route(
             "/products/{product_id}/raw",
             get(archive_product_raw_handler),
-        );
+        )
+        .route_layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_bearer_auth,
+        ));
 
     Router::new()
-        .merge(super::openapi::swagger_ui_mount())
+        .merge(super::openapi::swagger_ui_mount(auth_enabled))
         .nest(LIVE_API_PREFIX, live_router)
         .nest(ARCHIVE_API_PREFIX, archive_router)
         .layer(cors)
         .with_state(state)
+}
+
+async fn require_bearer_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(expected_token) = state.openapi_auth_token.as_deref() else {
+        return next.run(request).await;
+    };
+
+    let Some(header_value) = request
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return unauthorized_response();
+    };
+
+    let Some(provided_token) = parse_bearer_token(header_value) else {
+        return unauthorized_response();
+    };
+
+    if provided_token != expected_token {
+        return unauthorized_response();
+    }
+
+    next.run(request).await
+}
+
+fn unauthorized_response() -> Response {
+    (StatusCode::UNAUTHORIZED, "missing or invalid bearer token").into_response()
+}
+
+fn parse_bearer_token(header_value: &str) -> Option<&str> {
+    let mut parts = header_value.split_ascii_whitespace();
+    let scheme = parts.next()?;
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+    let token = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(token)
 }
 
 #[utoipa::path(
@@ -65,7 +121,9 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
     path = "/v1/live/incidents",
     tag = "live",
     params(IncidentsQuery),
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "List live incident projection rows.", body = super::openapi::IncidentsResponseSchema),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -107,6 +165,7 @@ pub(super) async fn incidents_handler(
     get,
     path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}",
     tag = "live",
+    security(("bearer_auth" = [])),
     params(
         ("office" = String, Path, description = "NWS office code"),
         ("phenomena" = String, Path, description = "VTEC phenomena code"),
@@ -114,6 +173,7 @@ pub(super) async fn incidents_handler(
         ("etn" = i64, Path, description = "Event tracking number")
     ),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Fetch one live incident projection row.", body = super::openapi::IncidentResponseSchema),
         (status = 404, description = "Incident was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
@@ -140,6 +200,7 @@ pub(super) async fn incident_handler(
     get,
     path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products",
     tag = "live",
+    security(("bearer_auth" = [])),
     params(
         ("office" = String, Path, description = "NWS office code"),
         ("phenomena" = String, Path, description = "VTEC phenomena code"),
@@ -148,6 +209,7 @@ pub(super) async fn incident_handler(
         IncidentProductsQuery
     ),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "List archived products linked to one incident.", body = super::openapi::IncidentProductsResponseSchema),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -186,8 +248,10 @@ pub(super) async fn incident_products_handler(
     get,
     path = "/v1/archive/products/{product_id}",
     tag = "archive",
+    security(("bearer_auth" = [])),
     params(("product_id" = i64, Path, description = "Archived product id")),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Fetch one archived product detail record.", body = super::openapi::ArchiveProductResponseSchema),
         (status = 404, description = "Archived product was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
@@ -216,8 +280,10 @@ pub(super) async fn archive_product_handler(
     get,
     path = "/v1/archive/products/{product_id}/raw",
     tag = "archive",
+    security(("bearer_auth" = [])),
     params(("product_id" = i64, Path, description = "Archived product id")),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Download archived raw payload bytes.", content_type = "application/octet-stream"),
         (status = 404, description = "Archived payload was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
@@ -248,7 +314,9 @@ pub(super) async fn archive_product_raw_handler(
     path = "/v1/live/events",
     tag = "live",
     params(EventsQuery),
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Server-sent events stream of live feed activity.", body = super::openapi::SseEventEnvelope, content_type = "text/event-stream"),
         (status = 400, description = "Event filter query validation failed.", body = String),
         (status = 429, description = "Concurrent SSE client limit reached.", body = String)
@@ -350,7 +418,9 @@ pub(super) async fn events_handler(
     path = "/v1/live/incident-events",
     tag = "live",
     params(IncidentEventsQuery),
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Server-sent events stream of persisted incident projection changes.", body = super::openapi::SseEventEnvelope, content_type = "text/event-stream"),
         (status = 429, description = "Concurrent SSE client limit reached.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
@@ -441,7 +511,9 @@ pub(super) async fn incident_events_handler(
     get,
     path = "/v1/live/files",
     tag = "live",
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "List retained completed files.", body = super::openapi::FilesResponseSchema)
     )
 )]
@@ -461,8 +533,10 @@ pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<Fi
     get,
     path = "/v1/live/files/{filename}",
     tag = "live",
+    security(("bearer_auth" = [])),
     params(("filename" = String, Path, description = "URL-encoded retained file path")),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Download retained file contents.", content_type = "application/octet-stream"),
         (status = 400, description = "Requested filename is invalid.", body = String),
         (status = 404, description = "Retained file was not found.", body = String)
@@ -488,7 +562,9 @@ pub(super) async fn file_download_handler(
     get,
     path = "/v1/live/health",
     tag = "admin",
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Live server health summary.", body = super::openapi::HealthResponseSchema)
     )
 )]
@@ -518,7 +594,9 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
     get,
     path = "/v1/live/metrics",
     tag = "admin",
+    security(("bearer_auth" = [])),
     responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
         (status = 200, description = "Live server telemetry snapshot.", body = serde_json::Value)
     )
 )]

@@ -405,6 +405,7 @@ mod tests {
             received_sat_servers: AtomicUsize::new(0),
             started_at: Instant::now(),
             upstream_endpoint: Mutex::new(None),
+            openapi_auth_token: None,
             quiet: true,
         })
     }

@@ -4,12 +4,14 @@
 //! types presented to OpenAPI consumers.
 #![allow(dead_code)]
 
-use super::types::OPENAPI_JSON_PATH;
-use utoipa::OpenApi;
+use super::types::{OPENAPI_AUTH_SCHEME_NAME, OPENAPI_JSON_PATH};
 use utoipa::ToSchema;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
 
 #[derive(OpenApi)]
 #[openapi(
+    modifiers(&SecurityAddon),
     paths(
         super::server_http::incidents_handler,
         super::server_http::incident_handler,
@@ -50,7 +52,107 @@ use utoipa::ToSchema;
         description = "Versioned HTTP and SSE API for emwin-cli server mode."
     )
 )]
-pub(crate) struct ApiDoc;
+pub(crate) struct SecureApiDoc;
+
+#[derive(OpenApi)]
+#[openapi(
+    modifiers(&PublicSecurityRemover),
+    paths(
+        super::server_http::incidents_handler,
+        super::server_http::incident_handler,
+        super::server_http::incident_products_handler,
+        super::server_http::archive_product_handler,
+        super::server_http::archive_product_raw_handler,
+        super::server_http::incident_events_handler,
+        super::server_http::events_handler,
+        super::server_http::files_handler,
+        super::server_http::file_download_handler,
+        super::server_http::health_handler,
+        super::server_http::metrics_handler,
+    ),
+    components(
+        schemas(
+            FilesResponseSchema,
+            CompletedFileSchema,
+            IncidentsResponseSchema,
+            IncidentSummarySchema,
+            IncidentResponseSchema,
+            IncidentDetailSchema,
+            IncidentProductsResponseSchema,
+            ArchiveProductSummarySchema,
+            ArchiveProductResponseSchema,
+            ArchiveProductDetailSchema,
+            HealthResponseSchema,
+            SseEventEnvelope,
+        )
+    ),
+    tags(
+        (name = "live", description = "In-memory live server endpoints and SSE streams"),
+        (name = "archive", description = "Postgres-backed archived product endpoints"),
+        (name = "admin", description = "Operational health and metrics endpoints")
+    ),
+    info(
+        title = "emwin-cli server API",
+        version = "v1",
+        description = "Versioned HTTP and SSE API for emwin-cli server mode."
+    )
+)]
+pub(crate) struct PublicApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi
+            .components
+            .get_or_insert_with(utoipa::openapi::Components::new);
+        components.add_security_scheme(
+            OPENAPI_AUTH_SCHEME_NAME,
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("API key")
+                    .description(Some(
+                        "Bearer token required for versioned HTTP and SSE API routes.",
+                    ))
+                    .build(),
+            ),
+        );
+    }
+}
+
+struct PublicSecurityRemover;
+
+impl Modify for PublicSecurityRemover {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        for path_item in openapi.paths.paths.values_mut() {
+            if let Some(operation) = path_item.get.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.post.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.put.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.delete.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.options.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.head.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.patch.as_mut() {
+                operation.security = None;
+            }
+            if let Some(operation) = path_item.trace.as_mut() {
+                operation.security = None;
+            }
+        }
+    }
+}
 
 #[derive(Debug, ToSchema)]
 pub(crate) struct SseEventEnvelope {
@@ -314,10 +416,14 @@ pub(crate) struct HealthResponseSchema {
     pub(crate) upstream_endpoint: Option<String>,
 }
 
-pub(crate) fn openapi_json() -> utoipa::openapi::OpenApi {
-    ApiDoc::openapi()
+pub(crate) fn openapi_json(auth_enabled: bool) -> utoipa::openapi::OpenApi {
+    if auth_enabled {
+        SecureApiDoc::openapi()
+    } else {
+        PublicApiDoc::openapi()
+    }
 }
 
-pub(crate) fn swagger_ui_mount() -> utoipa_swagger_ui::SwaggerUi {
-    utoipa_swagger_ui::SwaggerUi::new("/").url(OPENAPI_JSON_PATH, openapi_json())
+pub(crate) fn swagger_ui_mount(auth_enabled: bool) -> utoipa_swagger_ui::SwaggerUi {
+    utoipa_swagger_ui::SwaggerUi::new("/").url(OPENAPI_JSON_PATH, openapi_json(auth_enabled))
 }

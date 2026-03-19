@@ -81,6 +81,9 @@ enum Commands {
         /// Optional Postgres metadata sink URL used alongside --output-dir blob storage.
         #[arg(long, env = "EMWIN_PERSIST_DATABASE_URL")]
         persist_database_url: Option<String>,
+        /// Optional Bearer token required for versioned HTTP and SSE API routes.
+        #[arg(long, env = "EMWIN_OPENAPI_AUTH_TOKEN")]
+        openapi_auth_token: Option<String>,
     },
     /// Run low-latency EMWIN passthrough relay.
     Relay {
@@ -133,6 +136,7 @@ async fn main() -> crate::error::CliResult<()> {
             quiet,
             persist_queue_capacity,
             persist_database_url,
+            openapi_auth_token,
         } => {
             let options = live::server::ServerOptions {
                 username,
@@ -151,6 +155,7 @@ async fn main() -> crate::error::CliResult<()> {
                 quiet,
                 persistence_queue_capacity: persist_queue_capacity,
                 postgres_database_url: persist_database_url,
+                openapi_auth_token,
             };
             live::server::run(options).await
         }
@@ -211,6 +216,7 @@ mod tests {
         assert!(help.contains("--post-process-archives"));
         assert!(help.contains("--output-dir"));
         assert!(help.contains("--persist-database-url"));
+        assert!(help.contains("--openapi-auth-token"));
     }
 
     #[test]
@@ -226,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn server_accepts_output_dir_queue_capacity_and_database_url() {
+    fn server_accepts_output_dir_queue_capacity_database_url_and_openapi_auth_token() {
         let cli = Cli::try_parse_from([
             "emwin",
             "server",
@@ -238,6 +244,8 @@ mod tests {
             "55",
             "--persist-database-url",
             "postgres://localhost/emwin",
+            "--openapi-auth-token",
+            "secret-token",
         ])
         .expect("server args should parse");
 
@@ -245,6 +253,7 @@ mod tests {
             output_dir,
             persist_queue_capacity,
             persist_database_url,
+            openapi_auth_token,
             ..
         } = cli.command
         else {
@@ -257,6 +266,7 @@ mod tests {
             persist_database_url.as_deref(),
             Some("postgres://localhost/emwin")
         );
+        assert_eq!(openapi_auth_token.as_deref(), Some("secret-token"));
     }
 
     #[test]

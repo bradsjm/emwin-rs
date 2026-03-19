@@ -124,7 +124,8 @@ Useful server flags:
 - `--max-clients 100` (cap concurrent SSE clients)
 - `--file-retention-secs 300` (in-memory completed-file TTL)
 - `--max-retained-files 1000` (in-memory completed-file capacity)
-- `--cors-origin "*"` or `--cors-origin "https://your-ui.example"`
+- `--openapi-auth-token "secret-token"` (require `Authorization: Bearer <token>` on `/v1/live/*` and `/v1/archive/*`)
+- `--cors-origin "*"` or `--cors-origin "https://your-ui.example"` (cross-origin browser clients can send `Authorization` when bearer auth is enabled)
 
 Server endpoints:
 
@@ -141,6 +142,12 @@ Server endpoints:
 - `GET /v1/live/files/{*filename}` - retained file download (URL-encoded path segment)
 - `GET /v1/live/health` - server health summary
 - `GET /v1/live/metrics` - JSON telemetry snapshot
+
+Authentication notes:
+
+- When `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, all `/v1/live/*` and `/v1/archive/*` requests must include `Authorization: Bearer <token>`.
+- `/openapi.json` advertises bearer auth only when `--openapi-auth-token` is configured.
+- `GET /`, `GET /openapi.json`, and Swagger UI asset routes remain public so the browser docs continue to load.
 
 Archive/incident notes:
 
@@ -193,7 +200,7 @@ Environment and `.env` support:
 
 - `.env` from the current working directory is loaded before CLI parsing.
 - CLI args override process env; process env overrides `.env`.
-- Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
+- Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_OPENAPI_AUTH_TOKEN`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
 - When `EMWIN_OUTPUT_DIR` uses `s3://bucket[/prefix]`, `emwin-db` resolves object-store settings from AWS-compatible environment variables: `AWS_ENDPOINT_URL` switches to a custom endpoint with path-style access, `AWS_REGION` or `AWS_DEFAULT_REGION` selects the region, and credentials come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` plus the compatible metadata providers exposed by `rust-s3`.
 - Filters are CLI-only and are not loaded from environment variables.
 
