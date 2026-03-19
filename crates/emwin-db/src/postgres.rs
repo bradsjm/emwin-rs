@@ -19,9 +19,11 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tracing::info;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+const INCIDENT_CHANGE_CHANNEL_CAPACITY: usize = 1024;
 
 /// Connection settings for the Postgres/PostGIS metadata sink.
 #[derive(Debug, Clone)]
@@ -55,6 +57,7 @@ pub struct PostgresMetadataSink {
     pool: Arc<Mutex<Option<PgPool>>>,
     reconnect_pending: Arc<AtomicBool>,
     blob_reader: Arc<StorageBlobReader>,
+    incident_change_tx: broadcast::Sender<IncidentChange>,
 }
 
 /// Result of expiring active incident rows whose end time has passed.
@@ -62,6 +65,27 @@ pub struct PostgresMetadataSink {
 pub struct IncidentCleanupResult {
     /// Number of incident rows updated to `expired`.
     pub expired_count: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IncidentChangeAction {
+    Created,
+    Updated,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IncidentChangeTrigger {
+    Persist,
+    Cleanup,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IncidentChange {
+    pub action: IncidentChangeAction,
+    pub trigger: IncidentChangeTrigger,
+    pub incident: IncidentSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -223,11 +247,13 @@ pub struct ArchivedPayload {
 impl PostgresMetadataSink {
     /// Creates a sink that establishes the pool lazily on first use.
     pub fn new(config: PostgresConfig) -> Self {
+        let (incident_change_tx, _) = broadcast::channel(INCIDENT_CHANGE_CHANNEL_CAPACITY);
         Self {
             config,
             pool: Arc::new(Mutex::new(None)),
             reconnect_pending: Arc::new(AtomicBool::new(false)),
             blob_reader: Arc::new(StorageBlobReader::new()),
+            incident_change_tx,
         }
     }
 
@@ -253,6 +279,10 @@ impl PostgresMetadataSink {
     pub fn describe_target(&self) -> String {
         connection_target(&self.config)
             .unwrap_or_else(|_| "postgres target unavailable".to_string())
+    }
+
+    pub fn subscribe_incident_changes(&self) -> broadcast::Receiver<IncidentChange> {
+        self.incident_change_tx.subscribe()
     }
 
     async fn ensure_pool(&self) -> PersistResult<PgPool> {
@@ -295,22 +325,45 @@ impl PostgresMetadataSink {
         now: chrono::DateTime<chrono::Utc>,
     ) -> PersistResult<IncidentCleanupResult> {
         let pool = self.ensure_pool().await?;
-        let result = sqlx::query(
+        let result = sqlx::query_as::<_, IncidentSummary>(
             "UPDATE incidents
              SET current_status = 'expired',
                  last_updated_at = now()
              WHERE current_status = 'active'
                AND end_utc IS NOT NULL
-               AND end_utc < $1",
+               AND end_utc < $1
+             RETURNING
+                office,
+                phenomena,
+                significance,
+                etn,
+                current_status,
+                latest_vtec_action,
+                issued_at,
+                start_utc,
+                end_utc,
+                last_updated_at,
+                first_product_id,
+                latest_product_id,
+                latest_product_timestamp_utc",
         )
         .bind(now)
-        .execute(&pool)
+        .fetch_all(&pool)
         .await;
 
         match result {
-            Ok(done) => Ok(IncidentCleanupResult {
-                expired_count: done.rows_affected(),
-            }),
+            Ok(incidents) => {
+                self.publish_incident_changes(incidents.iter().cloned().map(|incident| {
+                    IncidentChange {
+                        action: IncidentChangeAction::Updated,
+                        trigger: IncidentChangeTrigger::Cleanup,
+                        incident,
+                    }
+                }));
+                Ok(IncidentCleanupResult {
+                    expired_count: incidents.len() as u64,
+                })
+            }
             Err(err) => {
                 let err = PersistError::from(err);
                 self.handle_runtime_error(&err).await;
@@ -462,6 +515,12 @@ impl PostgresMetadataSink {
             }
         }
     }
+
+    fn publish_incident_changes(&self, changes: impl IntoIterator<Item = IncidentChange>) {
+        for change in changes {
+            let _ = self.incident_change_tx.send(change);
+        }
+    }
 }
 
 impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
@@ -472,17 +531,20 @@ impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
         Box::pin(async move {
             let prepared = PreparedProduct::prepare(&request.metadata, &request.blobs)?;
             let pool = self.ensure_pool().await?;
-            let result: PersistResult<()> = async {
+            let result: PersistResult<Vec<IncidentChange>> = async {
                 let mut tx = pool.begin().await?;
                 let product_id = upsert_product(&mut tx, &prepared).await?;
-                replace_children(&mut tx, product_id, &prepared).await?;
+                let incident_changes = replace_children(&mut tx, product_id, &prepared).await?;
                 tx.commit().await?;
-                Ok(())
+                load_incident_changes(&pool, incident_changes, IncidentChangeTrigger::Persist).await
             }
             .await;
 
             match result {
-                Ok(()) => Ok(()),
+                Ok(incident_changes) => {
+                    self.publish_incident_changes(incident_changes);
+                    Ok(())
+                }
                 Err(err) => {
                     self.handle_runtime_error(&err).await;
                     Err(err)
@@ -498,6 +560,46 @@ impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
     fn target_description(&self) -> Option<String> {
         Some(self.describe_target())
     }
+}
+
+async fn load_incident_changes(
+    pool: &PgPool,
+    changes: Vec<PendingIncidentChange>,
+    trigger: IncidentChangeTrigger,
+) -> PersistResult<Vec<IncidentChange>> {
+    let mut loaded = Vec::with_capacity(changes.len());
+    for change in changes {
+        let Some(incident) = fetch_incident_summary(pool, &change.key).await? else {
+            continue;
+        };
+        loaded.push(IncidentChange {
+            action: change.action,
+            trigger,
+            incident,
+        });
+    }
+    Ok(loaded)
+}
+
+async fn fetch_incident_summary(
+    pool: &PgPool,
+    key: &IncidentKey,
+) -> PersistResult<Option<IncidentSummary>> {
+    let mut builder = QueryBuilder::<Postgres>::new(incident_select_sql());
+    builder
+        .push(" WHERE office = ")
+        .push_bind(&key.office)
+        .push(" AND phenomena = ")
+        .push_bind(&key.phenomena)
+        .push(" AND significance = ")
+        .push_bind(&key.significance)
+        .push(" AND etn = ")
+        .push_bind(key.etn);
+    builder
+        .build_query_as::<IncidentSummary>()
+        .fetch_optional(pool)
+        .await
+        .map_err(PersistError::from)
 }
 
 async fn list_incidents_query(
@@ -1013,6 +1115,12 @@ struct PreparedIncidentUpdate {
     start_utc: Option<chrono::DateTime<chrono::Utc>>,
     end_utc: Option<chrono::DateTime<chrono::Utc>>,
     latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug)]
+struct PendingIncidentChange {
+    key: IncidentKey,
+    action: IncidentChangeAction,
 }
 
 #[derive(Debug)]
@@ -1753,7 +1861,7 @@ async fn replace_children(
     tx: &mut Transaction<'_, Postgres>,
     product_id: i64,
     prepared: &PreparedProduct,
-) -> PersistResult<()> {
+) -> PersistResult<Vec<PendingIncidentChange>> {
     for table in [
         "product_issues",
         "product_vtec",
@@ -1773,23 +1881,38 @@ async fn replace_children(
 
     insert_product_issues(tx, product_id, &prepared.issues).await?;
     insert_product_vtec(tx, product_id, &prepared.vtec).await?;
-    upsert_incidents(tx, product_id, &prepared.incident_updates).await?;
+    let incident_changes = upsert_incidents(tx, product_id, &prepared.incident_updates).await?;
     insert_product_ugc_areas(tx, product_id, &prepared.ugc_areas).await?;
     insert_product_hvtec(tx, product_id, &prepared.hvtec).await?;
     insert_product_time_mot_loc(tx, product_id, &prepared.time_mot_loc).await?;
     insert_product_polygons(tx, product_id, &prepared.polygons).await?;
     insert_product_wind_hail(tx, product_id, &prepared.wind_hail).await?;
     insert_product_search_points(tx, product_id, &prepared.search_points).await?;
-    Ok(())
+    Ok(incident_changes)
 }
 
 async fn upsert_incidents(
     tx: &mut Transaction<'_, Postgres>,
     product_id: i64,
     rows: &[PreparedIncidentUpdate],
-) -> PersistResult<()> {
+) -> PersistResult<Vec<PendingIncidentChange>> {
+    let mut changes = Vec::with_capacity(rows.len());
     for row in rows {
-        sqlx::query(
+        let existed = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(
+                SELECT 1
+                FROM incidents
+                WHERE office = $1 AND phenomena = $2 AND significance = $3 AND etn = $4
+            )",
+        )
+        .bind(&row.key.office)
+        .bind(&row.key.phenomena)
+        .bind(&row.key.significance)
+        .bind(row.key.etn)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        let done = sqlx::query(
             "WITH existing AS (
                 SELECT current_status
                 FROM incidents
@@ -1851,9 +1974,20 @@ async fn upsert_incidents(
         .bind(row.latest_product_timestamp_utc)
         .execute(&mut **tx)
         .await?;
+
+        if done.rows_affected() > 0 {
+            changes.push(PendingIncidentChange {
+                key: row.key.clone(),
+                action: if existed {
+                    IncidentChangeAction::Updated
+                } else {
+                    IncidentChangeAction::Created
+                },
+            });
+        }
     }
 
-    Ok(())
+    Ok(changes)
 }
 
 async fn insert_product_issues(

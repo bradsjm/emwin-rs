@@ -1,7 +1,7 @@
 # emwin-cli Server Mode API
 
-Version: 1.0
-Last Updated: 2026-03-03
+Version: 1.1
+Last Updated: 2026-03-18
 Status: Authoritative for `emwin-cli server`
 
 ## 1. Purpose
@@ -12,6 +12,7 @@ It covers:
 
 - Available endpoints
 - Event stream contract (`/events`)
+- Incident event stream contract (`/incident-events`)
 - Event names and payload shapes
 - Field-level definitions
 
@@ -43,7 +44,8 @@ Response shape:
   "service": "emwin-cli server",
   "endpoints": [
     {"method":"GET","path":"/","description":"..."},
-    {"method":"GET","path":"/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5","description":"..."}
+    {"method":"GET","path":"/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5","description":"..."},
+    {"method":"GET","path":"/incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active","description":"..."}
   ]
 }
 ```
@@ -86,6 +88,38 @@ Example wire form:
 id: 42
 event: file_complete
 data: {"filename":"WARN.txt","size":2140,"timestamp_utc":1767488000,"product":{"schema_version":2,"source":"text_header","family":"nws_text_product","title":"Area Forecast Discussion","container":"raw","pil":"AFD","wmo_prefix":"FX","office":{"code":"FFC","city":"Peachtree City","state":"GA"},"header":{"kind":"afos","ttaaii":"FXUS62","cccc":"KFFC","ddhhmm":"022101","afos":"AFDFFC"},"facets":{"has_body":false,"has_artifact":false,"has_issues":false,"vtec_count":0,"ugc_count":0,"hvtec_count":0,"latlon_count":0,"time_mot_loc_count":0,"wind_hail_count":0},"keys":{},"issues":{"count":0,"codes":[]}},"download_url":"/files/WARN.txt"}
+```
+
+## `GET /incident-events`
+
+Server-Sent Events stream for Postgres-backed incident projection changes.
+
+Availability:
+
+- requires `--persist-database-url`
+- returns `503` when archive metadata persistence is not configured
+
+Supported query params:
+
+- `action` (optional string): comma-delimited incident mutation types: `created`, `updated`
+- `office` (optional string): comma-delimited office filters such as `KOAX`
+- `phenomena` (optional string): comma-delimited VTEC phenomena filters such as `FF`
+- `significance` (optional string): comma-delimited significance filters such as `W`
+- `status` (optional string): comma-delimited incident status filters such as `active`, `cancelled`, `expired`, `upgraded`
+- `etn` (optional string): comma-delimited ETN filters such as `2001,2002`
+
+SSE framing:
+
+- `id`: monotonically increasing incident-event id
+- `event`: always `incident_change`
+- `data`: JSON payload
+
+Example wire form:
+
+```text
+id: 7
+event: incident_change
+data: {"action":"created","trigger":"persist","incident":{"office":"KOAX","phenomena":"FF","significance":"W","etn":2001,"current_status":"active","latest_vtec_action":"NEW","issued_at":"2025-03-05T12:00:00Z","start_utc":"2025-03-05T12:00:00Z","end_utc":"2025-03-05T18:00:00Z","last_updated_at":"2025-03-05T12:00:01Z","first_product_id":10,"latest_product_id":10,"latest_product_timestamp_utc":"2025-03-05T12:00:00Z","detail_url":"/incidents/KOAX/FF/W/2001","products_url":"/incidents/KOAX/FF/W/2001/products","latest_product_url":"/archive/products/10"}}
 ```
 
 ## `GET /files`
@@ -382,6 +416,39 @@ Fields:
 - `timestamp_utc` (number): UNIX timestamp seconds parsed from protocol `/FD`
   - `product` (object): summary v2 metadata for the completed product
 - `download_url` (string): URL-encoded retrieval path for `GET /files/*filename`
+
+## `event: incident_change`
+
+```json
+{
+  "action": "created",
+  "trigger": "persist",
+  "incident": {
+    "office": "KOAX",
+    "phenomena": "FF",
+    "significance": "W",
+    "etn": 2001,
+    "current_status": "active",
+    "latest_vtec_action": "NEW",
+    "issued_at": "2025-03-05T12:00:00Z",
+    "start_utc": "2025-03-05T12:00:00Z",
+    "end_utc": "2025-03-05T18:00:00Z",
+    "last_updated_at": "2025-03-05T12:00:01Z",
+    "first_product_id": 10,
+    "latest_product_id": 10,
+    "latest_product_timestamp_utc": "2025-03-05T12:00:00Z",
+    "detail_url": "/incidents/KOAX/FF/W/2001",
+    "products_url": "/incidents/KOAX/FF/W/2001/products",
+    "latest_product_url": "/archive/products/10"
+  }
+}
+```
+
+Fields:
+
+- `action` (string): `created` for first insert of one incident key, `updated` for later persisted or cleanup-driven changes
+- `trigger` (string): `persist` for ingest-driven writes, `cleanup` for background expiry updates
+- `incident` (object): incident summary payload using the same fields returned by `GET /incidents`, plus archive/detail links
 
 ## `event: telemetry`
 

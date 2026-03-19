@@ -6,7 +6,8 @@
 use super::types::{
     AppState, ArchiveProductDetailPayload, ArchiveProductResponse, BroadcastEvent, ClientGuard,
     EndpointDoc, EventFilter, EventKind, EventsQuery, FilesResponse, HealthResponse,
-    IncidentDetailPayload, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
+    IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter, IncidentEventPayload,
+    IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
     IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, RootResponse,
 };
 use crate::live::server_support::{
@@ -47,6 +48,7 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
             "/archive/products/{product_id}/raw",
             get(archive_product_raw_handler),
         )
+        .route("/incident-events", get(incident_events_handler))
         .route("/events", get(events_handler))
         .route("/files", get(files_handler))
         .route("/files/{*filename}", get(file_download_handler))
@@ -94,6 +96,11 @@ pub(super) async fn root_handler() -> Json<RootResponse> {
                 method: "GET",
                 path: "/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5",
                 description: "SSE stream with optional structured live filters over event, file, product, header, geography, VTEC, and location metadata",
+            },
+            EndpointDoc {
+                method: "GET",
+                path: "/incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active",
+                description: "SSE stream of persisted incident projection changes with incident-native filters",
             },
             EndpointDoc {
                 method: "GET",
@@ -244,24 +251,7 @@ pub(super) async fn events_handler(
     headers: HeaderMap,
     Query(query): Query<EventsQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
-    if state
-        .connected_clients
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-            (current < state.max_clients).then_some(current + 1)
-        })
-        .is_err()
-    {
-        super::log_info(
-            state.quiet,
-            &format!("rejecting client; limit reached peer={peer}"),
-        );
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            "client limit reached".to_string(),
-        ));
-    }
-
-    super::log_info(state.quiet, &format!("sse client connected peer={peer}"));
+    reserve_client_slot(&state, peer)?;
 
     let rx = state.event_tx.subscribe();
     let shutdown_rx = state.shutdown_rx.clone();
@@ -326,6 +316,87 @@ pub(super) async fn events_handler(
                         super::log_info(
                             st.state.quiet,
                             &format!("sse client lagged peer={} dropped={}", st.peer, dropped),
+                        );
+                        let warning = Event::default().event("warning").data(
+                            serde_json::json!({
+                                "message": "client lagged; events dropped",
+                                "dropped": dropped,
+                                "peer": st.peer,
+                            })
+                            .to_string(),
+                        );
+                        return Some((Ok(warning), st));
+                    }
+                    }
+                }
+            }
+        },
+    );
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
+}
+
+pub(super) async fn incident_events_handler(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(query): Query<IncidentEventsQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
+    let _ = archive_service(&state)?;
+    reserve_client_slot(&state, peer)?;
+
+    let rx = state.incident_event_tx.subscribe();
+    let shutdown_rx = state.shutdown_rx.clone();
+    let last_id = headers
+        .get("last-event-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    let filter = IncidentEventFilter::from_query(query);
+
+    let stream = futures::stream::unfold(
+        IncidentStreamState {
+            state: Arc::clone(&state),
+            rx: Some(rx),
+            last_id,
+            filter,
+            shutdown_rx,
+            peer,
+            _guard: Some(ClientGuard {
+                state: Arc::clone(&state),
+                peer,
+            }),
+        },
+        move |mut st| async move {
+            let rx = st.rx.as_mut()?;
+            loop {
+                tokio::select! {
+                    _ = st.shutdown_rx.changed() => return None,
+                    received = rx.recv() => match received {
+                    Ok(event) => {
+                        if event.id <= st.last_id {
+                            continue;
+                        }
+                        if !st.filter.matches(&event.payload) {
+                            continue;
+                        }
+
+                        st.last_id = event.id;
+                        let payload = match serde_json::to_string(&event.payload) {
+                            Ok(payload) => payload,
+                            Err(_) => "{}".to_string(),
+                        };
+                        let sse = Event::default()
+                            .id(event.id.to_string())
+                            .event(IncidentEventPayload::EVENT_NAME)
+                            .data(payload);
+                        return Some((Ok(sse), st));
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(dropped)) => {
+                        super::log_info(
+                            st.state.quiet,
+                            &format!("incident sse client lagged peer={} dropped={}", st.peer, dropped),
                         );
                         let warning = Event::default().event("warning").data(
                             serde_json::json!({
@@ -426,6 +497,41 @@ pub(super) struct StreamState {
     pub(super) shutdown_rx: tokio::sync::watch::Receiver<bool>,
     pub(super) peer: SocketAddr,
     pub(super) _guard: Option<ClientGuard>,
+}
+
+pub(super) struct IncidentStreamState {
+    pub(super) state: Arc<AppState>,
+    pub(super) rx: Option<tokio::sync::broadcast::Receiver<IncidentBroadcastEvent>>,
+    pub(super) last_id: u64,
+    pub(super) filter: IncidentEventFilter,
+    pub(super) shutdown_rx: tokio::sync::watch::Receiver<bool>,
+    pub(super) peer: SocketAddr,
+    pub(super) _guard: Option<ClientGuard>,
+}
+
+fn reserve_client_slot(
+    state: &Arc<AppState>,
+    peer: SocketAddr,
+) -> Result<(), (StatusCode, String)> {
+    if state
+        .connected_clients
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+            (current < state.max_clients).then_some(current + 1)
+        })
+        .is_err()
+    {
+        super::log_info(
+            state.quiet,
+            &format!("rejecting client; limit reached peer={peer}"),
+        );
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "client limit reached".to_string(),
+        ));
+    }
+
+    super::log_info(state.quiet, &format!("sse client connected peer={peer}"));
+    Ok(())
 }
 
 fn archive_service(

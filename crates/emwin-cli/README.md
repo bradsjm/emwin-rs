@@ -63,6 +63,7 @@ Persistence behavior when `--output-dir` is set:
 - `/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
 - when `--persist-database-url` is configured, the server also exposes `/incidents` plus `/archive/products/*` for incident-first archive reads
 - `/incidents` and `/archive/products/*` return `503` when Postgres-backed archive metadata is not configured
+- when `--persist-database-url` is configured, the server also exposes `/incident-events` for SSE notifications when incident projection rows are created or updated
 
 If `--server` is omitted, built-in default endpoints are used.
 `--server` and `--server-list-path` are only supported for `--receiver qbt`.
@@ -128,6 +129,7 @@ and `HVTEC` coordinates for radius checks.
 
 ## Incident and archive endpoints
 
+- `/incident-events` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
 - `/incidents` lists live incident projection rows from persisted Postgres metadata
 - `/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
 - `/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident

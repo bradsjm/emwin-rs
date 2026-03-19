@@ -134,6 +134,7 @@ Server endpoints:
 - `GET /archive/products/{product_id}` - persisted archived product detail
 - `GET /archive/products/{product_id}/raw` - persisted archived payload bytes proxied through the CLI
 - `GET /events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5` - SSE event stream with optional live filters over event, file, product, header, and parsed location metadata
+- `GET /incident-events?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active` - SSE stream of persisted incident projection changes with incident-native filters
 - `GET /files` - retained completed-file payloads using the same shape as `file_complete` events, including parsed `product` metadata and `download_url`
 - `GET /files/{*filename}` - retained file download (URL-encoded path segment)
 - `GET /health` - server health summary
@@ -143,6 +144,13 @@ Archive/incident notes:
 
 - `/incidents` and `/archive/products/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
 - `/incidents` exposes the mutable incident projection from the `incidents` table; `/archive/products/*` exposes persisted product records and raw payload retrieval.
+- `/incident-events` also requires `--persist-database-url`; it emits `incident_change` SSE frames only after incident projection writes or cleanup updates succeed in Postgres.
+
+`/incident-events` filter parameters:
+
+- `action` - comma-delimited incident mutation types: `created`, `updated`
+- `office`, `phenomena`, `significance`, `status` - incident identity and lifecycle filters using canonical values such as `KOAX`, `FF`, `W`, and `active`
+- `etn` - comma-delimited event tracking number filter such as `2001,2002`
 
 `/events` filter parameters:
 

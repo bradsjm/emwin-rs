@@ -28,7 +28,10 @@ mod server_ingest;
 mod types;
 
 pub use types::ServerOptions;
-use types::{AppState, BroadcastEvent, EventKind, TelemetryPayload};
+use types::{
+    AppState, BroadcastEvent, EventKind, IncidentBroadcastEvent, IncidentEventPayload,
+    TelemetryPayload,
+};
 
 #[cfg(test)]
 use server_http::{event_matches_filter, files_handler};
@@ -78,10 +81,55 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         ),
         None => None,
     };
-    if let Some(postgres_sink) = started_persistence
+    let cleanup_sink = started_persistence
         .as_ref()
-        .and_then(|started| started.postgres_sink.as_ref())
-    {
+        .and_then(|started| started.postgres_sink.clone());
+    let archive_sink = started_persistence
+        .as_ref()
+        .and_then(|started| started.postgres_sink.clone());
+    let persistence_runtime = started_persistence.map(|started| started.runtime);
+    let persistence_producer = persistence_runtime
+        .as_ref()
+        .map(|runtime| runtime.producer());
+
+    let state = Arc::new(AppState {
+        event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
+        incident_event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
+        shutdown_rx: shutdown_rx.clone(),
+        retained_files: Mutex::new(RetainedFiles::new(
+            max_retained_files.max(1),
+            Duration::from_secs(file_retention_secs.max(1)),
+        )),
+        telemetry: Mutex::new(TelemetryPayload::Unavailable),
+        persistence: persistence_producer.clone(),
+        archive: archive_sink.clone(),
+        connected_clients: AtomicUsize::new(0),
+        max_clients: max_clients.max(1),
+        next_event_id: AtomicU64::new(1),
+        next_incident_event_id: AtomicU64::new(1),
+        data_blocks_total: AtomicU64::new(0),
+        received_servers: AtomicUsize::new(0),
+        received_sat_servers: AtomicUsize::new(0),
+        started_at: Instant::now(),
+        upstream_endpoint: Mutex::new(None),
+        quiet,
+    });
+
+    let cors = build_cors_layer(cors_origin)?;
+    let app = server_http::build_router(Arc::clone(&state), cors);
+
+    let listener = TcpListener::bind(bind_addr).await?;
+    log_info(quiet, &format!("server listening addr={bind_addr}"));
+
+    let incident_relay_task = archive_sink.clone().map(|sink| {
+        tokio::spawn(server_ingest::run_incident_event_relay_loop(
+            sink,
+            Arc::clone(&state),
+            shutdown_rx.clone(),
+        ))
+    });
+
+    if let Some(postgres_sink) = archive_sink.as_ref() {
         match postgres_sink.expire_active_incidents(Utc::now()).await {
             Ok(result) if result.expired_count > 0 => {
                 info!(
@@ -103,43 +151,6 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
             }
         }
     }
-    let cleanup_sink = started_persistence
-        .as_ref()
-        .and_then(|started| started.postgres_sink.clone());
-    let archive_sink = started_persistence
-        .as_ref()
-        .and_then(|started| started.postgres_sink.clone());
-    let persistence_runtime = started_persistence.map(|started| started.runtime);
-    let persistence_producer = persistence_runtime
-        .as_ref()
-        .map(|runtime| runtime.producer());
-
-    let state = Arc::new(AppState {
-        event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
-        shutdown_rx: shutdown_rx.clone(),
-        retained_files: Mutex::new(RetainedFiles::new(
-            max_retained_files.max(1),
-            Duration::from_secs(file_retention_secs.max(1)),
-        )),
-        telemetry: Mutex::new(TelemetryPayload::Unavailable),
-        persistence: persistence_producer.clone(),
-        archive: archive_sink,
-        connected_clients: AtomicUsize::new(0),
-        max_clients: max_clients.max(1),
-        next_event_id: AtomicU64::new(1),
-        data_blocks_total: AtomicU64::new(0),
-        received_servers: AtomicUsize::new(0),
-        received_sat_servers: AtomicUsize::new(0),
-        started_at: Instant::now(),
-        upstream_endpoint: Mutex::new(None),
-        quiet,
-    });
-
-    let cors = build_cors_layer(cors_origin)?;
-    let app = server_http::build_router(Arc::clone(&state), cors);
-
-    let listener = TcpListener::bind(bind_addr).await?;
-    log_info(quiet, &format!("server listening addr={bind_addr}"));
 
     let ingest_task = match receiver {
         ReceiverKind::Qbt => {
@@ -234,6 +245,10 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         Some(task) => Some(task.await),
         None => None,
     };
+    let incident_relay_result = match incident_relay_task {
+        Some(task) => Some(task.await),
+        None => None,
+    };
     let _persistence_shutdown_stats = match persistence_runtime {
         Some(runtime) => Some(crate::live::persistence::shutdown_runtime(runtime).await?),
         None => None,
@@ -283,6 +298,19 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
             )));
         }
     }
+    match incident_relay_result {
+        Some(Ok(Ok(()))) | None => {}
+        Some(Ok(Err(err))) => {
+            return Err(crate::error::CliError::runtime(format!(
+                "incident relay task failed: {err}"
+            )));
+        }
+        Some(Err(err)) => {
+            return Err(crate::error::CliError::runtime(format!(
+                "incident relay task join failed: {err}"
+            )));
+        }
+    }
     info!("server stopped");
     Ok(())
 }
@@ -301,6 +329,15 @@ fn publish(state: &Arc<AppState>, kind: EventKind) {
         .next_event_id
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let _ = state.event_tx.send(BroadcastEvent { id, kind });
+}
+
+fn publish_incident_change(state: &Arc<AppState>, payload: IncidentEventPayload) {
+    let id = state
+        .next_incident_event_id
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let _ = state
+        .incident_event_tx
+        .send(IncidentBroadcastEvent { id, payload });
 }
 
 #[cfg(test)]
@@ -344,7 +381,10 @@ mod tests {
         sanitize_requested_filename,
     };
     use crate::live::file_pipeline::build_persist_request;
-    use crate::live::server::types::{AppState, CompletedFileEventPayload, EventKind, EventsQuery};
+    use crate::live::server::types::{
+        AppState, CompletedFileEventPayload, EventKind, EventsQuery, IncidentEventPayload,
+        IncidentEventsQuery,
+    };
     use crate::live::server_support::RetainedFiles;
     use crate::live::server_support::wildcard_match;
     use axum::Json;
@@ -352,7 +392,8 @@ mod tests {
     use axum::extract::{ConnectInfo, Query, State};
     use axum::http::{HeaderMap, Request, StatusCode};
     use emwin_db::{
-        CompletedFileMetadata, NoopMetadataSink, PersistenceConfig, PersistenceRuntime,
+        CompletedFileMetadata, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary,
+        NoopMetadataSink, PersistenceConfig, PersistenceRuntime,
     };
     use emwin_protocol::ingest::ProductOrigin;
     use std::sync::Arc;
@@ -366,6 +407,7 @@ mod tests {
         let (_, shutdown_rx) = watch::channel(false);
         Arc::new(AppState {
             event_tx: broadcast::channel(32).0,
+            incident_event_tx: broadcast::channel(32).0,
             shutdown_rx,
             retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
             telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
@@ -374,6 +416,32 @@ mod tests {
             connected_clients: AtomicUsize::new(0),
             max_clients,
             next_event_id: AtomicU64::new(1),
+            next_incident_event_id: AtomicU64::new(1),
+            data_blocks_total: AtomicU64::new(0),
+            received_servers: AtomicUsize::new(0),
+            received_sat_servers: AtomicUsize::new(0),
+            started_at: Instant::now(),
+            upstream_endpoint: std::sync::Mutex::new(None),
+            quiet: true,
+        })
+    }
+
+    fn test_state_with_archive(max_clients: usize) -> Arc<AppState> {
+        let (_, shutdown_rx) = watch::channel(false);
+        Arc::new(AppState {
+            event_tx: broadcast::channel(32).0,
+            incident_event_tx: broadcast::channel(32).0,
+            shutdown_rx,
+            retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
+            telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
+            persistence: None,
+            archive: Some(emwin_db::PostgresMetadataSink::new(
+                emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
+            )),
+            connected_clients: AtomicUsize::new(0),
+            max_clients,
+            next_event_id: AtomicU64::new(1),
+            next_incident_event_id: AtomicU64::new(1),
             data_blocks_total: AtomicU64::new(0),
             received_servers: AtomicUsize::new(0),
             received_sat_servers: AtomicUsize::new(0),
@@ -511,6 +579,30 @@ AKC090-051300-
         };
 
         EventKind::FileComplete(Box::new(CompletedFileEventPayload::from_metadata(metadata)))
+    }
+
+    fn incident_event_payload() -> IncidentEventPayload {
+        IncidentEventPayload {
+            action: IncidentChangeAction::Created,
+            trigger: IncidentChangeTrigger::Persist,
+            incident: crate::live::server::types::IncidentSummaryPayload::from_incident(
+                IncidentSummary {
+                    office: "KOAX".to_string(),
+                    phenomena: "FF".to_string(),
+                    significance: "W".to_string(),
+                    etn: 2001,
+                    current_status: "active".to_string(),
+                    latest_vtec_action: "NEW".to_string(),
+                    issued_at: chrono::Utc::now(),
+                    start_utc: None,
+                    end_utc: None,
+                    last_updated_at: chrono::Utc::now(),
+                    first_product_id: 10,
+                    latest_product_id: 10,
+                    latest_product_timestamp_utc: chrono::Utc::now(),
+                },
+            ),
+        }
     }
 
     fn empty_events_query() -> EventsQuery {
@@ -760,6 +852,7 @@ Body
             body_text
                 .contains("\"/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=5\"")
         );
+        assert!(body_text.contains("\"/incident-events"));
         assert!(body_text.contains("\"/incidents\""));
         assert!(body_text.contains("\"/archive/products/{product_id}\""));
         assert!(body_text.contains("\"/files\""));
@@ -784,6 +877,57 @@ Body
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn incident_events_endpoint_returns_service_unavailable_without_archive_database() {
+        let state = test_state(10);
+        let result = crate::live::server::server_http::incident_events_handler(
+            State(state),
+            ConnectInfo("127.0.0.1:4000".parse().expect("valid socket addr")),
+            HeaderMap::new(),
+            Query(IncidentEventsQuery {
+                action: None,
+                office: None,
+                phenomena: None,
+                significance: None,
+                status: None,
+                etn: None,
+            }),
+        )
+        .await;
+
+        assert!(matches!(result, Err((StatusCode::SERVICE_UNAVAILABLE, _))));
+    }
+
+    #[tokio::test]
+    async fn incident_events_handler_streams_incident_change_payloads() {
+        let state = test_state_with_archive(10);
+        let result = crate::live::server::server_http::incident_events_handler(
+            State(Arc::clone(&state)),
+            ConnectInfo("127.0.0.1:4000".parse().expect("valid socket addr")),
+            HeaderMap::new(),
+            Query(IncidentEventsQuery {
+                action: Some("created".to_string()),
+                office: Some("KOAX".to_string()),
+                phenomena: None,
+                significance: None,
+                status: Some("active".to_string()),
+                etn: None,
+            }),
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "handler should accept configured incident SSE"
+        );
+        let payload = incident_event_payload();
+        let json = serde_json::to_value(&payload).expect("payload should serialize");
+        assert_eq!(json["action"], "created");
+        assert_eq!(json["trigger"], "persist");
+        assert_eq!(json["incident"]["office"], "KOAX");
+        assert_eq!(json["incident"]["detail_url"], "/incidents/KOAX/FF/W/2001");
     }
 
     #[tokio::test]
@@ -827,6 +971,7 @@ Body
         let (_, shutdown_rx) = watch::channel(false);
         let state = Arc::new(AppState {
             event_tx: broadcast::channel(32).0,
+            incident_event_tx: broadcast::channel(32).0,
             shutdown_rx,
             retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
             telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
@@ -835,6 +980,7 @@ Body
             connected_clients: AtomicUsize::new(0),
             max_clients: 10,
             next_event_id: AtomicU64::new(1),
+            next_incident_event_id: AtomicU64::new(1),
             data_blocks_total: AtomicU64::new(0),
             received_servers: AtomicUsize::new(0),
             received_sat_servers: AtomicUsize::new(0),

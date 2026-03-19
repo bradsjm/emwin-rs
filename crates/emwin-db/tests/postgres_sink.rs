@@ -1,10 +1,13 @@
 use chrono::{DateTime, TimeZone, Utc};
 use emwin_db::{
-    BlobRole, BlobStorageKind, BlobWriter, CompletedFileMetadata, MetadataSink, PersistedRequest,
-    PostgresConfig, PostgresMetadataSink, StoredBlob,
+    BlobRole, BlobStorageKind, BlobWriter, CompletedFileMetadata, IncidentChange,
+    IncidentChangeAction, IncidentChangeTrigger, MetadataSink, PersistedRequest, PostgresConfig,
+    PostgresMetadataSink, StoredBlob,
 };
 use emwin_protocol::ingest::ProductOrigin;
 use sqlx::Row;
+use tokio::sync::broadcast;
+use tokio::time::{Duration, timeout};
 
 #[derive(Clone, Copy)]
 struct TestIncidentKey {
@@ -201,6 +204,13 @@ async fn persist_metadata_with_blobs(
         .await
         .expect("persisted product row should exist")
         .get("id")
+}
+
+async fn recv_incident_change(rx: &mut broadcast::Receiver<IncidentChange>) -> IncidentChange {
+    timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("incident change should arrive before timeout")
+        .expect("incident change should be delivered")
 }
 
 async fn cleanup_rows(
@@ -667,6 +677,75 @@ async fn incident_projection_tracks_lifecycle_and_lineage() {
 }
 
 #[tokio::test]
+async fn incident_changes_emit_created_and_updated_notifications() {
+    let Some(sink) = connect_test_sink().await else {
+        return;
+    };
+
+    let key = TestIncidentKey {
+        office: "KOAX",
+        phenomena: "FF",
+        significance: "W",
+        etn: 3001,
+    };
+    let filenames = ["FFWOAX-CHANGE-NEW.TXT", "FFWOAX-CHANGE-CON.TXT"];
+    cleanup_rows(&sink, &filenames, &[key]).await;
+
+    let mut rx = sink.subscribe_incident_changes();
+    let new_timestamp = 1_741_175_200;
+    let new_id = persist_metadata(
+        &sink,
+        build_vtec_metadata(
+            filenames[0],
+            new_timestamp,
+            "NEC001-051300-",
+            &[vtec_line(
+                'O',
+                "NEW",
+                key.etn,
+                "250305T1200Z",
+                "250305T1800Z",
+            )],
+        ),
+    )
+    .await;
+    let created = recv_incident_change(&mut rx).await;
+    assert_eq!(created.action, IncidentChangeAction::Created);
+    assert_eq!(created.trigger, IncidentChangeTrigger::Persist);
+    assert_eq!(created.incident.office, key.office);
+    assert_eq!(created.incident.phenomena, key.phenomena);
+    assert_eq!(created.incident.significance, key.significance);
+    assert_eq!(created.incident.etn, key.etn);
+    assert_eq!(created.incident.latest_product_id, new_id);
+
+    let con_timestamp = new_timestamp + 300;
+    let con_id = persist_metadata(
+        &sink,
+        build_vtec_metadata(
+            filenames[1],
+            con_timestamp,
+            "NEC001-051300-",
+            &[vtec_line(
+                'O',
+                "CON",
+                key.etn,
+                "250305T1200Z",
+                "250305T1900Z",
+            )],
+        ),
+    )
+    .await;
+    let updated = recv_incident_change(&mut rx).await;
+    assert_eq!(updated.action, IncidentChangeAction::Updated);
+    assert_eq!(updated.trigger, IncidentChangeTrigger::Persist);
+    assert_eq!(updated.incident.latest_product_id, con_id);
+    assert_eq!(updated.incident.first_product_id, new_id);
+    assert_eq!(updated.incident.latest_vtec_action, "CON");
+
+    cleanup_rows(&sink, &filenames, &[key]).await;
+}
+
+#[tokio::test]
 async fn incident_projection_collapses_duplicate_keys_within_one_product() {
     let Some(sink) = connect_test_sink().await else {
         return;
@@ -800,6 +879,68 @@ async fn incident_projection_rejects_stale_updates() {
 }
 
 #[tokio::test]
+async fn stale_incident_updates_do_not_emit_notifications() {
+    let Some(sink) = connect_test_sink().await else {
+        return;
+    };
+
+    let key = TestIncidentKey {
+        office: "KOAX",
+        phenomena: "FF",
+        significance: "W",
+        etn: 2005,
+    };
+    let filenames = ["FFWOAX-NOTIFY-NEWER.TXT", "FFWOAX-NOTIFY-OLDER.TXT"];
+    cleanup_rows(&sink, &filenames, &[key]).await;
+
+    let mut rx = sink.subscribe_incident_changes();
+    let newer_timestamp = 1_741_176_600;
+    persist_metadata(
+        &sink,
+        build_vtec_metadata(
+            filenames[0],
+            newer_timestamp,
+            "NEC001-051300-",
+            &[vtec_line(
+                'O',
+                "NEW",
+                key.etn,
+                "250305T1200Z",
+                "250305T1800Z",
+            )],
+        ),
+    )
+    .await;
+    let _ = recv_incident_change(&mut rx).await;
+
+    let older_timestamp = newer_timestamp - 600;
+    persist_metadata(
+        &sink,
+        build_vtec_metadata(
+            filenames[1],
+            older_timestamp,
+            "NEC001-051300-",
+            &[vtec_line(
+                'O',
+                "CAN",
+                key.etn,
+                "250305T1200Z",
+                "250305T1800Z",
+            )],
+        ),
+    )
+    .await;
+
+    let stale_result = timeout(Duration::from_millis(250), rx.recv()).await;
+    assert!(
+        stale_result.is_err(),
+        "stale replay should not emit a change"
+    );
+
+    cleanup_rows(&sink, &filenames, &[key]).await;
+}
+
+#[tokio::test]
 async fn incident_projection_ignores_non_operational_vtec() {
     let Some(sink) = connect_test_sink().await else {
         return;
@@ -889,6 +1030,57 @@ async fn incident_cleanup_expires_active_rows_with_past_end_utc() {
         .await
         .expect("incident should remain present after cleanup");
     assert_eq!(incident.current_status, "expired");
+
+    cleanup_rows(&sink, &[filename], &[key]).await;
+}
+
+#[tokio::test]
+async fn incident_cleanup_emits_update_notifications() {
+    let Some(sink) = connect_test_sink().await else {
+        return;
+    };
+
+    let key = TestIncidentKey {
+        office: "KOAX",
+        phenomena: "FF",
+        significance: "W",
+        etn: 2105,
+    };
+    let filename = "FFWOAX-CLEANUP-NOTIFY.TXT";
+    cleanup_rows(&sink, &[filename], &[key]).await;
+
+    let mut rx = sink.subscribe_incident_changes();
+    persist_metadata(
+        &sink,
+        build_vtec_metadata(
+            filename,
+            1_741_178_000,
+            "NEC001-051300-",
+            &[vtec_line(
+                'O',
+                "NEW",
+                key.etn,
+                "250305T1200Z",
+                "250305T1800Z",
+            )],
+        ),
+    )
+    .await;
+    let _ = recv_incident_change(&mut rx).await;
+
+    let cleanup_now = Utc
+        .with_ymd_and_hms(2025, 3, 5, 20, 0, 0)
+        .single()
+        .expect("valid timestamp");
+    sink.expire_active_incidents(cleanup_now)
+        .await
+        .expect("cleanup should succeed");
+
+    let change = recv_incident_change(&mut rx).await;
+    assert_eq!(change.action, IncidentChangeAction::Updated);
+    assert_eq!(change.trigger, IncidentChangeTrigger::Cleanup);
+    assert_eq!(change.incident.current_status, "expired");
+    assert_eq!(change.incident.etn, key.etn);
 
     cleanup_rows(&sink, &[filename], &[key]).await;
 }

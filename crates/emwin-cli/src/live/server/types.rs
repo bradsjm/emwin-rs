@@ -8,8 +8,9 @@ use crate::live::filter::{FileEventFilter, FileFilterInput};
 use crate::live::persistence::FilePersistenceProducer;
 use crate::live::server_support::{RetainedFiles, file_download_url};
 use emwin_db::{
-    ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata, IncidentDetail,
-    IncidentSummary, PaginatedResponse, PersistenceStats, PostgresMetadataSink,
+    ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata, IncidentChange,
+    IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
+    PaginatedResponse, PersistenceStats, PostgresMetadataSink,
 };
 use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
 use emwin_protocol::wxwire_receiver::{WxWireReceiverFrameEvent, WxWireReceiverTelemetrySnapshot};
@@ -28,6 +29,12 @@ use tokio::sync::{broadcast, watch};
 pub(crate) struct BroadcastEvent {
     pub(crate) id: u64,
     pub(crate) kind: EventKind,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IncidentBroadcastEvent {
+    pub(crate) id: u64,
+    pub(crate) payload: IncidentEventPayload,
 }
 
 /// Downloadable file payload advertised by the HTTP API.
@@ -120,6 +127,25 @@ impl Serialize for MetricsPayload {
             map.serialize_entry("persistence_failed_total", &persistence.failed_total)?;
         }
         map.end()
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct IncidentEventPayload {
+    pub(crate) action: IncidentChangeAction,
+    pub(crate) trigger: IncidentChangeTrigger,
+    pub(crate) incident: IncidentSummaryPayload,
+}
+
+impl IncidentEventPayload {
+    pub(crate) const EVENT_NAME: &'static str = "incident_change";
+
+    pub(crate) fn from_change(change: IncidentChange) -> Self {
+        Self {
+            action: change.action,
+            trigger: change.trigger,
+            incident: IncidentSummaryPayload::from_incident(change.incident),
+        }
     }
 }
 
@@ -245,14 +271,95 @@ fn normalize_lower(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
+fn normalize_upper(value: &str) -> String {
+    value.trim().to_ascii_uppercase()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EventFilterQueryError {
     pub(crate) message: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct IncidentEventFilter {
+    pub(crate) actions: Option<BTreeSet<String>>,
+    pub(crate) offices: Option<BTreeSet<String>>,
+    pub(crate) phenomena: Option<BTreeSet<String>>,
+    pub(crate) significance: Option<BTreeSet<String>>,
+    pub(crate) statuses: Option<BTreeSet<String>>,
+    pub(crate) etns: Option<BTreeSet<i64>>,
+}
+
+impl IncidentEventFilter {
+    pub(crate) fn from_query(query: IncidentEventsQuery) -> Self {
+        Self {
+            actions: csv_values(query.action.as_deref(), normalize_lower),
+            offices: csv_values(query.office.as_deref(), normalize_upper),
+            phenomena: csv_values(query.phenomena.as_deref(), normalize_upper),
+            significance: csv_values(query.significance.as_deref(), normalize_upper),
+            statuses: csv_values(query.status.as_deref(), normalize_lower),
+            etns: csv_i64_values(query.etn.as_deref()),
+        }
+    }
+
+    pub(crate) fn matches(&self, event: &IncidentEventPayload) -> bool {
+        if let Some(actions) = &self.actions
+            && !actions
+                .contains(normalize_lower(incident_change_action_name(event.action)).as_str())
+        {
+            return false;
+        }
+        if let Some(offices) = &self.offices
+            && !offices.contains(event.incident.incident.office.as_str())
+        {
+            return false;
+        }
+        if let Some(phenomena) = &self.phenomena
+            && !phenomena.contains(event.incident.incident.phenomena.as_str())
+        {
+            return false;
+        }
+        if let Some(significance) = &self.significance
+            && !significance.contains(event.incident.incident.significance.as_str())
+        {
+            return false;
+        }
+        if let Some(statuses) = &self.statuses
+            && !statuses.contains(event.incident.incident.current_status.as_str())
+        {
+            return false;
+        }
+        if let Some(etns) = &self.etns
+            && !etns.contains(&event.incident.incident.etn)
+        {
+            return false;
+        }
+        true
+    }
+}
+
+fn incident_change_action_name(action: IncidentChangeAction) -> &'static str {
+    match action {
+        IncidentChangeAction::Created => "created",
+        IncidentChangeAction::Updated => "updated",
+    }
+}
+
+fn csv_i64_values(raw: Option<&str>) -> Option<BTreeSet<i64>> {
+    let values = raw
+        .into_iter()
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .filter_map(|value| value.parse::<i64>().ok())
+        .collect::<BTreeSet<_>>();
+    (!values.is_empty()).then_some(values)
+}
+
 #[derive(Debug)]
 pub(crate) struct AppState {
     pub(crate) event_tx: broadcast::Sender<BroadcastEvent>,
+    pub(crate) incident_event_tx: broadcast::Sender<IncidentBroadcastEvent>,
     pub(crate) shutdown_rx: watch::Receiver<bool>,
     pub(crate) retained_files: Mutex<RetainedFiles>,
     pub(crate) telemetry: Mutex<TelemetryPayload>,
@@ -261,6 +368,7 @@ pub(crate) struct AppState {
     pub(crate) connected_clients: AtomicUsize,
     pub(crate) max_clients: usize,
     pub(crate) next_event_id: AtomicU64,
+    pub(crate) next_incident_event_id: AtomicU64,
     pub(crate) data_blocks_total: AtomicU64,
     pub(crate) received_servers: AtomicUsize,
     pub(crate) received_sat_servers: AtomicUsize,
@@ -287,6 +395,16 @@ pub(crate) struct IncidentsQuery {
 pub(crate) struct IncidentProductsQuery {
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct IncidentEventsQuery {
+    pub(crate) action: Option<String>,
+    pub(crate) office: Option<String>,
+    pub(crate) phenomena: Option<String>,
+    pub(crate) significance: Option<String>,
+    pub(crate) status: Option<String>,
+    pub(crate) etn: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -396,7 +514,7 @@ pub(crate) struct FilesResponse {
     pub(crate) files: Vec<CompletedFilePayload>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct IncidentSummaryPayload {
     #[serde(flatten)]
     pub(crate) incident: IncidentSummary,

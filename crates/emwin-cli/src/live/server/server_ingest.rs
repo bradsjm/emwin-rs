@@ -3,10 +3,12 @@
 //! This module translates runtime events into retained files, broadcast notifications, and
 //! telemetry snapshots without leaking transport-specific details into the HTTP layer.
 
-use super::types::{AppState, CompletedFileEventPayload, EventKind, TelemetryPayload};
+use super::types::{
+    AppState, CompletedFileEventPayload, EventKind, IncidentEventPayload, TelemetryPayload,
+};
 use crate::live::archive_postprocess::post_process_archive;
 use crate::live::persistence::FilePersistenceProducer;
-use emwin_db::PersistenceStats;
+use emwin_db::{PersistenceStats, PostgresMetadataSink};
 use emwin_protocol::ingest::{
     IngestConfig, IngestError, IngestEvent, IngestReceiver, IngestTelemetry, IngestWarning,
     ProductOrigin,
@@ -91,6 +93,38 @@ pub(super) async fn run_wxwire_ingest_loop(
 
     drop(events);
     ingest.stop().await?;
+
+    Ok(())
+}
+
+pub(super) async fn run_incident_event_relay_loop(
+    sink: PostgresMetadataSink,
+    state: Arc<AppState>,
+    mut shutdown_rx: watch::Receiver<bool>,
+) -> crate::error::CliResult<()> {
+    let mut rx = sink.subscribe_incident_changes();
+    loop {
+        tokio::select! {
+            _ = shutdown_rx.changed() => {
+                break;
+            }
+            received = rx.recv() => match received {
+                Ok(change) => {
+                    super::publish_incident_change(
+                        &state,
+                        IncidentEventPayload::from_change(change),
+                    );
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(dropped)) => {
+                    super::log_info(
+                        state.quiet,
+                        &format!("incident relay lagged dropped={dropped}"),
+                    );
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -356,6 +390,7 @@ mod tests {
         let (_, shutdown_rx) = watch::channel(false);
         Arc::new(AppState {
             event_tx: broadcast::channel(16).0,
+            incident_event_tx: broadcast::channel(16).0,
             shutdown_rx,
             retained_files: Mutex::new(RetainedFiles::new(16, Duration::from_secs(60))),
             telemetry: Mutex::new(TelemetryPayload::Unavailable),
@@ -364,6 +399,7 @@ mod tests {
             connected_clients: AtomicUsize::new(0),
             max_clients: 16,
             next_event_id: AtomicU64::new(1),
+            next_incident_event_id: AtomicU64::new(1),
             data_blocks_total: AtomicU64::new(0),
             received_servers: AtomicUsize::new(0),
             received_sat_servers: AtomicUsize::new(0),
