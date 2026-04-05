@@ -1,8 +1,9 @@
 use crate::live::server::types::{
-    AppState, EventsQuery, IncidentEventPayload, IncidentSummaryPayload, TelemetryPayload,
+    AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
+    TelemetryPayload,
 };
 use crate::live::server_support::RetainedFiles;
-use emwin_db::{IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
+use emwin_db::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::time::{Duration, Instant};
@@ -159,4 +160,15 @@ fn incident_event_payload() -> IncidentEventPayload {
             latest_product_timestamp_utc: chrono::Utc::now(),
         }),
     }
+}
+
+fn archive_issue_payload() -> ArchiveIssuePayload {
+    ArchiveIssuePayload::from_issue(ArchivedIssue {
+        id: 7,
+        product_id: 42,
+        kind: "text_product_parse".to_string(),
+        code: "invalid_wmo_header".to_string(),
+        message: "failed to parse WMO header".to_string(),
+        line: Some("INVALID HEADER".to_string()),
+    })
 }

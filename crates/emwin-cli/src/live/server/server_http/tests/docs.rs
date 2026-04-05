@@ -60,6 +60,8 @@ async fn openapi_json_lists_versioned_routes() {
     assert!(body_text.contains("\"/v1/live/events\""));
     assert!(body_text.contains("\"/v1/live/incident-events\""));
     assert!(body_text.contains("\"/v1/live/incidents\""));
+    assert!(body_text.contains("\"/v1/archive/issues\""));
+    assert!(body_text.contains("\"/v1/archive/issues/{issue_id}\""));
     assert!(body_text.contains("\"/v1/archive/products/{product_id}\""));
     assert!(body_text.contains("\"/v1/live/files\""));
     assert!(body_text.contains("\"/v1/live/health\""));

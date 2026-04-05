@@ -110,6 +110,13 @@ pub struct IncidentProductsCursor {
     pub product_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchivedIssueCursor {
+    pub source_timestamp_utc: i64,
+    pub product_id: i64,
+    pub issue_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncidentListQuery {
     pub office: Option<String>,
@@ -150,6 +157,27 @@ pub struct IncidentProductsQuery {
 impl Default for IncidentProductsQuery {
     fn default() -> Self {
         Self {
+            limit: 100,
+            cursor: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedIssueListQuery {
+    pub product_id: Option<i64>,
+    pub kind: Option<String>,
+    pub code: Option<String>,
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+
+impl Default for ArchivedIssueListQuery {
+    fn default() -> Self {
+        Self {
+            product_id: None,
+            kind: None,
+            code: None,
             limit: 100,
             cursor: None,
         }
@@ -241,6 +269,16 @@ pub struct ArchivedPayload {
     pub filename: String,
     pub bytes: Vec<u8>,
     pub payload_storage_kind: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct ArchivedIssue {
+    pub id: i64,
+    pub product_id: i64,
+    pub kind: String,
+    pub code: String,
+    pub message: String,
+    pub line: Option<String>,
 }
 
 impl PostgresMetadataSink {
@@ -446,6 +484,33 @@ impl PostgresMetadataSink {
 
         match result {
             Ok(product) => Ok(product),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn list_archived_issues(
+        &self,
+        query: ArchivedIssueListQuery,
+    ) -> PersistResult<PaginatedResponse<ArchivedIssue>> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_archived_issues_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn get_archived_issue(&self, issue_id: i64) -> PersistResult<Option<ArchivedIssue>> {
+        let pool = self.ensure_pool().await?;
+        let result = query::get_archived_issue_query(&pool, issue_id).await;
+        match result {
+            Ok(issue) => Ok(issue),
             Err(err) => {
                 self.handle_runtime_error(&err).await;
                 Err(err)

@@ -275,7 +275,17 @@ pub(crate) async fn fetch_incident(
         first_product_id: row.get("first_product_id"),
         latest_product_id: row.get("latest_product_id"),
         latest_product_timestamp_utc: row.get("latest_product_timestamp_utc"),
-    })
+        })
+}
+
+pub(crate) async fn product_issue_id(sink: &PostgresMetadataSink, product_id: i64) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM product_issues WHERE product_id = $1 ORDER BY id ASC LIMIT 1",
+    )
+    .bind(product_id)
+    .fetch_one(&sink.pool())
+    .await
+    .expect("product issue row should exist")
 }
 
 pub(crate) async fn update_incident_end_utc(

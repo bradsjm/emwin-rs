@@ -26,6 +26,11 @@ enum ReceiverKind {
 /// Available CLI commands.
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Query archived incident and product data directly from persistence.
+    Query {
+        #[command(flatten)]
+        options: cmd::query::QueryOptions,
+    },
     /// Live command with HTTP, SSE, and retained file endpoints.
     Server {
         /// Optional filesystem path or `s3://bucket[/prefix]` URI for async blob persistence.
@@ -95,6 +100,7 @@ enum Commands {
 impl Commands {
     fn name(&self) -> &'static str {
         match self {
+            Self::Query { .. } => "query",
             Self::Server { .. } => "server",
             Self::Relay { .. } => "relay",
         }
@@ -119,6 +125,7 @@ async fn main() -> crate::error::CliResult<()> {
     log_startup(&cli.command);
 
     match cli.command {
+        Commands::Query { options } => cmd::query::run(options).await,
         Commands::Server {
             output_dir,
             post_process_archives,
@@ -197,6 +204,92 @@ mod tests {
 
     #[test]
     fn cli_parses_representative_commands() {
+        let query_cases = [
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "incidents",
+                "--office",
+                "KOAX",
+                "--limit",
+                "25",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "incident",
+                "KOAX",
+                "FF",
+                "W",
+                "2001",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "incident-products",
+                "KOAX",
+                "FF",
+                "W",
+                "2001",
+                "--cursor",
+                "opaque",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "product",
+                "42",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "issues",
+                "--product-id",
+                "42",
+                "--kind",
+                "text_product_parse",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "issue",
+                "7",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "product-raw",
+                "42",
+                "--stdout",
+            ]
+            .as_slice(),
+        ];
+
+        for args in query_cases {
+            let cli = Cli::try_parse_from(args).expect("query args should parse");
+            assert!(matches!(cli.command, Commands::Query { .. }));
+        }
+
         let server_cases = [
             (
                 [
@@ -267,5 +360,51 @@ mod tests {
     #[test]
     fn invalid_subcommand_is_rejected() {
         assert!(Cli::try_parse_from(["emwin", "download", "./out"]).is_err());
+    }
+
+    #[test]
+    fn product_raw_requires_exactly_one_output_sink() {
+        assert!(
+            Cli::try_parse_from([
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "product-raw",
+                "42",
+            ])
+            .is_err()
+        );
+
+        assert!(
+            Cli::try_parse_from([
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "product-raw",
+                "42",
+                "--stdout",
+                "--output",
+                "./payload.bin",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn incidents_reject_invalid_rfc3339_timestamp() {
+        assert!(
+            Cli::try_parse_from([
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "incidents",
+                "--updated-after",
+                "not-a-timestamp",
+            ])
+            .is_err()
+        );
     }
 }

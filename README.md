@@ -80,6 +80,18 @@ emwin-protocol = { path = "../emwin-rs/crates/emwin-protocol", default-features 
 
 ## Quick start
 
+Archive query mode:
+
+```bash
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incidents --office KOAX
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident KOAX FF W 2001
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident-products KOAX FF W 2001 --limit 50
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product 42
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issues --product-id 42 --kind text_product_parse
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issue 7
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product-raw 42 --output ./product.bin
+```
+
 Live server mode:
 
 ```bash
@@ -201,6 +213,7 @@ Environment and `.env` support:
 - `.env` from the current working directory is loaded before CLI parsing.
 - CLI args override process env; process env overrides `.env`.
 - Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_OPENAPI_AUTH_TOKEN`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
+- `query` uses `EMWIN_DATABASE_URL` for direct archive reads from Postgres-backed metadata.
 - When `EMWIN_OUTPUT_DIR` uses `s3://bucket[/prefix]`, `emwin-db` resolves object-store settings from AWS-compatible environment variables: `AWS_ENDPOINT_URL` switches to a custom endpoint with path-style access, `AWS_REGION` or `AWS_DEFAULT_REGION` selects the region, and credentials come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` plus the compatible metadata providers exposed by `rust-s3`.
 - Filters are CLI-only and are not loaded from environment variables.
 

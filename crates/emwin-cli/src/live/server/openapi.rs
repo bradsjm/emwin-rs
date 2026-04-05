@@ -18,6 +18,8 @@ use utoipa::{Modify, OpenApi};
         super::server_http::incident_products_handler,
         super::server_http::archive_product_handler,
         super::server_http::archive_product_raw_handler,
+        super::server_http::archive_issues_handler,
+        super::server_http::archive_issue_handler,
         super::server_http::incident_events_handler,
         super::server_http::events_handler,
         super::server_http::files_handler,
@@ -37,6 +39,9 @@ use utoipa::{Modify, OpenApi};
             ArchiveProductSummarySchema,
             ArchiveProductResponseSchema,
             ArchiveProductDetailSchema,
+            ArchiveIssuesResponseSchema,
+            ArchiveIssueResponseSchema,
+            ArchiveIssueSchema,
             HealthResponseSchema,
             SseEventEnvelope,
         )
@@ -63,6 +68,8 @@ pub(crate) struct SecureApiDoc;
         super::server_http::incident_products_handler,
         super::server_http::archive_product_handler,
         super::server_http::archive_product_raw_handler,
+        super::server_http::archive_issues_handler,
+        super::server_http::archive_issue_handler,
         super::server_http::incident_events_handler,
         super::server_http::events_handler,
         super::server_http::files_handler,
@@ -82,6 +89,9 @@ pub(crate) struct SecureApiDoc;
             ArchiveProductSummarySchema,
             ArchiveProductResponseSchema,
             ArchiveProductDetailSchema,
+            ArchiveIssuesResponseSchema,
+            ArchiveIssueResponseSchema,
+            ArchiveIssueSchema,
             HealthResponseSchema,
             SseEventEnvelope,
         )
@@ -277,6 +287,38 @@ pub(crate) struct IncidentProductsResponseSchema {
 #[derive(Debug, ToSchema)]
 pub(crate) struct ArchiveProductResponseSchema {
     pub(crate) product: ArchiveProductDetailSchema,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ArchiveIssuesResponseSchema {
+    pub(crate) items: Vec<ArchiveIssueSchema>,
+    #[schema(example = "cursor-token")]
+    pub(crate) next_cursor: Option<String>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ArchiveIssueResponseSchema {
+    pub(crate) issue: ArchiveIssueSchema,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ArchiveIssueSchema {
+    #[schema(example = 10)]
+    pub(crate) id: i64,
+    #[schema(example = 42)]
+    pub(crate) product_id: i64,
+    #[schema(example = "text_product_parse")]
+    pub(crate) kind: String,
+    #[schema(example = "invalid_wmo_header")]
+    pub(crate) code: String,
+    #[schema(example = "failed to parse WMO header")]
+    pub(crate) message: String,
+    #[schema(example = "INVALID HEADER")]
+    pub(crate) line: Option<String>,
+    #[schema(example = "/v1/archive/issues/10")]
+    pub(crate) detail_url: String,
+    #[schema(example = "/v1/archive/products/42")]
+    pub(crate) product_url: String,
 }
 
 #[derive(Debug, ToSchema)]

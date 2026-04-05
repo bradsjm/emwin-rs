@@ -4,11 +4,12 @@
 //! filtering, and ingest coordination live in neighboring modules.
 
 use super::types::{
-    ARCHIVE_API_PREFIX, AppState, ArchiveProductDetailPayload, ArchiveProductResponse,
-    BroadcastEvent, ClientGuard, EventFilter, EventKind, EventsQuery, FilesResponse,
-    HealthResponse, IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter,
-    IncidentEventPayload, IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse,
-    IncidentResponse, IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, LIVE_API_PREFIX,
+    ARCHIVE_API_PREFIX, AppState, ArchiveIssuePayload, ArchiveIssueResponse, ArchiveIssuesQuery,
+    ArchiveIssuesResponse, ArchiveProductDetailPayload, ArchiveProductResponse, BroadcastEvent,
+    ClientGuard, EventFilter, EventKind, EventsQuery, FilesResponse, HealthResponse,
+    IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter, IncidentEventPayload,
+    IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
+    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, LIVE_API_PREFIX,
 };
 use crate::live::server_support::{
     build_bytes_download_response, build_file_download_response, filename_request_or_400,
@@ -53,6 +54,8 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
             require_bearer_auth,
         ));
     let archive_router = Router::new()
+        .route("/issues", get(archive_issues_handler))
+        .route("/issues/{issue_id}", get(archive_issue_handler))
         .route("/products/{product_id}", get(archive_product_handler))
         .route(
             "/products/{product_id}/raw",
@@ -273,6 +276,78 @@ pub(super) async fn archive_product_handler(
 
     Ok(Json(ArchiveProductResponse {
         product: ArchiveProductDetailPayload::from_product(product),
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/archive/issues",
+    tag = "archive",
+    params(ArchiveIssuesQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "List archived issue rows.", body = super::openapi::ArchiveIssuesResponseSchema),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn archive_issues_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ArchiveIssuesQuery>,
+) -> Result<Json<ArchiveIssuesResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let page = archive
+        .list_archived_issues(emwin_db::ArchivedIssueListQuery {
+            product_id: query.product_id,
+            kind: query.kind,
+            code: query.code,
+            limit: query.limit.unwrap_or(100),
+            cursor: query.cursor,
+        })
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(ArchiveIssuesResponse {
+        page: emwin_db::PaginatedResponse {
+            items: page
+                .items
+                .into_iter()
+                .map(ArchiveIssuePayload::from_issue)
+                .collect(),
+            next_cursor: page.next_cursor,
+        },
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/archive/issues/{issue_id}",
+    tag = "archive",
+    security(("bearer_auth" = [])),
+    params(("issue_id" = i64, Path, description = "Archived issue id")),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "Fetch one archived issue row.", body = super::openapi::ArchiveIssueResponseSchema),
+        (status = 404, description = "Archived issue was not found.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn archive_issue_handler(
+    State(state): State<Arc<AppState>>,
+    Path(issue_id): Path<i64>,
+) -> Result<Json<ArchiveIssueResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let issue = archive
+        .get_archived_issue(issue_id)
+        .await
+        .map_err(map_archive_error)?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            "archived issue not found".to_string(),
+        ))?;
+
+    Ok(Json(ArchiveIssueResponse {
+        issue: ArchiveIssuePayload::from_issue(issue),
     }))
 }
 

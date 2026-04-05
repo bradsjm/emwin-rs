@@ -1,6 +1,11 @@
-use super::{empty_events_query, incident_event_payload, test_state, test_state_with_archive};
+use super::{
+    archive_issue_payload, empty_events_query, incident_event_payload, test_state,
+    test_state_with_archive,
+};
 use crate::live::server::build_router;
-use crate::live::server::server_http::{events_handler, incident_events_handler};
+use crate::live::server::server_http::{
+    archive_issue_handler, events_handler, incident_events_handler,
+};
 use crate::live::server::types::IncidentEventsQuery;
 use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, Request, StatusCode};
@@ -114,4 +119,41 @@ async fn archive_product_raw_endpoint_returns_service_unavailable_without_archiv
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn archive_issues_endpoint_returns_service_unavailable_without_archive_database() {
+    let state = test_state(10);
+    let app = build_router(state, None).expect("router should build");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/archive/issues")
+                .method("GET")
+                .body(axum::body::Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn archive_issue_endpoint_returns_service_unavailable_without_archive_database() {
+    let state = test_state(10);
+    let result = archive_issue_handler(State(state), axum::extract::Path(7)).await;
+
+    assert!(matches!(result, Err((StatusCode::SERVICE_UNAVAILABLE, _))));
+}
+
+#[tokio::test]
+async fn archive_issue_payload_serializes_related_urls() {
+    let payload = archive_issue_payload();
+    let json = serde_json::to_value(&payload).expect("payload should serialize");
+    assert_eq!(json["id"], 7);
+    assert_eq!(json["code"], "invalid_wmo_header");
+    assert_eq!(json["detail_url"], "/v1/archive/issues/7");
+    assert_eq!(json["product_url"], "/v1/archive/products/42");
 }

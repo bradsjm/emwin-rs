@@ -8,8 +8,8 @@ use crate::live::filter::{FileEventFilter, FileFilterInput};
 use crate::live::persistence::FilePersistenceProducer;
 use crate::live::server_support::{RetainedFiles, file_download_url};
 use emwin_db::{
-    ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata, IncidentChange,
-    IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
+    ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata,
+    IncidentChange, IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
     PaginatedResponse, PersistenceStats, PostgresMetadataSink,
 };
 use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
@@ -602,6 +602,26 @@ impl ArchiveProductDetailPayload {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct ArchiveIssuePayload {
+    #[serde(flatten)]
+    pub(crate) issue: ArchivedIssue,
+    pub(crate) detail_url: String,
+    pub(crate) product_url: String,
+}
+
+impl ArchiveIssuePayload {
+    pub(crate) fn from_issue(issue: ArchivedIssue) -> Self {
+        let detail_url = archive_issue_url(issue.id);
+        let product_url = archive_product_url(issue.product_id);
+        Self {
+            issue,
+            detail_url,
+            product_url,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct IncidentsResponse {
     #[serde(flatten)]
     pub(crate) page: PaginatedResponse<IncidentSummaryPayload>,
@@ -621,6 +641,17 @@ pub(crate) struct IncidentResponse {
 #[derive(Debug, Serialize)]
 pub(crate) struct ArchiveProductResponse {
     pub(crate) product: ArchiveProductDetailPayload,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveIssuesResponse {
+    #[serde(flatten)]
+    pub(crate) page: PaginatedResponse<ArchiveIssuePayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveIssueResponse {
+    pub(crate) issue: ArchiveIssuePayload,
 }
 
 #[derive(Debug, Serialize)]
@@ -654,6 +685,10 @@ pub(crate) fn archive_product_raw_url(product_id: i64) -> String {
     format!("{ARCHIVE_API_PREFIX}/products/{product_id}/raw")
 }
 
+pub(crate) fn archive_issue_url(issue_id: i64) -> String {
+    format!("{ARCHIVE_API_PREFIX}/issues/{issue_id}")
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerOptions {
     pub receiver: crate::ReceiverKind,
@@ -673,6 +708,15 @@ pub struct ServerOptions {
     pub persistence_queue_capacity: usize,
     pub postgres_database_url: Option<String>,
     pub openapi_auth_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct ArchiveIssuesQuery {
+    pub(crate) product_id: Option<i64>,
+    pub(crate) kind: Option<String>,
+    pub(crate) code: Option<String>,
+    pub(crate) limit: Option<usize>,
+    pub(crate) cursor: Option<String>,
 }
 
 pub(crate) struct ClientGuard {

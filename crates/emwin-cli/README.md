@@ -4,6 +4,10 @@ CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `
 
 ## Commands
 
+- `query`
+  - Archive query command.
+  - Connects directly to persisted Postgres metadata and reads archived payloads through stored filesystem or S3 locations.
+  - Supports archived issue listing and issue detail reads.
 - `server`
   - Live command.
   - Connects to EMWIN servers, exposes versioned HTTP and SSE endpoints, and retains recent files for `/v1/live/files` downloads.
@@ -11,6 +15,7 @@ CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `
 
 ## Output formats
 
+- `query` emits JSON payloads to `stdout` for structured archive reads. `query product-raw` writes bytes to `stdout` only with `--stdout`, otherwise it requires `--output <PATH>`.
 - `server` emits structured `tracing` diagnostics to `stderr` and serves retained payloads over HTTP.
 
 Contract:
@@ -83,6 +88,7 @@ Precedence is:
 
 Supported environment variables include:
 
+- `EMWIN_DATABASE_URL`
 - `EMWIN_TEXT_PREVIEW_CHARS`
 - `EMWIN_RECEIVER`
 - `EMWIN_USERNAME`
@@ -107,6 +113,18 @@ Filters are intentionally not configurable through environment variables.
 When `EMWIN_OUTPUT_DIR` uses `s3://bucket[/prefix]`, object-store configuration stays env-driven: set `AWS_ENDPOINT_URL` for MinIO or another custom S3-compatible endpoint, `AWS_REGION` or `AWS_DEFAULT_REGION` for region selection, and `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` for credentials. Persisted metadata still stores canonical `s3://bucket/key` references rather than presigned URLs.
 
 ## Examples
+
+Archive query mode:
+
+```bash
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incidents --office KOAX
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident KOAX FF W 2001
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident-products KOAX FF W 2001 --limit 50
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product 42
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issues --product-id 42 --kind text_product_parse
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issue 7
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product-raw 42 --output ./product.bin
+```
 
 Live mode:
 
@@ -141,6 +159,10 @@ and `HVTEC` coordinates for radius checks.
 - `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
 - `/v1/archive/products/{product_id}` returns persisted product detail including `product_json`
 - `/v1/archive/products/{product_id}/raw` proxies archived payload bytes for one product
+- `/v1/archive/issues` lists archived issue rows with optional exact filters `product_id`, `kind`, and `code`
+- `/v1/archive/issues/{issue_id}` fetches one archived issue row
+
+The `query` command mirrors those archive read capabilities locally. Postgres remains the query backend; S3 is only used indirectly when an archived payload location points at `s3://...`.
 
 Authenticated example:
 

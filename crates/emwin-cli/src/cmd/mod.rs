@@ -10,3 +10,5 @@
 //! `crate::live`.
 
 pub mod event_output;
+pub mod query;
+pub mod query_output;

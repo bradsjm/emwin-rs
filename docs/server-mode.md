@@ -39,12 +39,15 @@ Contract rules:
 
 ### Archive
 
+- `GET /v1/archive/issues`
+- `GET /v1/archive/issues/{issue_id}`
 - `GET /v1/archive/products/{product_id}`
 - `GET /v1/archive/products/{product_id}/raw`
 
 ## Archive and Incident Availability
 
 - `/v1/live/incidents`, `/v1/live/incident-events`, and `/v1/archive/products/*` require `--persist-database-url`
+- `/v1/archive/issues*` also requires `--persist-database-url`
 - those endpoints return `503` when Postgres-backed archive metadata is not configured
 - `/v1/live/files/*` serves only the in-memory retained payload cache
 - persisted S3 or filesystem blobs remain archive storage and are not proxied through `/v1/live/files/*`
@@ -108,6 +111,7 @@ Example:
 - completed-file payloads include `download_url` values under `/v1/live/files/...`
 - incident payloads include `detail_url` and `products_url` values under `/v1/live/incidents/...`
 - incident and archive payloads include product links under `/v1/archive/products/...`
+- archive issue payloads include `detail_url` and `product_url`
 - `/v1/live/metrics` returns a flat telemetry object; when persistence is enabled it also includes `persistence_*` queue fields
 
 ## Start Server Mode
