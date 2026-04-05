@@ -18,7 +18,7 @@ use crate::specialized::taf::parse_taf_bulletin;
 
 use super::common::{
     filename_stem, first_nonempty_line, malformed_supported_family, starts_with_icao_sigmet_line,
-    unsupported_wmo_candidate,
+    unsupported_wmo_candidate, unsupported_wmo_family_candidate,
 };
 use super::context::WmoClassificationContext;
 use super::text::{
@@ -87,7 +87,9 @@ pub(super) fn classify_wmo_fd(
 pub(super) fn classify_wmo_metar(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if first_nonempty_line(context.body_text).is_some_and(|line| line.starts_with("NPL SA ")) {
+    if context.header.ttaaii.starts_with("SACN")
+        || first_nonempty_line(context.body_text).is_some_and(|line| line.starts_with("NPL SA "))
+    {
         return None;
     }
     let Some((bulletin, issues)) = parse_metar_bulletin(context.body_text) else {
@@ -374,17 +376,80 @@ pub(super) fn classify_wmo_surface_observation_unsupported(
     })
 }
 
-pub(super) fn classify_wmo_canadian_text_unsupported(
+pub(super) fn classify_wmo_canadian(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    looks_like_canadian_text_bulletin(context.header, context.body_text).then(|| {
-        unsupported_wmo_candidate(
+    let family = classify_canadian_wmo_family(context)?;
+
+    match family {
+        CanadianWmoFamily::SurfaceObservation => classify_canadian_surface_observation(context),
+        CanadianWmoFamily::TornadoWarning => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_tornado_warning_bulletin",
+            Some("Canadian tornado warning bulletin"),
+            "unsupported_canadian_tornado_warning_bulletin",
+            "recognized valid WMO Canadian tornado warning bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::SevereThunderstormWarning => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_severe_thunderstorm_warning_bulletin",
+            Some("Canadian severe thunderstorm warning bulletin"),
+            "unsupported_canadian_severe_thunderstorm_warning_bulletin",
+            "recognized valid WMO Canadian severe thunderstorm warning bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::TropicalCyclonePublicInformation => {
+            Some(canadian_unsupported_candidate(
+                context,
+                "canadian_tropical_cyclone_public_information",
+                Some("Canadian tropical cyclone public information"),
+                "unsupported_canadian_tropical_cyclone_public_information",
+                "recognized valid WMO Canadian tropical cyclone public information bulletin, but parsing is not implemented",
+            ))
+        }
+        CanadianWmoFamily::TropicalCycloneWatchWarning => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_tropical_cyclone_watch_warning_bulletin",
+            Some("Canadian tropical cyclone watch/warning bulletin"),
+            "unsupported_canadian_tropical_cyclone_watch_warning_bulletin",
+            "recognized valid WMO Canadian tropical cyclone watch/warning bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::TropicalCycloneTechnicalDiscussion => {
+            Some(canadian_unsupported_candidate(
+                context,
+                "canadian_tropical_cyclone_technical_discussion",
+                Some("Canadian tropical cyclone technical discussion"),
+                "unsupported_canadian_tropical_cyclone_technical_discussion",
+                "recognized valid WMO Canadian tropical cyclone technical discussion bulletin, but parsing is not implemented",
+            ))
+        }
+        CanadianWmoFamily::StormSummary => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_storm_summary",
+            Some("Canadian storm summary"),
+            "unsupported_canadian_storm_summary",
+            "recognized valid WMO Canadian storm summary bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::SpecialWeatherStatement => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_special_weather_statement",
+            Some("Canadian special weather statement"),
+            "unsupported_canadian_special_weather_statement",
+            "recognized valid WMO Canadian special weather statement bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::VolcanicAshBulletin => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_volcanic_ash_bulletin",
+            Some("Canadian volcanic ash bulletin"),
+            "unsupported_canadian_volcanic_ash_bulletin",
+            "recognized valid WMO Canadian volcanic ash bulletin, but parsing is not implemented",
+        )),
+        CanadianWmoFamily::Residual => Some(unsupported_wmo_candidate(
             context.header,
             "unsupported_canadian_text_bulletin",
             "recognized valid WMO Canadian text bulletin, but parsing is not implemented",
             context.body_text,
-        )
-    })
+        )),
+    }
 }
 
 pub(super) fn classify_wmo_unknown_valid(
@@ -396,4 +461,117 @@ pub(super) fn classify_wmo_unknown_valid(
         "recognized valid WMO bulletin without AFOS line, but no parser is available",
         context.body_text,
     ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CanadianWmoFamily {
+    SurfaceObservation,
+    TornadoWarning,
+    SevereThunderstormWarning,
+    TropicalCyclonePublicInformation,
+    TropicalCycloneWatchWarning,
+    TropicalCycloneTechnicalDiscussion,
+    StormSummary,
+    SpecialWeatherStatement,
+    VolcanicAshBulletin,
+    Residual,
+}
+
+fn classify_canadian_wmo_family(
+    context: &WmoClassificationContext<'_>,
+) -> Option<CanadianWmoFamily> {
+    let ttaaii = context.header.ttaaii.as_str();
+
+    if ttaaii.starts_with("SACN") {
+        return Some(CanadianWmoFamily::SurfaceObservation);
+    }
+    if ttaaii.starts_with("WFCN") {
+        return Some(CanadianWmoFamily::TornadoWarning);
+    }
+    if ttaaii.starts_with("WUCN") {
+        return Some(CanadianWmoFamily::SevereThunderstormWarning);
+    }
+    if ttaaii.starts_with("WTCN") && is_tropical_canadian_number(ttaaii) {
+        return Some(CanadianWmoFamily::TropicalCycloneWatchWarning);
+    }
+    if ttaaii.starts_with("FXCN") && is_tropical_canadian_number(ttaaii) {
+        return Some(CanadianWmoFamily::TropicalCycloneTechnicalDiscussion);
+    }
+    if ttaaii.starts_with("WWCN") {
+        return Some(if is_tropical_canadian_number(ttaaii) {
+            CanadianWmoFamily::StormSummary
+        } else {
+            CanadianWmoFamily::SpecialWeatherStatement
+        });
+    }
+    if ttaaii.starts_with("WOCN") {
+        return Some(if is_tropical_canadian_number(ttaaii) {
+            CanadianWmoFamily::TropicalCyclonePublicInformation
+        } else {
+            CanadianWmoFamily::SpecialWeatherStatement
+        });
+    }
+    if ttaaii.starts_with("FVCN") && matches!(canadian_sequence(ttaaii), Some(1..=4)) {
+        return Some(CanadianWmoFamily::VolcanicAshBulletin);
+    }
+    looks_like_canadian_text_bulletin(context.header, context.body_text)
+        .then_some(CanadianWmoFamily::Residual)
+}
+
+fn classify_canadian_surface_observation(
+    context: &WmoClassificationContext<'_>,
+) -> Option<ClassificationCandidate> {
+    let Some((bulletin, issues)) = parse_metar_bulletin(context.body_text) else {
+        return Some(malformed_supported_family(
+            ProductEnrichmentSource::WmoBulletin,
+            "metar_collective",
+            "METAR bulletin",
+            None,
+            Some(context.header.clone()),
+            None,
+            None,
+            None,
+            "metar_parse",
+            "invalid_metar_bulletin",
+            "recognized Canadian surface observation bulletin, but structured parsing failed",
+            first_nonempty_line(context.body_text),
+        ));
+    };
+
+    Some(ClassificationCandidate::Metar(MetarCandidate {
+        source: ProductEnrichmentSource::WmoBulletin,
+        header: None,
+        wmo_header: Some(context.header.clone()),
+        pil: None,
+        bbb_kind: None,
+        body_request: None,
+        bulletin,
+        issues,
+    }))
+}
+
+fn canadian_unsupported_candidate(
+    context: &WmoClassificationContext<'_>,
+    family: &'static str,
+    title: Option<&'static str>,
+    code: &'static str,
+    message: &'static str,
+) -> ClassificationCandidate {
+    unsupported_wmo_family_candidate(
+        context.header,
+        family,
+        title,
+        code,
+        message,
+        context.body_text,
+    )
+}
+
+fn canadian_sequence(ttaaii: &str) -> Option<u8> {
+    let digits = ttaaii.get(4..6)?;
+    digits.parse().ok()
+}
+
+fn is_tropical_canadian_number(ttaaii: &str) -> bool {
+    matches!(canadian_sequence(ttaaii), Some(31..=33 | 41..=43))
 }

@@ -1,6 +1,8 @@
 mod common;
 
-use common::{assert_supported_family, assert_wmo, enrich, fixture_cases, issue_codes};
+use common::{
+    assert_family, assert_supported_family, assert_wmo, enrich, fixture_cases, issue_codes,
+};
 use emwin_parser::{TafForecastGroupKind, enrich_product};
 
 #[test]
@@ -249,4 +251,101 @@ fn dcp_corpus_routes_to_wmo_bulletins() {
             case.name
         );
     }
+}
+
+fn assert_explicit_unsupported_family(family: &str, issue_code: &str, title: &str) {
+    for case in fixture_cases("wmo", family) {
+        let enrichment = enrich(&case);
+        assert_family(&enrichment, family, &case);
+        assert_eq!(
+            enrichment.title,
+            Some(title),
+            "{} -> expected title {title}, got {:?}",
+            case.name,
+            enrichment.title
+        );
+        assert!(
+            enrichment.parsed.is_none(),
+            "{} -> expected no parsed artifact",
+            case.name
+        );
+        assert!(
+            issue_codes(&enrichment.issues).contains(issue_code),
+            "{} -> expected issue code {issue_code}, got {:?}",
+            case.name,
+            issue_codes(&enrichment.issues)
+        );
+    }
+}
+
+#[test]
+fn canadian_tornado_warning_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_tornado_warning_bulletin",
+        "unsupported_canadian_tornado_warning_bulletin",
+        "Canadian tornado warning bulletin",
+    );
+}
+
+#[test]
+fn canadian_severe_thunderstorm_warning_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_severe_thunderstorm_warning_bulletin",
+        "unsupported_canadian_severe_thunderstorm_warning_bulletin",
+        "Canadian severe thunderstorm warning bulletin",
+    );
+}
+
+#[test]
+fn canadian_tropical_cyclone_public_information_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_tropical_cyclone_public_information",
+        "unsupported_canadian_tropical_cyclone_public_information",
+        "Canadian tropical cyclone public information",
+    );
+}
+
+#[test]
+fn canadian_tropical_cyclone_watch_warning_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_tropical_cyclone_watch_warning_bulletin",
+        "unsupported_canadian_tropical_cyclone_watch_warning_bulletin",
+        "Canadian tropical cyclone watch/warning bulletin",
+    );
+}
+
+#[test]
+fn canadian_tropical_cyclone_technical_discussion_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_tropical_cyclone_technical_discussion",
+        "unsupported_canadian_tropical_cyclone_technical_discussion",
+        "Canadian tropical cyclone technical discussion",
+    );
+}
+
+#[test]
+fn canadian_storm_summary_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_storm_summary",
+        "unsupported_canadian_storm_summary",
+        "Canadian storm summary",
+    );
+}
+
+#[test]
+fn canadian_special_weather_statement_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_special_weather_statement",
+        "unsupported_canadian_special_weather_statement",
+        "Canadian special weather statement",
+    );
+}
+
+#[test]
+fn canadian_volcanic_ash_corpus_routes_to_explicit_unsupported_family() {
+    assert_explicit_unsupported_family(
+        "canadian_volcanic_ash_bulletin",
+        "unsupported_canadian_volcanic_ash_bulletin",
+        "Canadian volcanic ash bulletin",
+    );
 }

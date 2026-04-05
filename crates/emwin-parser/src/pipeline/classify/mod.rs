@@ -56,8 +56,8 @@ const WMO_STRATEGIES: &[WmoStrategy] = &[
     wmo::classify_wmo_sigmet,
     wmo::classify_wmo_cwa,
     wmo::classify_wmo_airmet_unsupported,
+    wmo::classify_wmo_canadian,
     wmo::classify_wmo_surface_observation_unsupported,
-    wmo::classify_wmo_canadian_text_unsupported,
     wmo::classify_wmo_unknown_valid,
 ];
 

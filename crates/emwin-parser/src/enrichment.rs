@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_canadian_bulletins_use_wmo_unsupported_source() {
+    fn unsupported_canadian_bulletins_preserve_explicit_family() {
         let enrichment = enrich_product(
             "FPCN11.TXT",
             b"FPCN11 CWWG 090059 AAD\nUPDATED FORECASTS FOR SOUTHERN MANITOBA ISSUED BY ENVIRONMENT CANADA\nAT 7:57 P.M. CDT SUNDAY 8 MARCH 2026 FOR TONIGHT MONDAY AND MONDAY\nNIGHT.\n",
@@ -523,18 +523,42 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_surface_observation_bulletins_use_wmo_unsupported_source() {
+    fn canadian_surface_observation_bulletins_route_to_metar() {
         let enrichment = enrich_product(
             "SAHOURLY.TXT",
             b"SACN74 CWAO 090000 RRC\n\nNPL SA 0000 AUTO8 M M M 990/-36/-39/2703/M/     7003 61MM=\n",
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(enrichment.family, Some("metar_collective"));
+        assert_eq!(enrichment.title, Some("METAR bulletin"));
+        assert_eq!(
+            enrichment
+                .parsed
+                .as_ref()
+                .and_then(ProductArtifact::as_metar)
+                .map(MetarBulletin::report_count),
+            Some(1)
+        );
+        assert!(enrichment.wmo_header.is_some());
+        assert!(enrichment.issues.is_empty());
+    }
+
+    #[test]
+    fn unsupported_canadian_warning_bulletins_use_explicit_family() {
+        let enrichment = enrich_product(
+            "TORW11CN.TXT",
+            b"WFCN11 CWTO 090100\nTORNADO WARNING FOR SOUTHERN ONTARIO.\n",
+        );
+
+        assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
+        assert_eq!(enrichment.family, Some("canadian_tornado_warning_bulletin"));
+        assert_eq!(enrichment.title, Some("Canadian tornado warning bulletin"));
         assert_eq!(
             enrichment.issues[0].code,
-            "unsupported_surface_observation_bulletin"
+            "unsupported_canadian_tornado_warning_bulletin"
         );
+        assert!(enrichment.parsed.is_none());
         assert!(enrichment.wmo_header.is_some());
     }
 

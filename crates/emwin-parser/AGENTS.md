@@ -212,6 +212,7 @@ WMO-only strategies currently support structured parsing for:
 - `SIGMET`
 - `DCP`
 - WMO-routed `CWA`
+- `SACN` Canadian surface observations via the METAR parser
 
 If you add or remove a supported family, update this section, [README.md](./README.md), and the corpus fixtures/tests together.
 

@@ -45,11 +45,11 @@ The crate currently supports:
   - MCD/MPD bulletins
   - ERO bulletins
   - SPC outlook points bulletins
-  - METAR collectives
+  - METAR collectives, including Canadian `SACN*` surface observation bulletins
   - TAF bulletins
   - GOES DCP telemetry bulletins
 - Filename-based classification for supported non-text products
-- WMO-only fallback handling for valid bulletins that do not carry AFOS lines
+- WMO-only fallback handling for valid bulletins that do not carry AFOS lines, including explicit Canadian family routing for unsupported bulletin families
 
 ## Architecture
 
@@ -272,8 +272,8 @@ WMO-only envelope
     +--> DCP
     +--> SIGMET
     +--> unsupported AIRMET
+    +--> explicit Canadian family routing
     +--> unsupported surface observation
-    +--> unsupported Canadian text
     +--> unsupported valid WMO fallback
 ```
 

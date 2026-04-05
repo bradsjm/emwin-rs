@@ -80,7 +80,7 @@ fn wmo_canadian_text_returns_unsupported_candidate() {
 }
 
 #[test]
-fn wmo_surface_observation_returns_unsupported_candidate() {
+fn wmo_canadian_surface_observation_routes_to_metar_candidate() {
     let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
         "SAHOURLY.TXT",
         b"SACN74 CWAO 090000 RRC\n\nNPL SA 0000 AUTO8 M M M=\n",
@@ -88,8 +88,158 @@ fn wmo_surface_observation_returns_unsupported_candidate() {
 
     assert!(matches!(
         classify(&envelope),
-        ClassificationCandidate::UnsupportedWmo(_)
+        ClassificationCandidate::Metar(_)
     ));
+}
+
+#[test]
+fn wmo_canadian_tornado_warning_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "TORW11CN.TXT",
+        b"WFCN11 CWTO 090100\nTORNADO WARNING FOR SOUTHERN ONTARIO.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "canadian_tornado_warning_bulletin");
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_tornado_warning_bulletin"
+    );
+}
+
+#[test]
+fn wmo_canadian_severe_thunderstorm_warning_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "SVRW11CN.TXT",
+        b"WUCN11 CWWG 090100\nSEVERE THUNDERSTORM WARNING FOR SOUTHERN MANITOBA.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(
+        candidate.family,
+        "canadian_severe_thunderstorm_warning_bulletin"
+    );
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_severe_thunderstorm_warning_bulletin"
+    );
+}
+
+#[test]
+fn wmo_canadian_tropical_cyclone_public_information_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "SPSN31CN.TXT",
+        b"WOCN31 CWHX 090100\nPUBLIC TROPICAL CYCLONE INFORMATION FOR ATLANTIC CANADA.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(
+        candidate.family,
+        "canadian_tropical_cyclone_public_information"
+    );
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_tropical_cyclone_public_information"
+    );
+}
+
+#[test]
+fn wmo_canadian_tropical_cyclone_watch_warning_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "HAFN31CN.TXT",
+        b"WTCN31 CWHX 090100\nTROPICAL CYCLONE WATCHES AND WARNINGS FOR ATLANTIC CANADA.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(
+        candidate.family,
+        "canadian_tropical_cyclone_watch_warning_bulletin"
+    );
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_tropical_cyclone_watch_warning_bulletin"
+    );
+}
+
+#[test]
+fn wmo_canadian_tropical_cyclone_technical_discussion_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "HADN31CN.TXT",
+        b"FXCN31 CWHX 090100\nTECHNICAL DISCUSSION FOR TROPICAL CYCLONE CONDITIONS.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(
+        candidate.family,
+        "canadian_tropical_cyclone_technical_discussion"
+    );
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_tropical_cyclone_technical_discussion"
+    );
+}
+
+#[test]
+fn wmo_canadian_storm_summary_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "SUMN31CN.TXT",
+        b"WWCN31 CWHX 090100\nCANADIAN STORM SUMMARY FOR ATLANTIC CANADA.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "canadian_storm_summary");
+    assert_eq!(candidate.code, "unsupported_canadian_storm_summary");
+}
+
+#[test]
+fn wmo_canadian_special_weather_statement_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "SPSWULCN.TXT",
+        b"WOCN10 CWUL 090100\nSPECIAL WEATHER STATEMENT FOR QUEBEC.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "canadian_special_weather_statement");
+    assert_eq!(
+        candidate.code,
+        "unsupported_canadian_special_weather_statement"
+    );
+}
+
+#[test]
+fn wmo_canadian_volcanic_ash_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "ASHN01US.TXT",
+        b"FVCN01 CWAO 090100\nVOLCANIC ASH ADVISORY FOR CANADA.\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "canadian_volcanic_ash_bulletin");
+    assert_eq!(candidate.code, "unsupported_canadian_volcanic_ash_bulletin");
 }
 
 #[test]

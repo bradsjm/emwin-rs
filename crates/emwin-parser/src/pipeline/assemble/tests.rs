@@ -730,6 +730,8 @@ fn assembles_dcp_candidate_shape() {
 #[test]
 fn assembles_unsupported_wmo_candidate_shape() {
     let candidate = ClassificationCandidate::UnsupportedWmo(UnsupportedWmoCandidate {
+        family: "unsupported_wmo_bulletin",
+        title: None,
         header: wmo_header("WAAB31", "LATI"),
         code: "unsupported_airmet_bulletin",
         message: "recognized valid WMO AIRMET bulletin, but textual AIRMET parsing is not implemented",
@@ -742,7 +744,29 @@ fn assembles_unsupported_wmo_candidate_shape() {
         enrichment.source,
         crate::ProductEnrichmentSource::WmoBulletin
     );
+    assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
     assert_eq!(enrichment.issues[0].code, "unsupported_airmet_bulletin");
+}
+
+#[test]
+fn assembles_explicit_unsupported_wmo_family_shape() {
+    let candidate = ClassificationCandidate::UnsupportedWmo(UnsupportedWmoCandidate {
+        family: "canadian_tornado_warning_bulletin",
+        title: Some("Canadian tornado warning bulletin"),
+        header: wmo_header("WFCN11", "CWTO"),
+        code: "unsupported_canadian_tornado_warning_bulletin",
+        message: "recognized valid WMO Canadian tornado warning bulletin, but parsing is not implemented",
+        line: Some("TORNADO WARNING FOR SOUTHERN ONTARIO.".to_string()),
+    });
+
+    let enrichment = assemble_product_enrichment(candidate, "TORW11CN.TXT", b"ignored");
+
+    assert_eq!(enrichment.family, Some("canadian_tornado_warning_bulletin"));
+    assert_eq!(enrichment.title, Some("Canadian tornado warning bulletin"));
+    assert_eq!(
+        enrichment.issues[0].code,
+        "unsupported_canadian_tornado_warning_bulletin"
+    );
 }
 
 #[test]

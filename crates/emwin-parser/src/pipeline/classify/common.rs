@@ -91,7 +91,28 @@ pub(super) fn unsupported_wmo_candidate(
     message: &'static str,
     body_text: &str,
 ) -> ClassificationCandidate {
+    unsupported_wmo_family_candidate(
+        header,
+        "unsupported_wmo_bulletin",
+        None,
+        code,
+        message,
+        body_text,
+    )
+}
+
+/// Produces an unsupported-WMO candidate with an explicit public family identity.
+pub(super) fn unsupported_wmo_family_candidate(
+    header: &WmoHeader,
+    family: &'static str,
+    title: Option<&'static str>,
+    code: &'static str,
+    message: &'static str,
+    body_text: &str,
+) -> ClassificationCandidate {
     ClassificationCandidate::UnsupportedWmo(UnsupportedWmoCandidate {
+        family,
+        title,
         header: header.clone(),
         code,
         message,

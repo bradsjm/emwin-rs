@@ -680,6 +680,8 @@ fn assemble_from_unsupported_wmo(
     filename: &str,
 ) -> ProductEnrichment {
     let UnsupportedWmoCandidate {
+        family,
+        title,
         header,
         code,
         message,
@@ -688,8 +690,8 @@ fn assemble_from_unsupported_wmo(
 
     build_enrichment(EnrichmentBase {
         source: ProductEnrichmentSource::WmoBulletin,
-        family: Some("unsupported_wmo_bulletin"),
-        title: None,
+        family: Some(family),
+        title,
         container: container_from_filename(filename),
         pil: None,
         wmo_prefix: None,

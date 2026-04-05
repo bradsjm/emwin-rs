@@ -375,6 +375,10 @@ pub(crate) struct MalformedFamilyCandidate {
 /// Unsupported-but-recognized WMO bulletin candidate.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct UnsupportedWmoCandidate {
+    /// Public family emitted for the unsupported bulletin.
+    pub(crate) family: &'static str,
+    /// Human-readable title for the unsupported bulletin family.
+    pub(crate) title: Option<&'static str>,
     /// WMO header preserved for output.
     pub(crate) header: WmoHeader,
     /// Stable machine-readable issue code.
