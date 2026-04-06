@@ -1,9 +1,5 @@
 //! Archive query command implementations.
 
-use crate::archive_filter::{
-    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
-    build_feature_list_query, build_timeseries_aggregate_query,
-};
 use crate::cmd::query_output::{
     ArchiveIssueResponse, ArchiveIssuesResponse, ArchiveProductResponse, CellAggregateResponse,
     FacetAggregateResponse, FeatureCollectionResponse, FeaturesResponse, IncidentProductsResponse,
@@ -13,6 +9,10 @@ use crate::cmd::query_output::{
 use crate::error::{CliError, CliResult};
 use chrono::{DateTime, Utc};
 use clap::{ArgGroup, Args, Subcommand};
+use emwin_api::archive_filter::{
+    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
+    build_feature_list_query, build_timeseries_aggregate_query,
+};
 use emwin_db::{
     ArchivedIssueListQuery, CellAggregateQuery, FacetAggregateQuery, FeatureListQuery, IncidentKey,
     IncidentListQuery, IncidentProductsQuery, PostgresConfig, PostgresMetadataSink,
@@ -321,7 +321,7 @@ impl ArchiveFilterArgs {
         limit: Option<usize>,
         cursor: Option<String>,
     ) -> CliResult<ProductListQuery> {
-        ArchiveFilterInput::from(self).into_product_list_query(default_limit, limit, cursor)
+        Ok(ArchiveFilterInput::from(self).into_product_list_query(default_limit, limit, cursor)?)
     }
 }
 
@@ -723,8 +723,8 @@ mod tests {
     use super::{
         IncidentLocatorArgs, incident_key, normalize_lower, normalize_upper, parse_rfc3339_utc,
     };
-    use crate::archive_filter::parse_archive_bool;
     use chrono::{TimeZone, Utc};
+    use emwin_api::archive_filter::parse_archive_bool;
 
     #[test]
     fn parse_rfc3339_normalizes_to_utc() {

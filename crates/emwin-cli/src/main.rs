@@ -3,11 +3,8 @@
 //! This application provides commands for:
 //! - Running the live HTTP server with SSE and file endpoints
 
-mod archive_filter;
 mod cmd;
-mod default_servers;
 mod error;
-mod live;
 mod relay;
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
@@ -108,6 +105,15 @@ impl Commands {
     }
 }
 
+impl From<ReceiverKind> for emwin_api::ReceiverKind {
+    fn from(value: ReceiverKind) -> Self {
+        match value {
+            ReceiverKind::Qbt => Self::Qbt,
+            ReceiverKind::Wxwire => Self::Wxwire,
+        }
+    }
+}
+
 /// CLI argument parser for emwin.
 #[derive(Debug, Parser)]
 #[command(name = "emwin")]
@@ -146,10 +152,10 @@ async fn main() -> crate::error::CliResult<()> {
             persist_database_url,
             openapi_auth_token,
         } => {
-            let options = live::server::ServerOptions {
+            let options = emwin_api::ServerOptions {
                 username,
                 password,
-                receiver,
+                receiver: receiver.into(),
                 raw_servers: servers,
                 server_list_path,
                 bind,
@@ -165,7 +171,7 @@ async fn main() -> crate::error::CliResult<()> {
                 postgres_database_url: persist_database_url,
                 openapi_auth_token,
             };
-            live::server::run(options).await
+            emwin_api::run(options).await.map_err(Into::into)
         }
         Commands::Relay { options } => relay::runtime::run(options).await,
     }

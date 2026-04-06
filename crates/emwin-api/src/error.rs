@@ -1,16 +1,18 @@
-//! Error types for the EMWIN CLI.
-//!
-//! This module defines the error types used throughout the CLI application,
-//! providing a unified error handling interface that wraps errors from
-//! underlying libraries (emwin-protocol) and CLI-specific errors.
+//! Error types for the EMWIN API crate.
 
 use thiserror::Error;
 
-/// Result type alias for CLI operations.
-pub type CliResult<T> = std::result::Result<T, CliError>;
+/// Result type alias for API operations.
+pub type ApiResult<T> = std::result::Result<T, ApiError>;
+
+/// Compatibility alias retained so the moved server code can remain mechanical.
+pub type CliResult<T> = ApiResult<T>;
+
+/// Compatibility alias retained so the moved server code can remain mechanical.
+pub type CliError = ApiError;
 
 #[derive(Debug, Error)]
-pub enum CliError {
+pub enum ApiError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -29,15 +31,13 @@ pub enum CliError {
     Ingest(#[from] emwin_protocol::ingest::IngestError),
     #[error(transparent)]
     Persistence(#[from] emwin_db::PersistError),
-    #[error(transparent)]
-    Api(#[from] emwin_api::ApiError),
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("runtime failure: {0}")]
     Runtime(String),
 }
 
-impl CliError {
+impl ApiError {
     pub fn invalid_argument(msg: impl Into<String>) -> Self {
         Self::InvalidArgument(msg.into())
     }

@@ -7,66 +7,66 @@ use emwin_db::{
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ArchiveFilterInput {
-    pub(crate) filename: Option<String>,
-    pub(crate) source_receiver: Option<String>,
-    pub(crate) source: Option<String>,
-    pub(crate) pil: Option<String>,
-    pub(crate) family: Option<String>,
-    pub(crate) artifact_kind: Option<String>,
-    pub(crate) container: Option<String>,
-    pub(crate) wmo_prefix: Option<String>,
-    pub(crate) office: Option<String>,
-    pub(crate) office_city: Option<String>,
-    pub(crate) office_state: Option<String>,
-    pub(crate) bbb_kind: Option<String>,
-    pub(crate) cccc: Option<String>,
-    pub(crate) ttaaii: Option<String>,
-    pub(crate) afos: Option<String>,
-    pub(crate) bbb: Option<String>,
-    pub(crate) has_issues: Option<String>,
-    pub(crate) issue_kind: Option<String>,
-    pub(crate) issue_code: Option<String>,
-    pub(crate) has_vtec: Option<String>,
-    pub(crate) has_ugc: Option<String>,
-    pub(crate) has_hvtec: Option<String>,
-    pub(crate) has_latlon: Option<String>,
-    pub(crate) has_time_mot_loc: Option<String>,
-    pub(crate) has_wind_hail: Option<String>,
-    pub(crate) state: Option<String>,
-    pub(crate) county: Option<String>,
-    pub(crate) zone: Option<String>,
-    pub(crate) fire_zone: Option<String>,
-    pub(crate) marine_zone: Option<String>,
-    pub(crate) vtec_phenomena: Option<String>,
-    pub(crate) vtec_significance: Option<String>,
-    pub(crate) vtec_action: Option<String>,
-    pub(crate) vtec_office: Option<String>,
-    pub(crate) etn: Option<String>,
-    pub(crate) hvtec_nwslid: Option<String>,
-    pub(crate) hvtec_severity: Option<String>,
-    pub(crate) hvtec_cause: Option<String>,
-    pub(crate) hvtec_record: Option<String>,
-    pub(crate) wind_hail_kind: Option<String>,
-    pub(crate) lat: Option<f64>,
-    pub(crate) lon: Option<f64>,
-    pub(crate) distance_miles: Option<f64>,
-    pub(crate) min_lat: Option<f64>,
-    pub(crate) max_lat: Option<f64>,
-    pub(crate) min_lon: Option<f64>,
-    pub(crate) max_lon: Option<f64>,
-    pub(crate) min_wind_mph: Option<f64>,
-    pub(crate) min_hail_inches: Option<f64>,
-    pub(crate) min_size: Option<usize>,
-    pub(crate) max_size: Option<usize>,
-    pub(crate) source_timestamp_after: Option<i64>,
-    pub(crate) source_timestamp_before: Option<i64>,
-    pub(crate) ingested_after: Option<DateTime<Utc>>,
-    pub(crate) ingested_before: Option<DateTime<Utc>>,
+pub struct ArchiveFilterInput {
+    pub filename: Option<String>,
+    pub source_receiver: Option<String>,
+    pub source: Option<String>,
+    pub pil: Option<String>,
+    pub family: Option<String>,
+    pub artifact_kind: Option<String>,
+    pub container: Option<String>,
+    pub wmo_prefix: Option<String>,
+    pub office: Option<String>,
+    pub office_city: Option<String>,
+    pub office_state: Option<String>,
+    pub bbb_kind: Option<String>,
+    pub cccc: Option<String>,
+    pub ttaaii: Option<String>,
+    pub afos: Option<String>,
+    pub bbb: Option<String>,
+    pub has_issues: Option<String>,
+    pub issue_kind: Option<String>,
+    pub issue_code: Option<String>,
+    pub has_vtec: Option<String>,
+    pub has_ugc: Option<String>,
+    pub has_hvtec: Option<String>,
+    pub has_latlon: Option<String>,
+    pub has_time_mot_loc: Option<String>,
+    pub has_wind_hail: Option<String>,
+    pub state: Option<String>,
+    pub county: Option<String>,
+    pub zone: Option<String>,
+    pub fire_zone: Option<String>,
+    pub marine_zone: Option<String>,
+    pub vtec_phenomena: Option<String>,
+    pub vtec_significance: Option<String>,
+    pub vtec_action: Option<String>,
+    pub vtec_office: Option<String>,
+    pub etn: Option<String>,
+    pub hvtec_nwslid: Option<String>,
+    pub hvtec_severity: Option<String>,
+    pub hvtec_cause: Option<String>,
+    pub hvtec_record: Option<String>,
+    pub wind_hail_kind: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub distance_miles: Option<f64>,
+    pub min_lat: Option<f64>,
+    pub max_lat: Option<f64>,
+    pub min_lon: Option<f64>,
+    pub max_lon: Option<f64>,
+    pub min_wind_mph: Option<f64>,
+    pub min_hail_inches: Option<f64>,
+    pub min_size: Option<usize>,
+    pub max_size: Option<usize>,
+    pub source_timestamp_after: Option<i64>,
+    pub source_timestamp_before: Option<i64>,
+    pub ingested_after: Option<DateTime<Utc>>,
+    pub ingested_before: Option<DateTime<Utc>>,
 }
 
 impl ArchiveFilterInput {
-    pub(crate) fn into_product_list_query(
+    pub fn into_product_list_query(
         self,
         default_limit: usize,
         limit: Option<usize>,
@@ -147,7 +147,7 @@ impl ArchiveFilterInput {
     }
 }
 
-pub(crate) fn build_feature_list_query(
+pub fn build_feature_list_query(
     filters: ArchiveFilterInput,
     kind: Option<String>,
     default_limit: usize,
@@ -160,7 +160,7 @@ pub(crate) fn build_feature_list_query(
     })
 }
 
-pub(crate) fn build_facet_aggregate_query(
+pub fn build_facet_aggregate_query(
     filters: ArchiveFilterInput,
     dimension: &str,
     limit: Option<usize>,
@@ -172,7 +172,7 @@ pub(crate) fn build_facet_aggregate_query(
     })
 }
 
-pub(crate) fn build_timeseries_aggregate_query(
+pub fn build_timeseries_aggregate_query(
     filters: ArchiveFilterInput,
     measure: &str,
     start: DateTime<Utc>,
@@ -188,7 +188,7 @@ pub(crate) fn build_timeseries_aggregate_query(
     })
 }
 
-pub(crate) fn build_cell_aggregate_query(
+pub fn build_cell_aggregate_query(
     filters: ArchiveFilterInput,
     measure: &str,
     precision: u8,
@@ -202,7 +202,7 @@ pub(crate) fn build_cell_aggregate_query(
     })
 }
 
-pub(crate) fn parse_archive_bool(name: &str, raw: Option<&str>) -> CliResult<Option<bool>> {
+pub fn parse_archive_bool(name: &str, raw: Option<&str>) -> CliResult<Option<bool>> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
         Some(value) if value.eq_ignore_ascii_case("true") || value == "1" => Ok(Some(true)),
         Some(value) if value.eq_ignore_ascii_case("false") || value == "0" => Ok(Some(false)),

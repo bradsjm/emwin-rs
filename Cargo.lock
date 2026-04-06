@@ -645,15 +645,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "emwin-cli"
+name = "emwin-api"
 version = "0.3.1"
 dependencies = [
  "axum",
  "bytes",
  "chrono",
- "clap",
  "crc32fast",
- "dotenvy",
  "emwin-db",
  "emwin-parser",
  "emwin-protocol",
@@ -668,11 +666,30 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
- "tracing-subscriber",
  "url",
  "utoipa",
  "utoipa-swagger-ui",
  "zip 8.2.0",
+]
+
+[[package]]
+name = "emwin-cli"
+version = "0.3.1"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "dotenvy",
+ "emwin-api",
+ "emwin-db",
+ "emwin-protocol",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
