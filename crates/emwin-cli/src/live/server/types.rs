@@ -3,14 +3,19 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
+use crate::archive_filter::{
+    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
+    build_feature_list_query, build_timeseries_aggregate_query,
+};
 use crate::cmd::event_output::{frame_event_name, frame_event_to_json};
 use crate::live::filter::{FileEventFilter, FileFilterInput};
 use crate::live::persistence::FilePersistenceProducer;
 use crate::live::server_support::{RetainedFiles, file_download_url};
 use emwin_db::{
-    ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary, CompletedFileMetadata,
+    AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedProductDetail,
+    ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata, FacetAggregateBucket,
     IncidentChange, IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
-    PaginatedResponse, PersistenceStats, PostgresMetadataSink,
+    PaginatedResponse, PersistenceStats, PostgresMetadataSink, TimeseriesAggregateBucket,
 };
 use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
 use emwin_protocol::wxwire_receiver::{WxWireReceiverFrameEvent, WxWireReceiverTelemetrySnapshot};
@@ -23,10 +28,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 use tokio::sync::{broadcast, watch};
-use utoipa::IntoParams;
+use utoipa::{IntoParams, ToSchema};
 
-pub(crate) const LIVE_API_PREFIX: &str = "/v1/live";
-pub(crate) const ARCHIVE_API_PREFIX: &str = "/v1/archive";
+pub(crate) const API_PREFIX: &str = "/v1";
 pub(crate) const OPENAPI_JSON_PATH: &str = "/openapi.json";
 pub(crate) const OPENAPI_AUTH_SCHEME_NAME: &str = "bearer_auth";
 
@@ -177,7 +181,7 @@ impl EventKind {
                 WxWireReceiverFrameEvent::Warning(_) => "warning",
                 _ => "unknown",
             },
-            Self::FileComplete(_) => "file_complete",
+            Self::FileComplete(_) => "product_available",
             Self::Telemetry(_) => "telemetry",
             Self::Error { .. } => "error",
         }
@@ -398,6 +402,255 @@ pub(crate) struct IncidentsQuery {
     pub(crate) cursor: Option<String>,
 }
 
+#[derive(Debug, Deserialize, IntoParams, ToSchema, Clone, Default)]
+pub(crate) struct ArchiveFilterParams {
+    pub(crate) filename: Option<String>,
+    pub(crate) source_receiver: Option<String>,
+    pub(crate) source: Option<String>,
+    pub(crate) pil: Option<String>,
+    pub(crate) family: Option<String>,
+    pub(crate) artifact_kind: Option<String>,
+    pub(crate) container: Option<String>,
+    pub(crate) wmo_prefix: Option<String>,
+    pub(crate) office: Option<String>,
+    pub(crate) office_city: Option<String>,
+    pub(crate) office_state: Option<String>,
+    pub(crate) bbb_kind: Option<String>,
+    pub(crate) cccc: Option<String>,
+    pub(crate) ttaaii: Option<String>,
+    pub(crate) afos: Option<String>,
+    pub(crate) bbb: Option<String>,
+    pub(crate) has_issues: Option<String>,
+    pub(crate) issue_kind: Option<String>,
+    pub(crate) issue_code: Option<String>,
+    pub(crate) has_vtec: Option<String>,
+    pub(crate) has_ugc: Option<String>,
+    pub(crate) has_hvtec: Option<String>,
+    pub(crate) has_latlon: Option<String>,
+    pub(crate) has_time_mot_loc: Option<String>,
+    pub(crate) has_wind_hail: Option<String>,
+    pub(crate) state: Option<String>,
+    pub(crate) county: Option<String>,
+    pub(crate) zone: Option<String>,
+    pub(crate) fire_zone: Option<String>,
+    pub(crate) marine_zone: Option<String>,
+    pub(crate) vtec_phenomena: Option<String>,
+    pub(crate) vtec_significance: Option<String>,
+    pub(crate) vtec_action: Option<String>,
+    pub(crate) vtec_office: Option<String>,
+    pub(crate) etn: Option<String>,
+    pub(crate) hvtec_nwslid: Option<String>,
+    pub(crate) hvtec_severity: Option<String>,
+    pub(crate) hvtec_cause: Option<String>,
+    pub(crate) hvtec_record: Option<String>,
+    pub(crate) wind_hail_kind: Option<String>,
+    pub(crate) lat: Option<f64>,
+    pub(crate) lon: Option<f64>,
+    pub(crate) distance_miles: Option<f64>,
+    pub(crate) min_lat: Option<f64>,
+    pub(crate) max_lat: Option<f64>,
+    pub(crate) min_lon: Option<f64>,
+    pub(crate) max_lon: Option<f64>,
+    pub(crate) min_wind_mph: Option<f64>,
+    pub(crate) min_hail_inches: Option<f64>,
+    pub(crate) min_size: Option<usize>,
+    pub(crate) max_size: Option<usize>,
+    pub(crate) source_timestamp_after: Option<i64>,
+    pub(crate) source_timestamp_before: Option<i64>,
+    pub(crate) ingested_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) ingested_before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl ArchiveFilterParams {
+    pub(crate) fn into_product_list_query(
+        self,
+        default_limit: usize,
+        limit: Option<usize>,
+        cursor: Option<String>,
+    ) -> Result<emwin_db::ProductListQuery, String> {
+        ArchiveFilterInput::from(self)
+            .into_product_list_query(default_limit, limit, cursor)
+            .map_err(|err| err.to_string())
+    }
+}
+
+impl From<ArchiveFilterParams> for ArchiveFilterInput {
+    fn from(value: ArchiveFilterParams) -> Self {
+        Self {
+            filename: value.filename,
+            source_receiver: value.source_receiver,
+            source: value.source,
+            pil: value.pil,
+            family: value.family,
+            artifact_kind: value.artifact_kind,
+            container: value.container,
+            wmo_prefix: value.wmo_prefix,
+            office: value.office,
+            office_city: value.office_city,
+            office_state: value.office_state,
+            bbb_kind: value.bbb_kind,
+            cccc: value.cccc,
+            ttaaii: value.ttaaii,
+            afos: value.afos,
+            bbb: value.bbb,
+            has_issues: value.has_issues,
+            issue_kind: value.issue_kind,
+            issue_code: value.issue_code,
+            has_vtec: value.has_vtec,
+            has_ugc: value.has_ugc,
+            has_hvtec: value.has_hvtec,
+            has_latlon: value.has_latlon,
+            has_time_mot_loc: value.has_time_mot_loc,
+            has_wind_hail: value.has_wind_hail,
+            state: value.state,
+            county: value.county,
+            zone: value.zone,
+            fire_zone: value.fire_zone,
+            marine_zone: value.marine_zone,
+            vtec_phenomena: value.vtec_phenomena,
+            vtec_significance: value.vtec_significance,
+            vtec_action: value.vtec_action,
+            vtec_office: value.vtec_office,
+            etn: value.etn,
+            hvtec_nwslid: value.hvtec_nwslid,
+            hvtec_severity: value.hvtec_severity,
+            hvtec_cause: value.hvtec_cause,
+            hvtec_record: value.hvtec_record,
+            wind_hail_kind: value.wind_hail_kind,
+            lat: value.lat,
+            lon: value.lon,
+            distance_miles: value.distance_miles,
+            min_lat: value.min_lat,
+            max_lat: value.max_lat,
+            min_lon: value.min_lon,
+            max_lon: value.max_lon,
+            min_wind_mph: value.min_wind_mph,
+            min_hail_inches: value.min_hail_inches,
+            min_size: value.min_size,
+            max_size: value.max_size,
+            source_timestamp_after: value.source_timestamp_after,
+            source_timestamp_before: value.source_timestamp_before,
+            ingested_after: value.ingested_after,
+            ingested_before: value.ingested_before,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct ProductsQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) limit: Option<usize>,
+    pub(crate) cursor: Option<String>,
+}
+
+impl ProductsQuery {
+    pub(crate) fn into_product_list_query(self) -> Result<emwin_db::ProductListQuery, String> {
+        self.filters
+            .into_product_list_query(100, self.limit, self.cursor)
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct FeaturesQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) kind: Option<String>,
+    pub(crate) limit: Option<usize>,
+    pub(crate) cursor: Option<String>,
+}
+
+impl FeaturesQuery {
+    pub(crate) fn into_feature_list_query(self) -> Result<emwin_db::FeatureListQuery, String> {
+        build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, self.cursor)
+            .map_err(|err| err.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct FeaturesGeoJsonQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) kind: Option<String>,
+    pub(crate) limit: Option<usize>,
+}
+
+impl FeaturesGeoJsonQuery {
+    pub(crate) fn into_feature_list_query(self) -> Result<emwin_db::FeatureListQuery, String> {
+        build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, None)
+            .map_err(|err| err.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct FacetAggregateHttpQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) dimension: String,
+    pub(crate) limit: Option<usize>,
+}
+
+impl FacetAggregateHttpQuery {
+    pub(crate) fn into_facet_aggregate_query(
+        self,
+    ) -> Result<emwin_db::FacetAggregateQuery, String> {
+        build_facet_aggregate_query(self.filters.into(), &self.dimension, self.limit)
+            .map_err(|err| err.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct TimeseriesAggregateHttpQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) measure: String,
+    pub(crate) start: chrono::DateTime<chrono::Utc>,
+    pub(crate) end: chrono::DateTime<chrono::Utc>,
+    pub(crate) bucket: String,
+}
+
+impl TimeseriesAggregateHttpQuery {
+    pub(crate) fn into_timeseries_aggregate_query(
+        self,
+    ) -> Result<emwin_db::TimeseriesAggregateQuery, String> {
+        build_timeseries_aggregate_query(
+            self.filters.into(),
+            &self.measure,
+            self.start,
+            self.end,
+            &self.bucket,
+        )
+        .map_err(|err| err.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct CellAggregateHttpQuery {
+    #[serde(flatten)]
+    #[param(inline)]
+    pub(crate) filters: ArchiveFilterParams,
+    pub(crate) measure: String,
+    pub(crate) precision: u8,
+    pub(crate) limit: Option<usize>,
+}
+
+impl CellAggregateHttpQuery {
+    pub(crate) fn into_cell_aggregate_query(self) -> Result<emwin_db::CellAggregateQuery, String> {
+        build_cell_aggregate_query(
+            self.filters.into(),
+            &self.measure,
+            self.precision,
+            self.limit,
+        )
+        .map_err(|err| err.to_string())
+    }
+}
+
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IncidentProductsQuery {
     pub(crate) limit: Option<usize>,
@@ -458,6 +711,10 @@ pub(crate) struct EventsQuery {
     pub(crate) lat: Option<f64>,
     pub(crate) lon: Option<f64>,
     pub(crate) distance_miles: Option<f64>,
+    pub(crate) min_lat: Option<f64>,
+    pub(crate) max_lat: Option<f64>,
+    pub(crate) min_lon: Option<f64>,
+    pub(crate) max_lon: Option<f64>,
     pub(crate) min_wind_mph: Option<f64>,
     pub(crate) min_hail_inches: Option<f64>,
     pub(crate) min_size: Option<usize>,
@@ -508,6 +765,10 @@ impl From<EventsQuery> for FileFilterInput {
             lat: query.lat,
             lon: query.lon,
             distance_miles: query.distance_miles,
+            min_lat: query.min_lat,
+            max_lat: query.max_lat,
+            min_lon: query.min_lon,
+            max_lon: query.max_lon,
             min_wind_mph: query.min_wind_mph,
             min_hail_inches: query.min_hail_inches,
             min_size: query.min_size,
@@ -621,10 +882,134 @@ impl ArchiveIssuePayload {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ArchivedFeaturePayload {
+    #[serde(flatten)]
+    pub(crate) feature: ArchivedFeature,
+    pub(crate) product_url: String,
+    pub(crate) product_raw_url: String,
+}
+
+impl ArchivedFeaturePayload {
+    pub(crate) fn from_feature(feature: ArchivedFeature) -> Self {
+        let product_url = archive_product_url(feature.product_id);
+        let product_raw_url = archive_product_raw_url(feature.product_id);
+        Self {
+            feature,
+            product_url,
+            product_raw_url,
+        }
+    }
+
+    pub(crate) fn into_geojson_feature(self) -> GeoJsonFeature {
+        let mut properties = match self.feature.properties {
+            serde_json::Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        properties.insert(
+            "feature_kind".to_string(),
+            serde_json::json!(self.feature.feature_kind),
+        );
+        properties.insert(
+            "product_id".to_string(),
+            serde_json::json!(self.feature.product_id),
+        );
+        properties.insert(
+            "source_timestamp_utc".to_string(),
+            serde_json::json!(self.feature.source_timestamp_utc),
+        );
+        properties.insert(
+            "product_url".to_string(),
+            serde_json::json!(self.product_url),
+        );
+        properties.insert(
+            "product_raw_url".to_string(),
+            serde_json::json!(self.product_raw_url),
+        );
+
+        GeoJsonFeature::new(
+            self.feature.feature_id,
+            self.feature.geometry,
+            serde_json::Value::Object(properties),
+        )
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct IncidentsResponse {
     #[serde(flatten)]
     pub(crate) page: PaginatedResponse<IncidentSummaryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ProductsResponse {
+    #[serde(flatten)]
+    pub(crate) page: PaginatedResponse<ArchiveProductSummaryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FeaturesResponse {
+    #[serde(flatten)]
+    pub(crate) page: PaginatedResponse<ArchivedFeaturePayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct GeoJsonFeature {
+    pub(crate) id: String,
+    #[serde(rename = "type")]
+    pub(crate) kind: &'static str,
+    pub(crate) geometry: serde_json::Value,
+    pub(crate) properties: serde_json::Value,
+}
+
+impl GeoJsonFeature {
+    pub(crate) fn new(
+        id: String,
+        geometry: serde_json::Value,
+        properties: serde_json::Value,
+    ) -> Self {
+        Self {
+            id,
+            kind: "Feature",
+            geometry,
+            properties,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FeatureCollectionResponse {
+    #[serde(rename = "type")]
+    pub(crate) kind: &'static str,
+    pub(crate) features: Vec<GeoJsonFeature>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FacetAggregateResponse {
+    pub(crate) dimension: String,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<FacetAggregateBucket>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TimeseriesAggregateResponse {
+    pub(crate) measure: String,
+    pub(crate) bucket: String,
+    pub(crate) start: chrono::DateTime<chrono::Utc>,
+    pub(crate) end: chrono::DateTime<chrono::Utc>,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<TimeseriesAggregateBucket>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct CellAggregateResponse {
+    pub(crate) measure: String,
+    pub(crate) precision: u8,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<CellAggregateBucket>,
 }
 
 #[derive(Debug, Serialize)]
@@ -665,28 +1050,28 @@ pub(crate) struct HealthResponse {
 
 pub(crate) fn incident_detail_url(incident: &IncidentSummary) -> String {
     format!(
-        "{LIVE_API_PREFIX}/incidents/{}/{}/{}/{}",
+        "{API_PREFIX}/incidents/{}/{}/{}/{}",
         incident.office, incident.phenomena, incident.significance, incident.etn
     )
 }
 
 pub(crate) fn incident_products_url(incident: &IncidentSummary) -> String {
     format!(
-        "{LIVE_API_PREFIX}/incidents/{}/{}/{}/{}/products",
+        "{API_PREFIX}/incidents/{}/{}/{}/{}/products",
         incident.office, incident.phenomena, incident.significance, incident.etn
     )
 }
 
 pub(crate) fn archive_product_url(product_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/products/{product_id}")
+    format!("{API_PREFIX}/products/{product_id}")
 }
 
 pub(crate) fn archive_product_raw_url(product_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/products/{product_id}/raw")
+    format!("{API_PREFIX}/products/{product_id}/raw")
 }
 
 pub(crate) fn archive_issue_url(issue_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/issues/{issue_id}")
+    format!("{API_PREFIX}/issues/{issue_id}")
 }
 
 #[derive(Debug, Clone)]

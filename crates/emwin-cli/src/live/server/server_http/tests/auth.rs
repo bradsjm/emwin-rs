@@ -20,7 +20,7 @@ async fn auth_enabled_rejects_missing_or_invalid_bearer_tokens() {
         Some("Bearer"),
         Some("Bearer wrong-token"),
     ] {
-        let mut request = Request::builder().uri("/v1/live/health").method("GET");
+        let mut request = Request::builder().uri("/v1/health").method("GET");
         if let Some(value) = header {
             request = request.header("authorization", value);
         }
@@ -45,7 +45,7 @@ async fn auth_enabled_allows_protected_routes_with_valid_bearer_token() {
                 .expect("valid socket addr"),
         ));
 
-    for path in ["/v1/live/health", "/v1/live/events"] {
+    for path in ["/v1/health", "/v1/streams/products"] {
         let response = app
             .clone()
             .oneshot(
@@ -83,7 +83,7 @@ async fn auth_enabled_accepts_case_insensitive_bearer_scheme_and_ascii_whitespac
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/v1/live/health")
+                    .uri("/v1/health")
                     .method("GET")
                     .header("authorization", header)
                     .body(Body::empty())
@@ -104,7 +104,7 @@ async fn cors_preflight_allows_authorization_header() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/v1/live/health")
+                .uri("/v1/health")
                 .method(Method::OPTIONS)
                 .header(ORIGIN, "https://example.com")
                 .header(ACCESS_CONTROL_REQUEST_METHOD, "GET")

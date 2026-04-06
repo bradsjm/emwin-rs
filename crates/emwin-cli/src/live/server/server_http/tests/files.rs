@@ -32,7 +32,7 @@ async fn files_download_accepts_url_encoded_nested_filename() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/v1/live/files/nested%2Fmy%20file.txt")
+                .uri("/v1/files/nested%2Fmy%20file.txt")
                 .method("GET")
                 .body(Body::empty())
                 .expect("request should build"),
@@ -72,7 +72,7 @@ Body
     let Json(response) = files_handler(State(state)).await;
     let file = &response.files[0];
     assert_eq!(file.metadata.filename, "TAFPDKGA.TXT");
-    assert_eq!(file.download_url, "/v1/live/files/TAFPDKGA.TXT");
+    assert_eq!(file.download_url, "/v1/files/TAFPDKGA.TXT");
     assert_eq!(file.metadata.product.pil.as_deref(), Some("TAF"));
     assert!(
         file.metadata

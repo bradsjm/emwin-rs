@@ -58,7 +58,7 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/v1/live/metrics")
+                .uri("/v1/metrics")
                 .method("GET")
                 .body(Body::empty())
                 .expect("request should build"),

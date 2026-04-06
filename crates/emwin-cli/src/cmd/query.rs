@@ -1,15 +1,22 @@
 //! Archive query command implementations.
 
+use crate::archive_filter::{
+    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
+    build_feature_list_query, build_timeseries_aggregate_query,
+};
 use crate::cmd::query_output::{
-    ArchiveIssueResponse, ArchiveIssuesResponse, ArchiveProductResponse, IncidentProductsResponse,
-    IncidentResponse, IncidentsResponse, write_json, write_raw_bytes,
+    ArchiveIssueResponse, ArchiveIssuesResponse, ArchiveProductResponse, CellAggregateResponse,
+    FacetAggregateResponse, FeatureCollectionResponse, FeaturesResponse, IncidentProductsResponse,
+    IncidentResponse, IncidentsResponse, ProductsResponse, TimeseriesAggregateResponse, write_json,
+    write_raw_bytes,
 };
 use crate::error::{CliError, CliResult};
 use chrono::{DateTime, Utc};
 use clap::{ArgGroup, Args, Subcommand};
 use emwin_db::{
-    ArchivedIssueListQuery, IncidentKey, IncidentListQuery, IncidentProductsQuery, PostgresConfig,
-    PostgresMetadataSink,
+    ArchivedIssueListQuery, CellAggregateQuery, FacetAggregateQuery, FeatureListQuery, IncidentKey,
+    IncidentListQuery, IncidentProductsQuery, PostgresConfig, PostgresMetadataSink,
+    ProductListQuery, TimeseriesAggregateQuery,
 };
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -34,6 +41,8 @@ pub(crate) enum QueryCommand {
     Incident(IncidentArgs),
     /// List archived products linked to one incident.
     IncidentProducts(IncidentIdentityArgs),
+    /// List archived product summaries.
+    Products(ProductsArgs),
     /// Fetch one archived product detail record.
     Product(ProductArgs),
     /// List archived issue rows.
@@ -42,6 +51,90 @@ pub(crate) enum QueryCommand {
     Issue(IssueArgs),
     /// Read raw archived payload bytes.
     ProductRaw(ProductRawArgs),
+    /// List archived spatial features.
+    Features(FeaturesArgs),
+    /// Emit a GeoJSON FeatureCollection view of archived spatial features.
+    FeaturesGeojson(FeaturesGeoJsonArgs),
+    /// Aggregate archived products into facet buckets.
+    AggregateFacets(FacetAggregateArgs),
+    /// Aggregate archived products into time buckets.
+    AggregateTimeseries(TimeseriesAggregateArgs),
+    /// Aggregate archived products into geohash cells.
+    AggregateCells(CellAggregateArgs),
+}
+
+impl QueryCommand {
+    fn prepare(self) -> CliResult<PreparedQueryCommand> {
+        match self {
+            Self::Incidents(args) => Ok(PreparedQueryCommand::Incidents(args)),
+            Self::Incident(args) => Ok(PreparedQueryCommand::Incident(args.identity)),
+            Self::IncidentProducts(args) => Ok(PreparedQueryCommand::IncidentProducts(args)),
+            Self::Products(args) => Ok(PreparedQueryCommand::Products(
+                args.filters
+                    .into_product_list_query(100, Some(args.limit), args.cursor)?,
+            )),
+            Self::Product(args) => Ok(PreparedQueryCommand::Product(args.product_id)),
+            Self::Issues(args) => Ok(PreparedQueryCommand::Issues(args)),
+            Self::Issue(args) => Ok(PreparedQueryCommand::Issue(args.issue_id)),
+            Self::ProductRaw(args) => Ok(PreparedQueryCommand::ProductRaw(args)),
+            Self::Features(args) => Ok(PreparedQueryCommand::Features(build_feature_list_query(
+                args.filters.into(),
+                args.kind,
+                100,
+                Some(args.limit),
+                args.cursor,
+            )?)),
+            Self::FeaturesGeojson(args) => Ok(PreparedQueryCommand::FeaturesGeojson(
+                build_feature_list_query(
+                    args.filters.into(),
+                    args.kind,
+                    100,
+                    Some(args.limit),
+                    None,
+                )?,
+            )),
+            Self::AggregateFacets(args) => Ok(PreparedQueryCommand::AggregateFacets(
+                build_facet_aggregate_query(
+                    args.filters.into(),
+                    &args.dimension,
+                    Some(args.limit),
+                )?,
+            )),
+            Self::AggregateTimeseries(args) => Ok(PreparedQueryCommand::AggregateTimeseries(
+                build_timeseries_aggregate_query(
+                    args.filters.into(),
+                    &args.measure,
+                    args.start,
+                    args.end,
+                    &args.bucket,
+                )?,
+            )),
+            Self::AggregateCells(args) => Ok(PreparedQueryCommand::AggregateCells(
+                build_cell_aggregate_query(
+                    args.filters.into(),
+                    &args.measure,
+                    args.precision,
+                    Some(args.limit),
+                )?,
+            )),
+        }
+    }
+}
+
+enum PreparedQueryCommand {
+    Incidents(IncidentsArgs),
+    Incident(IncidentLocatorArgs),
+    IncidentProducts(IncidentIdentityArgs),
+    Products(ProductListQuery),
+    Product(i64),
+    Issues(IssuesArgs),
+    Issue(i64),
+    ProductRaw(ProductRawArgs),
+    Features(FeatureListQuery),
+    FeaturesGeojson(FeatureListQuery),
+    AggregateFacets(FacetAggregateQuery),
+    AggregateTimeseries(TimeseriesAggregateQuery),
+    AggregateCells(CellAggregateQuery),
 }
 
 #[derive(Debug, Args)]
@@ -97,6 +190,258 @@ pub(crate) struct ProductArgs {
     product_id: i64,
 }
 
+#[derive(Debug, Args, Clone)]
+pub(crate) struct ProductsArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    #[arg(long, default_value_t = 100)]
+    limit: usize,
+    #[arg(long)]
+    cursor: Option<String>,
+}
+
+#[derive(Debug, Args, Clone, Default)]
+pub(crate) struct ArchiveFilterArgs {
+    #[arg(long)]
+    filename: Option<String>,
+    #[arg(long)]
+    source_receiver: Option<String>,
+    #[arg(long)]
+    source: Option<String>,
+    #[arg(long)]
+    pil: Option<String>,
+    #[arg(long)]
+    family: Option<String>,
+    #[arg(long)]
+    artifact_kind: Option<String>,
+    #[arg(long)]
+    container: Option<String>,
+    #[arg(long)]
+    wmo_prefix: Option<String>,
+    #[arg(long)]
+    office: Option<String>,
+    #[arg(long)]
+    office_city: Option<String>,
+    #[arg(long)]
+    office_state: Option<String>,
+    #[arg(long)]
+    bbb_kind: Option<String>,
+    #[arg(long)]
+    cccc: Option<String>,
+    #[arg(long)]
+    ttaaii: Option<String>,
+    #[arg(long)]
+    afos: Option<String>,
+    #[arg(long)]
+    bbb: Option<String>,
+    #[arg(long)]
+    has_issues: Option<String>,
+    #[arg(long)]
+    issue_kind: Option<String>,
+    #[arg(long)]
+    issue_code: Option<String>,
+    #[arg(long)]
+    has_vtec: Option<String>,
+    #[arg(long)]
+    has_ugc: Option<String>,
+    #[arg(long)]
+    has_hvtec: Option<String>,
+    #[arg(long)]
+    has_latlon: Option<String>,
+    #[arg(long)]
+    has_time_mot_loc: Option<String>,
+    #[arg(long)]
+    has_wind_hail: Option<String>,
+    #[arg(long)]
+    state: Option<String>,
+    #[arg(long)]
+    county: Option<String>,
+    #[arg(long)]
+    zone: Option<String>,
+    #[arg(long)]
+    fire_zone: Option<String>,
+    #[arg(long)]
+    marine_zone: Option<String>,
+    #[arg(long)]
+    vtec_phenomena: Option<String>,
+    #[arg(long)]
+    vtec_significance: Option<String>,
+    #[arg(long)]
+    vtec_action: Option<String>,
+    #[arg(long)]
+    vtec_office: Option<String>,
+    #[arg(long)]
+    etn: Option<String>,
+    #[arg(long)]
+    hvtec_nwslid: Option<String>,
+    #[arg(long)]
+    hvtec_severity: Option<String>,
+    #[arg(long)]
+    hvtec_cause: Option<String>,
+    #[arg(long)]
+    hvtec_record: Option<String>,
+    #[arg(long)]
+    wind_hail_kind: Option<String>,
+    #[arg(long)]
+    lat: Option<f64>,
+    #[arg(long)]
+    lon: Option<f64>,
+    #[arg(long)]
+    distance_miles: Option<f64>,
+    #[arg(long)]
+    min_lat: Option<f64>,
+    #[arg(long)]
+    max_lat: Option<f64>,
+    #[arg(long)]
+    min_lon: Option<f64>,
+    #[arg(long)]
+    max_lon: Option<f64>,
+    #[arg(long)]
+    min_wind_mph: Option<f64>,
+    #[arg(long)]
+    min_hail_inches: Option<f64>,
+    #[arg(long)]
+    min_size: Option<usize>,
+    #[arg(long)]
+    max_size: Option<usize>,
+    #[arg(long)]
+    source_timestamp_after: Option<i64>,
+    #[arg(long)]
+    source_timestamp_before: Option<i64>,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    ingested_after: Option<DateTime<Utc>>,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    ingested_before: Option<DateTime<Utc>>,
+}
+
+impl ArchiveFilterArgs {
+    fn into_product_list_query(
+        self,
+        default_limit: usize,
+        limit: Option<usize>,
+        cursor: Option<String>,
+    ) -> CliResult<ProductListQuery> {
+        ArchiveFilterInput::from(self).into_product_list_query(default_limit, limit, cursor)
+    }
+}
+
+impl From<ArchiveFilterArgs> for ArchiveFilterInput {
+    fn from(value: ArchiveFilterArgs) -> Self {
+        Self {
+            filename: value.filename,
+            source_receiver: value.source_receiver,
+            source: value.source,
+            pil: value.pil,
+            family: value.family,
+            artifact_kind: value.artifact_kind,
+            container: value.container,
+            wmo_prefix: value.wmo_prefix,
+            office: value.office,
+            office_city: value.office_city,
+            office_state: value.office_state,
+            bbb_kind: value.bbb_kind,
+            cccc: value.cccc,
+            ttaaii: value.ttaaii,
+            afos: value.afos,
+            bbb: value.bbb,
+            has_issues: value.has_issues,
+            issue_kind: value.issue_kind,
+            issue_code: value.issue_code,
+            has_vtec: value.has_vtec,
+            has_ugc: value.has_ugc,
+            has_hvtec: value.has_hvtec,
+            has_latlon: value.has_latlon,
+            has_time_mot_loc: value.has_time_mot_loc,
+            has_wind_hail: value.has_wind_hail,
+            state: value.state,
+            county: value.county,
+            zone: value.zone,
+            fire_zone: value.fire_zone,
+            marine_zone: value.marine_zone,
+            vtec_phenomena: value.vtec_phenomena,
+            vtec_significance: value.vtec_significance,
+            vtec_action: value.vtec_action,
+            vtec_office: value.vtec_office,
+            etn: value.etn,
+            hvtec_nwslid: value.hvtec_nwslid,
+            hvtec_severity: value.hvtec_severity,
+            hvtec_cause: value.hvtec_cause,
+            hvtec_record: value.hvtec_record,
+            wind_hail_kind: value.wind_hail_kind,
+            lat: value.lat,
+            lon: value.lon,
+            distance_miles: value.distance_miles,
+            min_lat: value.min_lat,
+            max_lat: value.max_lat,
+            min_lon: value.min_lon,
+            max_lon: value.max_lon,
+            min_wind_mph: value.min_wind_mph,
+            min_hail_inches: value.min_hail_inches,
+            min_size: value.min_size,
+            max_size: value.max_size,
+            source_timestamp_after: value.source_timestamp_after,
+            source_timestamp_before: value.source_timestamp_before,
+            ingested_after: value.ingested_after,
+            ingested_before: value.ingested_before,
+        }
+    }
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct FeaturesArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    #[arg(long)]
+    kind: Option<String>,
+    #[arg(long, default_value_t = 100)]
+    limit: usize,
+    #[arg(long)]
+    cursor: Option<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct FeaturesGeoJsonArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    #[arg(long)]
+    kind: Option<String>,
+    #[arg(long, default_value_t = 100)]
+    limit: usize,
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct FacetAggregateArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    dimension: String,
+    #[arg(long, default_value_t = 20)]
+    limit: usize,
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct TimeseriesAggregateArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    measure: String,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    start: DateTime<Utc>,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    end: DateTime<Utc>,
+    #[arg(long)]
+    bucket: String,
+}
+
+#[derive(Debug, Args, Clone)]
+pub(crate) struct CellAggregateArgs {
+    #[command(flatten)]
+    filters: ArchiveFilterArgs,
+    measure: String,
+    #[arg(long)]
+    precision: u8,
+    #[arg(long, default_value_t = 100)]
+    limit: usize,
+}
+
 #[derive(Debug, Args)]
 pub(crate) struct IssuesArgs {
     #[arg(long)]
@@ -140,17 +485,26 @@ pub(crate) async fn run(options: QueryOptions) -> CliResult<()> {
             "--database-url must not be empty",
         ));
     }
+    let command = options.command.prepare()?;
 
     let sink = PostgresMetadataSink::connect(PostgresConfig::new(database_url.to_string())).await?;
 
-    match options.command {
-        QueryCommand::Incidents(args) => run_incidents(&sink, args).await,
-        QueryCommand::Incident(args) => run_incident(&sink, args.identity).await,
-        QueryCommand::IncidentProducts(args) => run_incident_products(&sink, args).await,
-        QueryCommand::Product(args) => run_product(&sink, args.product_id).await,
-        QueryCommand::Issues(args) => run_issues(&sink, args).await,
-        QueryCommand::Issue(args) => run_issue(&sink, args.issue_id).await,
-        QueryCommand::ProductRaw(args) => run_product_raw(&sink, args).await,
+    match command {
+        PreparedQueryCommand::Incidents(args) => run_incidents(&sink, args).await,
+        PreparedQueryCommand::Incident(args) => run_incident(&sink, args).await,
+        PreparedQueryCommand::IncidentProducts(args) => run_incident_products(&sink, args).await,
+        PreparedQueryCommand::Products(query) => run_products(&sink, query).await,
+        PreparedQueryCommand::Product(product_id) => run_product(&sink, product_id).await,
+        PreparedQueryCommand::Issues(args) => run_issues(&sink, args).await,
+        PreparedQueryCommand::Issue(issue_id) => run_issue(&sink, issue_id).await,
+        PreparedQueryCommand::ProductRaw(args) => run_product_raw(&sink, args).await,
+        PreparedQueryCommand::Features(query) => run_features(&sink, query).await,
+        PreparedQueryCommand::FeaturesGeojson(query) => run_features_geojson(&sink, query).await,
+        PreparedQueryCommand::AggregateFacets(query) => run_aggregate_facets(&sink, query).await,
+        PreparedQueryCommand::AggregateTimeseries(query) => {
+            run_aggregate_timeseries(&sink, query).await
+        }
+        PreparedQueryCommand::AggregateCells(query) => run_aggregate_cells(&sink, query).await,
     }
 }
 
@@ -204,6 +558,13 @@ async fn run_incident_products(
     write_json(&mut stdout, &IncidentProductsResponse::from_page(page))
 }
 
+async fn run_products(sink: &PostgresMetadataSink, query: ProductListQuery) -> CliResult<()> {
+    let page = sink.list_archived_products(query).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(&mut stdout, &ProductsResponse::from_page(page))
+}
+
 async fn run_product(sink: &PostgresMetadataSink, product_id: i64) -> CliResult<()> {
     let product = sink
         .get_archived_product(product_id)
@@ -254,6 +615,78 @@ async fn run_product_raw(sink: &PostgresMetadataSink, args: ProductRawArgs) -> C
     write_raw_bytes(&mut stdout, &payload.bytes)
 }
 
+async fn run_features(sink: &PostgresMetadataSink, query: FeatureListQuery) -> CliResult<()> {
+    let page = sink.list_archived_features(query).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(&mut stdout, &FeaturesResponse::from_page(page))
+}
+
+async fn run_features_geojson(
+    sink: &PostgresMetadataSink,
+    query: FeatureListQuery,
+) -> CliResult<()> {
+    let page = sink.list_archived_features(query).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(&mut stdout, &FeatureCollectionResponse::from_page(page))
+}
+
+async fn run_aggregate_facets(
+    sink: &PostgresMetadataSink,
+    query: FacetAggregateQuery,
+) -> CliResult<()> {
+    let items = sink.list_facet_aggregate(query.clone()).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(
+        &mut stdout,
+        &FacetAggregateResponse {
+            dimension: query.dimension.as_str().to_string(),
+            completeness: items.completeness,
+            items: items.items,
+        },
+    )
+}
+
+async fn run_aggregate_timeseries(
+    sink: &PostgresMetadataSink,
+    query: TimeseriesAggregateQuery,
+) -> CliResult<()> {
+    let items = sink.list_timeseries_aggregate(query.clone()).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(
+        &mut stdout,
+        &TimeseriesAggregateResponse {
+            measure: query.measure.as_str().to_string(),
+            bucket: query.bucket.as_str().to_string(),
+            start: query.start,
+            end: query.end,
+            completeness: items.completeness,
+            items: items.items,
+        },
+    )
+}
+
+async fn run_aggregate_cells(
+    sink: &PostgresMetadataSink,
+    query: CellAggregateQuery,
+) -> CliResult<()> {
+    let items = sink.list_cell_aggregate(query.clone()).await?;
+
+    let mut stdout = io::stdout().lock();
+    write_json(
+        &mut stdout,
+        &CellAggregateResponse {
+            measure: query.measure.as_str().to_string(),
+            precision: query.precision,
+            completeness: items.completeness,
+            items: items.items,
+        },
+    )
+}
+
 fn write_payload_to_path(path: &PathBuf, bytes: &[u8]) -> CliResult<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
@@ -290,6 +723,7 @@ mod tests {
     use super::{
         IncidentLocatorArgs, incident_key, normalize_lower, normalize_upper, parse_rfc3339_utc,
     };
+    use crate::archive_filter::parse_archive_bool;
     use chrono::{TimeZone, Utc};
 
     #[test]
@@ -318,5 +752,12 @@ mod tests {
         assert_eq!(key.phenomena, "FF");
         assert_eq!(key.significance, "W");
         assert_eq!(key.etn, 2001);
+    }
+
+    #[test]
+    fn parse_bool_flag_rejects_invalid_literal() {
+        let error = parse_archive_bool("has_issues", Some("maybe"))
+            .expect_err("invalid bool literal should fail");
+        assert!(error.to_string().contains("has_issues must be one of"));
     }
 }

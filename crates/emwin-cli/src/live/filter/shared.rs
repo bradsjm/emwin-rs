@@ -47,6 +47,10 @@ pub(crate) struct FileFilterInput {
     pub(crate) lat: Option<f64>,
     pub(crate) lon: Option<f64>,
     pub(crate) distance_miles: Option<f64>,
+    pub(crate) min_lat: Option<f64>,
+    pub(crate) max_lat: Option<f64>,
+    pub(crate) min_lon: Option<f64>,
+    pub(crate) max_lon: Option<f64>,
     pub(crate) min_wind_mph: Option<f64>,
     pub(crate) min_hail_inches: Option<f64>,
     pub(crate) min_size: Option<usize>,
@@ -256,5 +260,21 @@ mod tests {
         .expect_err("distance without coords should fail");
 
         assert_eq!(err.message, "distance_miles requires both lat and lon");
+    }
+
+    #[test]
+    fn input_validation_rejects_partial_bbox() {
+        let err = FileEventFilter::try_from_input(&FileFilterInput {
+            min_lat: Some(40.0),
+            max_lat: Some(42.0),
+            min_lon: Some(-97.0),
+            ..FileFilterInput::default()
+        })
+        .expect_err("partial bbox should fail");
+
+        assert_eq!(
+            err.message,
+            "min_lat, max_lat, min_lon, and max_lon must be provided together"
+        );
     }
 }

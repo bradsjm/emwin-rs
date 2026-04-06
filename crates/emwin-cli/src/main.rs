@@ -3,6 +3,7 @@
 //! This application provides commands for:
 //! - Running the live HTTP server with SSE and file endpoints
 
+mod archive_filter;
 mod cmd;
 mod default_servers;
 mod error;
@@ -29,7 +30,7 @@ enum Commands {
     /// Query archived incident and product data directly from persistence.
     Query {
         #[command(flatten)]
-        options: cmd::query::QueryOptions,
+        options: Box<cmd::query::QueryOptions>,
     },
     /// Live command with HTTP, SSE, and retained file endpoints.
     Server {
@@ -125,7 +126,7 @@ async fn main() -> crate::error::CliResult<()> {
     log_startup(&cli.command);
 
     match cli.command {
-        Commands::Query { options } => cmd::query::run(options).await,
+        Commands::Query { options } => cmd::query::run(*options).await,
         Commands::Server {
             output_dir,
             post_process_archives,
@@ -248,8 +249,89 @@ mod tests {
                 "query",
                 "--database-url",
                 "postgres://localhost/emwin",
+                "products",
+                "--office",
+                "KOAX",
+                "--artifact-kind",
+                "nws_text_product",
+                "--min-lat",
+                "41.0",
+                "--max-lat",
+                "42.0",
+                "--min-lon=-97.0",
+                "--max-lon=-95.0",
+                "--limit",
+                "25",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
                 "product",
                 "42",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "features",
+                "--kind",
+                "polygon",
+                "--limit",
+                "25",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "features-geojson",
+                "--kind",
+                "search_point",
+                "--limit",
+                "50",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "aggregate-facets",
+                "office",
+                "--limit",
+                "10",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "aggregate-timeseries",
+                "product_count",
+                "--start",
+                "2025-03-05T12:00:00Z",
+                "--end",
+                "2025-03-05T15:00:00Z",
+                "--bucket",
+                "hour",
+            ]
+            .as_slice(),
+            [
+                "emwin",
+                "query",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "aggregate-cells",
+                "product_count",
+                "--precision",
+                "5",
             ]
             .as_slice(),
             [

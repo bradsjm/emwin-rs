@@ -57,15 +57,28 @@ async fn openapi_json_lists_versioned_routes() {
         .await
         .expect("body should read");
     let body_text = String::from_utf8(body.to_vec()).expect("body should be utf8 json");
-    assert!(body_text.contains("\"/v1/live/events\""));
-    assert!(body_text.contains("\"/v1/live/incident-events\""));
-    assert!(body_text.contains("\"/v1/live/incidents\""));
-    assert!(body_text.contains("\"/v1/archive/issues\""));
-    assert!(body_text.contains("\"/v1/archive/issues/{issue_id}\""));
-    assert!(body_text.contains("\"/v1/archive/products/{product_id}\""));
-    assert!(body_text.contains("\"/v1/live/files\""));
-    assert!(body_text.contains("\"/v1/live/health\""));
-    assert!(body_text.contains("\"/v1/live/metrics\""));
+    assert!(body_text.contains("\"/v1/streams/products\""));
+    assert!(body_text.contains("\"/v1/streams/incidents\""));
+    assert!(body_text.contains("\"/v1/features\""));
+    assert!(body_text.contains("\"/v1/features/geojson\""));
+    assert!(body_text.contains("\"/v1/aggregates/facets\""));
+    assert!(body_text.contains("\"/v1/aggregates/timeseries\""));
+    assert!(body_text.contains("\"/v1/aggregates/cells\""));
+    assert!(body_text.contains("\"/v1/incidents\""));
+    assert!(body_text.contains("\"/v1/issues\""));
+    assert!(body_text.contains("\"/v1/issues/{issue_id}\""));
+    assert!(body_text.contains("\"/v1/products/{product_id}\""));
+    assert!(body_text.contains("\"/v1/files\""));
+    assert!(body_text.contains("\"/v1/health\""));
+    assert!(body_text.contains("\"/v1/metrics\""));
+    assert!(body_text.contains("\"partial\""));
+    assert!(body_text.contains("\"approximate\""));
+    assert!(body_text.contains("\"reason\""));
+    assert!(body_text.contains("\"artifact_kind\""));
+    assert!(body_text.contains("\"min_lat\""));
+    assert!(body_text.contains("\"max_lat\""));
+    assert!(body_text.contains("\"min_lon\""));
+    assert!(body_text.contains("\"max_lon\""));
     assert!(!body_text.contains("\"/events\""));
 }
 
@@ -114,7 +127,22 @@ async fn openapi_json_omits_bearer_security_when_auth_disabled() {
     let body_json: serde_json::Value =
         serde_json::from_slice(&body).expect("body should be utf8 json");
     assert!(body_json["components"]["securitySchemes"]["bearer_auth"].is_null());
-    assert!(body_json["paths"]["/v1/live/health"]["get"]["security"].is_null());
+    assert!(body_json["paths"]["/v1/health"]["get"]["security"].is_null());
+    assert!(
+        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]
+            ["completeness"]
+            .is_null()
+    );
+    assert_eq!(
+        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]["partial"]
+            ["type"],
+        "boolean"
+    );
+    assert_eq!(
+        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]["approximate"]
+            ["type"],
+        "boolean"
+    );
 }
 
 #[tokio::test]
@@ -148,7 +176,7 @@ async fn openapi_json_declares_bearer_security_when_auth_enabled() {
         "bearer"
     );
     assert_eq!(
-        body_json["paths"]["/v1/live/health"]["get"]["security"][0]["bearer_auth"],
+        body_json["paths"]["/v1/health"]["get"]["security"][0]["bearer_auth"],
         serde_json::json!([])
     );
 }

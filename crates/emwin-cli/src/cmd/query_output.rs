@@ -1,14 +1,14 @@
 //! JSON and raw output helpers for archive query commands.
 
 use emwin_db::{
-    ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary, IncidentDetail, IncidentSummary,
-    PaginatedResponse,
+    AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedProductDetail,
+    ArchivedProductSummary, CellAggregateBucket, FacetAggregateBucket, IncidentDetail,
+    IncidentSummary, PaginatedResponse, TimeseriesAggregateBucket,
 };
 use serde::Serialize;
 use std::io::Write;
 
-const LIVE_API_PREFIX: &str = "/v1/live";
-const ARCHIVE_API_PREFIX: &str = "/v1/archive";
+const API_PREFIX: &str = "/v1";
 
 #[derive(Debug, Serialize)]
 pub(crate) struct IncidentSummaryPayload {
@@ -140,6 +140,27 @@ pub(crate) struct IncidentProductsResponse {
     page: PaginatedResponse<ArchiveProductSummaryPayload>,
 }
 
+#[derive(Debug, Serialize)]
+pub(crate) struct ProductsResponse {
+    #[serde(flatten)]
+    page: PaginatedResponse<ArchiveProductSummaryPayload>,
+}
+
+impl ProductsResponse {
+    pub(crate) fn from_page(page: PaginatedResponse<ArchivedProductSummary>) -> Self {
+        Self {
+            page: PaginatedResponse {
+                items: page
+                    .items
+                    .into_iter()
+                    .map(ArchiveProductSummaryPayload::from_product)
+                    .collect(),
+                next_cursor: page.next_cursor,
+            },
+        }
+    }
+}
+
 impl IncidentProductsResponse {
     pub(crate) fn from_page(page: PaginatedResponse<ArchivedProductSummary>) -> Self {
         Self {
@@ -189,9 +210,142 @@ impl ArchiveIssuePayload {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct ArchivedFeaturePayload {
+    #[serde(flatten)]
+    feature: ArchivedFeature,
+    product_url: String,
+    product_raw_url: String,
+}
+
+impl ArchivedFeaturePayload {
+    pub(crate) fn from_feature(feature: ArchivedFeature) -> Self {
+        let product_url = archive_product_url(feature.product_id);
+        let product_raw_url = archive_product_raw_url(feature.product_id);
+        Self {
+            feature,
+            product_url,
+            product_raw_url,
+        }
+    }
+
+    fn into_geojson_feature(self) -> GeoJsonFeature {
+        let mut properties = match self.feature.properties {
+            serde_json::Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        properties.insert(
+            "feature_kind".to_string(),
+            serde_json::json!(self.feature.feature_kind),
+        );
+        properties.insert(
+            "product_id".to_string(),
+            serde_json::json!(self.feature.product_id),
+        );
+        properties.insert(
+            "source_timestamp_utc".to_string(),
+            serde_json::json!(self.feature.source_timestamp_utc),
+        );
+        properties.insert(
+            "product_url".to_string(),
+            serde_json::json!(self.product_url),
+        );
+        properties.insert(
+            "product_raw_url".to_string(),
+            serde_json::json!(self.product_raw_url),
+        );
+
+        GeoJsonFeature {
+            id: self.feature.feature_id,
+            kind: "Feature",
+            geometry: self.feature.geometry,
+            properties: serde_json::Value::Object(properties),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct ArchiveIssuesResponse {
     #[serde(flatten)]
     page: PaginatedResponse<ArchiveIssuePayload>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FeaturesResponse {
+    #[serde(flatten)]
+    page: PaginatedResponse<ArchivedFeaturePayload>,
+}
+
+impl FeaturesResponse {
+    pub(crate) fn from_page(page: PaginatedResponse<ArchivedFeature>) -> Self {
+        Self {
+            page: PaginatedResponse {
+                items: page
+                    .items
+                    .into_iter()
+                    .map(ArchivedFeaturePayload::from_feature)
+                    .collect(),
+                next_cursor: page.next_cursor,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct GeoJsonFeature {
+    id: String,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    geometry: serde_json::Value,
+    properties: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FeatureCollectionResponse {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    features: Vec<GeoJsonFeature>,
+}
+
+impl FeatureCollectionResponse {
+    pub(crate) fn from_page(page: PaginatedResponse<ArchivedFeature>) -> Self {
+        Self {
+            kind: "FeatureCollection",
+            features: page
+                .items
+                .into_iter()
+                .map(ArchivedFeaturePayload::from_feature)
+                .map(ArchivedFeaturePayload::into_geojson_feature)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FacetAggregateResponse {
+    pub(crate) dimension: String,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<FacetAggregateBucket>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TimeseriesAggregateResponse {
+    pub(crate) measure: String,
+    pub(crate) bucket: String,
+    pub(crate) start: chrono::DateTime<chrono::Utc>,
+    pub(crate) end: chrono::DateTime<chrono::Utc>,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<TimeseriesAggregateBucket>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct CellAggregateResponse {
+    pub(crate) measure: String,
+    pub(crate) precision: u8,
+    #[serde(flatten)]
+    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) items: Vec<CellAggregateBucket>,
 }
 
 impl ArchiveIssuesResponse {
@@ -258,19 +412,19 @@ fn incident_products_base_url(
     significance: &str,
     etn: i64,
 ) -> String {
-    format!("{LIVE_API_PREFIX}/incidents/{office}/{phenomena}/{significance}/{etn}")
+    format!("{API_PREFIX}/incidents/{office}/{phenomena}/{significance}/{etn}")
 }
 
 fn archive_product_url(product_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/products/{product_id}")
+    format!("{API_PREFIX}/products/{product_id}")
 }
 
 fn archive_product_raw_url(product_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/products/{product_id}/raw")
+    format!("{API_PREFIX}/products/{product_id}/raw")
 }
 
 fn archive_issue_url(issue_id: i64) -> String {
-    format!("{ARCHIVE_API_PREFIX}/issues/{issue_id}")
+    format!("{API_PREFIX}/issues/{issue_id}")
 }
 
 #[cfg(test)]
@@ -296,16 +450,13 @@ mod tests {
         assert_eq!(value["items"][0]["office"], "KOAX");
         assert_eq!(
             value["items"][0]["detail_url"],
-            "/v1/live/incidents/KOAX/FF/W/2001"
+            "/v1/incidents/KOAX/FF/W/2001"
         );
         assert_eq!(
             value["items"][0]["products_url"],
-            "/v1/live/incidents/KOAX/FF/W/2001/products"
+            "/v1/incidents/KOAX/FF/W/2001/products"
         );
-        assert_eq!(
-            value["items"][0]["latest_product_url"],
-            "/v1/archive/products/42"
-        );
+        assert_eq!(value["items"][0]["latest_product_url"], "/v1/products/42");
         assert_eq!(value["next_cursor"], "cursor-1");
     }
 
@@ -319,16 +470,13 @@ mod tests {
 
         assert_eq!(
             incident_json["incident"]["products_url"],
-            "/v1/live/incidents/KOAX/FF/W/2001/products"
+            "/v1/incidents/KOAX/FF/W/2001/products"
         );
         assert_eq!(
             incident_json["incident"]["first_product_url"],
-            "/v1/archive/products/41"
+            "/v1/products/41"
         );
-        assert_eq!(
-            product_json["product"]["raw_url"],
-            "/v1/archive/products/42/raw"
-        );
+        assert_eq!(product_json["product"]["raw_url"], "/v1/products/42/raw");
     }
 
     #[test]
@@ -361,11 +509,8 @@ mod tests {
         let detail_json = serde_json::to_value(detail).expect("detail should serialize");
 
         assert_eq!(list_json["items"][0]["code"], "invalid_wmo_header");
-        assert_eq!(list_json["items"][0]["detail_url"], "/v1/archive/issues/7");
-        assert_eq!(
-            list_json["items"][0]["product_url"],
-            "/v1/archive/products/42"
-        );
+        assert_eq!(list_json["items"][0]["detail_url"], "/v1/issues/7");
+        assert_eq!(list_json["items"][0]["product_url"], "/v1/products/42");
         assert_eq!(list_json["next_cursor"], "cursor-1");
         assert_eq!(detail_json["issue"]["id"], 7);
     }

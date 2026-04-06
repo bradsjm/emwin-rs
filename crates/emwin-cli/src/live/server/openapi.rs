@@ -13,6 +13,12 @@ use utoipa::{Modify, OpenApi};
 #[openapi(
     modifiers(&SecurityAddon),
     paths(
+        super::server_http::products_handler,
+        super::server_http::features_handler,
+        super::server_http::features_geojson_handler,
+        super::server_http::facet_aggregate_handler,
+        super::server_http::timeseries_aggregate_handler,
+        super::server_http::cell_aggregate_handler,
         super::server_http::incidents_handler,
         super::server_http::incident_handler,
         super::server_http::incident_products_handler,
@@ -31,6 +37,17 @@ use utoipa::{Modify, OpenApi};
         schemas(
             FilesResponseSchema,
             CompletedFileSchema,
+            ProductsResponseSchema,
+            FeaturesResponseSchema,
+            ArchivedFeatureSchema,
+            FeatureCollectionSchema,
+            GeoJsonFeatureSchema,
+            FacetAggregateResponseSchema,
+            FacetAggregateBucketSchema,
+            TimeseriesAggregateResponseSchema,
+            TimeseriesAggregateBucketSchema,
+            CellAggregateResponseSchema,
+            CellAggregateBucketSchema,
             IncidentsResponseSchema,
             IncidentSummarySchema,
             IncidentResponseSchema,
@@ -47,9 +64,13 @@ use utoipa::{Modify, OpenApi};
         )
     ),
     tags(
-        (name = "live", description = "In-memory live server endpoints and SSE streams"),
-        (name = "archive", description = "Postgres-backed archived product endpoints"),
-        (name = "admin", description = "Operational health and metrics endpoints")
+        (name = "products", description = "Archived product resource endpoints"),
+        (name = "features", description = "Archived spatial feature resource endpoints"),
+        (name = "aggregates", description = "Archived aggregate resource endpoints"),
+        (name = "issues", description = "Archived issue resource endpoints"),
+        (name = "incidents", description = "Derived incident resource endpoints"),
+        (name = "streams", description = "Incremental server-sent event streams"),
+        (name = "operational", description = "Operational health, metrics, and retained file endpoints")
     ),
     info(
         title = "emwin-cli server API",
@@ -63,6 +84,12 @@ pub(crate) struct SecureApiDoc;
 #[openapi(
     modifiers(&PublicSecurityRemover),
     paths(
+        super::server_http::products_handler,
+        super::server_http::features_handler,
+        super::server_http::features_geojson_handler,
+        super::server_http::facet_aggregate_handler,
+        super::server_http::timeseries_aggregate_handler,
+        super::server_http::cell_aggregate_handler,
         super::server_http::incidents_handler,
         super::server_http::incident_handler,
         super::server_http::incident_products_handler,
@@ -81,6 +108,17 @@ pub(crate) struct SecureApiDoc;
         schemas(
             FilesResponseSchema,
             CompletedFileSchema,
+            ProductsResponseSchema,
+            FeaturesResponseSchema,
+            ArchivedFeatureSchema,
+            FeatureCollectionSchema,
+            GeoJsonFeatureSchema,
+            FacetAggregateResponseSchema,
+            FacetAggregateBucketSchema,
+            TimeseriesAggregateResponseSchema,
+            TimeseriesAggregateBucketSchema,
+            CellAggregateResponseSchema,
+            CellAggregateBucketSchema,
             IncidentsResponseSchema,
             IncidentSummarySchema,
             IncidentResponseSchema,
@@ -97,9 +135,13 @@ pub(crate) struct SecureApiDoc;
         )
     ),
     tags(
-        (name = "live", description = "In-memory live server endpoints and SSE streams"),
-        (name = "archive", description = "Postgres-backed archived product endpoints"),
-        (name = "admin", description = "Operational health and metrics endpoints")
+        (name = "products", description = "Archived product resource endpoints"),
+        (name = "features", description = "Archived spatial feature resource endpoints"),
+        (name = "aggregates", description = "Archived aggregate resource endpoints"),
+        (name = "issues", description = "Archived issue resource endpoints"),
+        (name = "incidents", description = "Derived incident resource endpoints"),
+        (name = "streams", description = "Incremental server-sent event streams"),
+        (name = "operational", description = "Operational health, metrics, and retained file endpoints")
     ),
     info(
         title = "emwin-cli server API",
@@ -168,7 +210,7 @@ impl Modify for PublicSecurityRemover {
 pub(crate) struct SseEventEnvelope {
     #[schema(example = "42")]
     pub(crate) id: String,
-    #[schema(example = "file_complete")]
+    #[schema(example = "product_available")]
     pub(crate) event: String,
     #[schema(value_type = Object)]
     pub(crate) data: serde_json::Value,
@@ -189,8 +231,140 @@ pub(crate) struct CompletedFileSchema {
     pub(crate) timestamp_utc: u64,
     #[schema(value_type = Object)]
     pub(crate) product: serde_json::Value,
-    #[schema(example = "/v1/live/files/AFDBOX.TXT")]
+    #[schema(example = "/v1/files/AFDBOX.TXT")]
     pub(crate) download_url: String,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ProductsResponseSchema {
+    pub(crate) items: Vec<ArchiveProductSummarySchema>,
+    #[schema(example = "cursor-token")]
+    pub(crate) next_cursor: Option<String>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct FeaturesResponseSchema {
+    pub(crate) items: Vec<ArchivedFeatureSchema>,
+    #[schema(example = "cursor-token")]
+    pub(crate) next_cursor: Option<String>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ArchivedFeatureSchema {
+    #[schema(example = "polygon:42")]
+    pub(crate) feature_id: String,
+    #[schema(example = "polygon")]
+    pub(crate) feature_kind: String,
+    #[schema(example = 42)]
+    pub(crate) product_id: i64,
+    #[schema(example = 1767488000i64)]
+    pub(crate) source_timestamp_utc: i64,
+    #[schema(value_type = Object)]
+    pub(crate) geometry: serde_json::Value,
+    #[schema(value_type = Object)]
+    pub(crate) properties: serde_json::Value,
+    #[schema(example = "/v1/products/42")]
+    pub(crate) product_url: String,
+    #[schema(example = "/v1/products/42/raw")]
+    pub(crate) product_raw_url: String,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct FeatureCollectionSchema {
+    #[schema(example = "FeatureCollection")]
+    pub(crate) r#type: String,
+    pub(crate) features: Vec<GeoJsonFeatureSchema>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct AggregateCompletenessSchema {
+    #[schema(example = false)]
+    pub(crate) partial: bool,
+    #[schema(example = false)]
+    pub(crate) approximate: bool,
+    #[schema(example = "upstream data source unavailable")]
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct GeoJsonFeatureSchema {
+    #[schema(example = "polygon:42")]
+    pub(crate) id: String,
+    #[schema(example = "Feature")]
+    pub(crate) r#type: String,
+    #[schema(value_type = Object)]
+    pub(crate) geometry: serde_json::Value,
+    #[schema(value_type = Object)]
+    pub(crate) properties: serde_json::Value,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct FacetAggregateResponseSchema {
+    #[schema(example = "office")]
+    pub(crate) dimension: String,
+    #[schema(example = false)]
+    pub(crate) partial: bool,
+    #[schema(example = false)]
+    pub(crate) approximate: bool,
+    #[schema(example = "upstream data source unavailable")]
+    pub(crate) reason: Option<String>,
+    pub(crate) items: Vec<FacetAggregateBucketSchema>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct FacetAggregateBucketSchema {
+    #[schema(example = "KOAX")]
+    pub(crate) value: String,
+    #[schema(example = 12)]
+    pub(crate) count: i64,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct TimeseriesAggregateResponseSchema {
+    #[schema(example = "product_count")]
+    pub(crate) measure: String,
+    #[schema(example = "hour")]
+    pub(crate) bucket: String,
+    pub(crate) start: chrono::DateTime<chrono::Utc>,
+    pub(crate) end: chrono::DateTime<chrono::Utc>,
+    #[schema(example = false)]
+    pub(crate) partial: bool,
+    #[schema(example = false)]
+    pub(crate) approximate: bool,
+    #[schema(example = "upstream data source unavailable")]
+    pub(crate) reason: Option<String>,
+    pub(crate) items: Vec<TimeseriesAggregateBucketSchema>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct TimeseriesAggregateBucketSchema {
+    pub(crate) bucket_start: chrono::DateTime<chrono::Utc>,
+    pub(crate) bucket_end: chrono::DateTime<chrono::Utc>,
+    #[schema(example = 5)]
+    pub(crate) count: i64,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct CellAggregateResponseSchema {
+    #[schema(example = "product_count")]
+    pub(crate) measure: String,
+    #[schema(example = 6)]
+    pub(crate) precision: u8,
+    #[schema(example = false)]
+    pub(crate) partial: bool,
+    #[schema(example = false)]
+    pub(crate) approximate: bool,
+    #[schema(example = "upstream data source unavailable")]
+    pub(crate) reason: Option<String>,
+    pub(crate) items: Vec<CellAggregateBucketSchema>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct CellAggregateBucketSchema {
+    #[schema(example = "9z7mvp")]
+    pub(crate) cell: String,
+    #[schema(example = 3)]
+    pub(crate) count: i64,
 }
 
 #[derive(Debug, ToSchema)]
@@ -233,11 +407,11 @@ pub(crate) struct IncidentSummarySchema {
     pub(crate) latest_product_id: i64,
     #[schema(value_type = String, format = DateTime, example = "2025-03-05T12:00:00Z")]
     pub(crate) latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
-    #[schema(example = "/v1/live/incidents/KOAX/FF/W/2001")]
+    #[schema(example = "/v1/incidents/KOAX/FF/W/2001")]
     pub(crate) detail_url: String,
-    #[schema(example = "/v1/live/incidents/KOAX/FF/W/2001/products")]
+    #[schema(example = "/v1/incidents/KOAX/FF/W/2001/products")]
     pub(crate) products_url: String,
-    #[schema(example = "/v1/archive/products/10")]
+    #[schema(example = "/v1/products/10")]
     pub(crate) latest_product_url: String,
 }
 
@@ -269,11 +443,11 @@ pub(crate) struct IncidentDetailSchema {
     pub(crate) latest_product_id: i64,
     #[schema(value_type = String, format = DateTime, example = "2025-03-05T12:00:00Z")]
     pub(crate) latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
-    #[schema(example = "/v1/live/incidents/KOAX/FF/W/2001/products")]
+    #[schema(example = "/v1/incidents/KOAX/FF/W/2001/products")]
     pub(crate) products_url: String,
-    #[schema(example = "/v1/archive/products/10")]
+    #[schema(example = "/v1/products/10")]
     pub(crate) first_product_url: String,
-    #[schema(example = "/v1/archive/products/10")]
+    #[schema(example = "/v1/products/10")]
     pub(crate) latest_product_url: String,
 }
 
@@ -315,9 +489,9 @@ pub(crate) struct ArchiveIssueSchema {
     pub(crate) message: String,
     #[schema(example = "INVALID HEADER")]
     pub(crate) line: Option<String>,
-    #[schema(example = "/v1/archive/issues/10")]
+    #[schema(example = "/v1/issues/10")]
     pub(crate) detail_url: String,
-    #[schema(example = "/v1/archive/products/42")]
+    #[schema(example = "/v1/products/42")]
     pub(crate) product_url: String,
 }
 
@@ -375,9 +549,9 @@ pub(crate) struct ArchiveProductSummarySchema {
     pub(crate) time_mot_loc_count: i32,
     pub(crate) wind_hail_count: i32,
     pub(crate) issue_count: i32,
-    #[schema(example = "/v1/archive/products/10")]
+    #[schema(example = "/v1/products/10")]
     pub(crate) detail_url: String,
-    #[schema(example = "/v1/archive/products/10/raw")]
+    #[schema(example = "/v1/products/10/raw")]
     pub(crate) raw_url: String,
 }
 
@@ -440,7 +614,7 @@ pub(crate) struct ArchiveProductDetailSchema {
     pub(crate) metadata_location: Option<String>,
     #[schema(value_type = Object)]
     pub(crate) product_json: serde_json::Value,
-    #[schema(example = "/v1/archive/products/10/raw")]
+    #[schema(example = "/v1/products/10/raw")]
     pub(crate) raw_url: String,
 }
 

@@ -7,10 +7,10 @@ CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `
 - `query`
   - Archive query command.
   - Connects directly to persisted Postgres metadata and reads archived payloads through stored filesystem or S3 locations.
-  - Supports archived issue listing and issue detail reads.
+  - Supports archived products, issues, features, and aggregate reads.
 - `server`
   - Live command.
-  - Connects to EMWIN servers, exposes versioned HTTP and SSE endpoints, and retains recent files for `/v1/live/files` downloads.
+  - Connects to EMWIN servers, exposes versioned HTTP and SSE endpoints, and retains recent files for `/v1/files` downloads.
   - Optional `--output-dir <PATH|s3://bucket[/prefix]>` persists completed payloads asynchronously.
 
 ## Output formats
@@ -47,7 +47,7 @@ Live command: `server`
 - `--file-retention-secs <SECONDS>`
 - `--max-retained-files <N>`
 - `--quiet`
-- `--openapi-auth-token <TOKEN>` (optional; requires `Authorization: Bearer <token>` on `/v1/live/*` and `/v1/archive/*`)
+- `--openapi-auth-token <TOKEN>` (optional; requires `Authorization: Bearer <token>` on `/v1/*`)
 - `--output-dir <PATH|s3://bucket[/prefix]>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar under canonical archival paths)
 
 Persistence behavior when `--output-dir` is set:
@@ -65,11 +65,10 @@ Persistence behavior when `--output-dir` is set:
 - `.ZIP` and `.ZIS` products are extracted before parsing, filtering, and persistence by default; the extracted entry filename replaces the archive filename
 - corrupt archives are logged as `Corrupt Zip File Received` and dropped when post-processing is enabled
 - sidecar names replace the original extension within the canonical archival path, for example `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.TXT` -> `qbt/.../20260316T021530Z-4f2c9d91-AFDBOX.JSON`
-- ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/v1/live/files`
-- `/v1/live/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
-- when `--persist-database-url` is configured, the server also exposes `/v1/live/incidents` plus `/v1/archive/products/*` for incident-first archive reads
-- `/v1/live/incidents` and `/v1/archive/products/*` return `503` when Postgres-backed archive metadata is not configured
-- when `--persist-database-url` is configured, the server also exposes `/v1/live/incident-events` for SSE notifications when incident projection rows are created or updated
+- ZIP/ZIS archive entry directories are flattened for persisted storage keys; the original delivered filename, including nested archive paths, remains visible in metadata and `/v1/files`
+- `/v1/files/*` continues to serve only the in-memory retained payload cache; persisted S3 objects are archival storage and are not proxied by the CLI
+- when `--persist-database-url` is configured, the server also exposes `/v1/incidents`, `/v1/products/*`, `/v1/issues/*`, and `/v1/streams/incidents`
+- `/v1/incidents`, `/v1/products/*`, and `/v1/issues/*` return `503` when Postgres-backed archive metadata is not configured
 
 If `--server` is omitted, built-in default endpoints are used.
 `--server` and `--server-list-path` are only supported for `--receiver qbt`.
@@ -120,7 +119,13 @@ Archive query mode:
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incidents --office KOAX
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident KOAX FF W 2001
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin incident-products KOAX FF W 2001 --limit 50
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin products --office KOAX --artifact-kind nws_text_product --min-lat 41 --max-lat 42 --min-lon -97 --max-lon -95 --limit 25
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product 42
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin features --kind polygon --artifact-kind nws_text_product --limit 25
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin features-geojson --kind search_point --limit 100
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin aggregate-facets office --artifact-kind nws_text_product --limit 20
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin aggregate-timeseries product_count --start 2025-03-05T12:00:00Z --end 2025-03-05T15:00:00Z --bucket hour
+cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin aggregate-cells product_count --precision 5 --limit 100
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issues --product-id 42 --kind text_product_parse
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin issue 7
 cargo run -p emwin-cli -- query --database-url postgres://localhost/emwin product-raw 42 --output ./product.bin
@@ -138,36 +143,55 @@ cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --
 
 ## Server filter examples
 
-When running `server`, `/v1/live/events` supports parsed-location filters:
+When running `server`, `/v1/streams/products` supports parsed-location filters:
 
-- `/v1/live/events?event=file_complete&lat=41.42&lon=-96.17`
-- `/v1/live/events?event=file_complete&lat=41.42&lon=-96.17&distance_miles=15`
+- `/v1/streams/products?event=product_available&lat=41.42&lon=-96.17`
+- `/v1/streams/products?event=product_available&lat=41.42&lon=-96.17&distance_miles=15`
+- `/v1/streams/products?event=product_available&min_lat=41.0&max_lat=42.0&min_lon=-97.0&max_lon=-95.0`
 
 `lat` and `lon` must be provided together. `distance_miles` is optional and defaults to `5.0`.
 Matches use parsed `LAT...LON` polygons for containment and parsed `TIME...MOT...LOC`, `UGC`,
 and `HVTEC` coordinates for radius checks.
+Bounding boxes require all four of `min_lat`, `max_lat`, `min_lon`, and `max_lon`, and match any
+parsed polygon, motion path, or parsed point that intersects the box.
+Archive boolean filters accept only `true`, `false`, `1`, or `0`; any other non-empty value fails
+request validation instead of being ignored.
+Archive size ranges also validate at request-build time; `min_size` must be less than or equal to
+`max_size`.
+`/v1/features`, `/v1/features/geojson`, and `/v1/aggregates/cells` apply spatial filters to each
+returned geometry or counted point, not just to product admission.
 
-## Incident and archive endpoints
+## Resource endpoints
 
 - `GET /` serves Swagger UI and `GET /openapi.json` serves the generated OpenAPI document
-- when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, all `/v1/live/*` and `/v1/archive/*` requests require `Authorization: Bearer <token>`
+- when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, all `/v1/*` requests require `Authorization: Bearer <token>`
 - `/openapi.json` advertises bearer auth only when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set
 - `GET /`, `GET /openapi.json`, and Swagger UI asset routes remain public when auth is enabled
-- `/v1/live/incident-events` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
-- `/v1/live/incidents` lists live incident projection rows from persisted Postgres metadata
-- `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus links to related archive resources
-- `/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
-- `/v1/archive/products/{product_id}` returns persisted product detail including `product_json`
-- `/v1/archive/products/{product_id}/raw` proxies archived payload bytes for one product
-- `/v1/archive/issues` lists archived issue rows with optional exact filters `product_id`, `kind`, and `code`
-- `/v1/archive/issues/{issue_id}` fetches one archived issue row
+- `/v1/streams/incidents` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
+- `/v1/streams/products` streams `product_available` SSE payloads for completed products; supported filters match the parsed product metadata and spatial filter set documented below
+- Both SSE endpoints are incremental streams, not durable replay logs. Clients should fetch an initial snapshot from the resource endpoints, then attach the stream.
+- `Last-Event-ID` is best-effort for short reconnect gaps only. If the server emits a lag warning or the client detects a gap, the client must resync from the resource endpoints.
+- `/v1/incidents` lists live incident projection rows from persisted Postgres metadata
+- `/v1/incidents/{office}/{phenomena}/{significance}/{etn}` fetches one incident plus related product links
+- `/v1/incidents/{office}/{phenomena}/{significance}/{etn}/products` returns the archived product timeline for one incident
+- `/v1/products` lists archived products with cursor pagination and the shared product filter grammar
+- archive product/feature/aggregate filters include `artifact_kind` alongside the existing source, family, and container metadata filters
+- `/v1/products/{product_id}` returns persisted product detail including `product_json`
+- `/v1/products/{product_id}/raw` proxies archived payload bytes for one product
+- `/v1/features` lists archived spatial features with cursor pagination and GeoJSON geometry per item
+- `/v1/features/geojson` emits a bounded GeoJSON `FeatureCollection` view over the same archived feature set
+- `/v1/aggregates/facets` returns uncursored facet buckets for supported archive dimensions
+- `/v1/aggregates/timeseries` returns uncursored time buckets for `product_count`, `issue_count`, or `incident_count`
+- `/v1/aggregates/cells` returns uncursored geohash cell buckets for `product_count`, counting each product once per intersected cell across persisted polygons, paths, and representative points
+- `/v1/issues` lists archived issue rows with optional exact filters `product_id`, `kind`, and `code`
+- `/v1/issues/{issue_id}` fetches one archived issue row
 
-The `query` command mirrors those archive read capabilities locally. Postgres remains the query backend; S3 is only used indirectly when an archived payload location points at `s3://...`.
+The `query` command mirrors those archive read capabilities locally, including features and aggregate responses. Postgres remains the query backend; S3 is only used indirectly when an archived payload location points at `s3://...`.
 
 Authenticated example:
 
 ```bash
-curl -H 'Authorization: Bearer secret-token' http://127.0.0.1:8080/v1/live/health
+curl -H 'Authorization: Bearer secret-token' http://127.0.0.1:8080/v1/health
 ```
 
 Cross-origin browser clients can combine `--cors-origin` with `--openapi-auth-token`; CORS preflights now allow the `Authorization` request header.

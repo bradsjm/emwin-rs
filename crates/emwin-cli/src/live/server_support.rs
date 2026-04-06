@@ -4,7 +4,7 @@
 //! handlers can stay focused on endpoint behavior.
 
 use crate::live::file_pipeline::build_completed_file_metadata;
-use crate::live::server::types::LIVE_API_PREFIX;
+use crate::live::server::types::API_PREFIX;
 use axum::body::Body;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
@@ -173,7 +173,7 @@ pub(crate) fn sanitize_requested_filename(raw: &str) -> Option<String> {
 }
 
 pub(crate) fn file_download_url(filename: &str) -> String {
-    format!("{LIVE_API_PREFIX}/files/{}", percent_encode(filename))
+    format!("{API_PREFIX}/files/{}", percent_encode(filename))
 }
 
 fn percent_encode(input: &str) -> String {

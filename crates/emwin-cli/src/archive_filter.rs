@@ -1,0 +1,383 @@
+use crate::error::{CliError, CliResult};
+use chrono::{DateTime, Utc};
+use emwin_db::{
+    CellAggregateQuery, FacetAggregateQuery, FeatureListQuery, ProductListQuery,
+    TimeseriesAggregateQuery,
+};
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ArchiveFilterInput {
+    pub(crate) filename: Option<String>,
+    pub(crate) source_receiver: Option<String>,
+    pub(crate) source: Option<String>,
+    pub(crate) pil: Option<String>,
+    pub(crate) family: Option<String>,
+    pub(crate) artifact_kind: Option<String>,
+    pub(crate) container: Option<String>,
+    pub(crate) wmo_prefix: Option<String>,
+    pub(crate) office: Option<String>,
+    pub(crate) office_city: Option<String>,
+    pub(crate) office_state: Option<String>,
+    pub(crate) bbb_kind: Option<String>,
+    pub(crate) cccc: Option<String>,
+    pub(crate) ttaaii: Option<String>,
+    pub(crate) afos: Option<String>,
+    pub(crate) bbb: Option<String>,
+    pub(crate) has_issues: Option<String>,
+    pub(crate) issue_kind: Option<String>,
+    pub(crate) issue_code: Option<String>,
+    pub(crate) has_vtec: Option<String>,
+    pub(crate) has_ugc: Option<String>,
+    pub(crate) has_hvtec: Option<String>,
+    pub(crate) has_latlon: Option<String>,
+    pub(crate) has_time_mot_loc: Option<String>,
+    pub(crate) has_wind_hail: Option<String>,
+    pub(crate) state: Option<String>,
+    pub(crate) county: Option<String>,
+    pub(crate) zone: Option<String>,
+    pub(crate) fire_zone: Option<String>,
+    pub(crate) marine_zone: Option<String>,
+    pub(crate) vtec_phenomena: Option<String>,
+    pub(crate) vtec_significance: Option<String>,
+    pub(crate) vtec_action: Option<String>,
+    pub(crate) vtec_office: Option<String>,
+    pub(crate) etn: Option<String>,
+    pub(crate) hvtec_nwslid: Option<String>,
+    pub(crate) hvtec_severity: Option<String>,
+    pub(crate) hvtec_cause: Option<String>,
+    pub(crate) hvtec_record: Option<String>,
+    pub(crate) wind_hail_kind: Option<String>,
+    pub(crate) lat: Option<f64>,
+    pub(crate) lon: Option<f64>,
+    pub(crate) distance_miles: Option<f64>,
+    pub(crate) min_lat: Option<f64>,
+    pub(crate) max_lat: Option<f64>,
+    pub(crate) min_lon: Option<f64>,
+    pub(crate) max_lon: Option<f64>,
+    pub(crate) min_wind_mph: Option<f64>,
+    pub(crate) min_hail_inches: Option<f64>,
+    pub(crate) min_size: Option<usize>,
+    pub(crate) max_size: Option<usize>,
+    pub(crate) source_timestamp_after: Option<i64>,
+    pub(crate) source_timestamp_before: Option<i64>,
+    pub(crate) ingested_after: Option<DateTime<Utc>>,
+    pub(crate) ingested_before: Option<DateTime<Utc>>,
+}
+
+impl ArchiveFilterInput {
+    pub(crate) fn into_product_list_query(
+        self,
+        default_limit: usize,
+        limit: Option<usize>,
+        cursor: Option<String>,
+    ) -> CliResult<ProductListQuery> {
+        validate_archive_size_inputs(self.min_size, self.max_size)?;
+        validate_archive_spatial_inputs(
+            self.lat,
+            self.lon,
+            self.distance_miles,
+            self.min_lat,
+            self.max_lat,
+            self.min_lon,
+            self.max_lon,
+        )?;
+        Ok(ProductListQuery {
+            filename: self.filename,
+            source_receiver: self.source_receiver,
+            source: self.source,
+            pil: self.pil,
+            family: self.family,
+            artifact_kind: self.artifact_kind,
+            container: self.container,
+            wmo_prefix: self.wmo_prefix,
+            office: self.office,
+            office_city: self.office_city,
+            office_state: self.office_state,
+            bbb_kind: self.bbb_kind,
+            cccc: self.cccc,
+            ttaaii: self.ttaaii,
+            afos: self.afos,
+            bbb: self.bbb,
+            has_issues: parse_archive_bool("has_issues", self.has_issues.as_deref())?,
+            issue_kind: self.issue_kind,
+            issue_code: self.issue_code,
+            has_vtec: parse_archive_bool("has_vtec", self.has_vtec.as_deref())?,
+            has_ugc: parse_archive_bool("has_ugc", self.has_ugc.as_deref())?,
+            has_hvtec: parse_archive_bool("has_hvtec", self.has_hvtec.as_deref())?,
+            has_latlon: parse_archive_bool("has_latlon", self.has_latlon.as_deref())?,
+            has_time_mot_loc: parse_archive_bool(
+                "has_time_mot_loc",
+                self.has_time_mot_loc.as_deref(),
+            )?,
+            has_wind_hail: parse_archive_bool("has_wind_hail", self.has_wind_hail.as_deref())?,
+            state: self.state,
+            county: self.county,
+            zone: self.zone,
+            fire_zone: self.fire_zone,
+            marine_zone: self.marine_zone,
+            vtec_phenomena: self.vtec_phenomena,
+            vtec_significance: self.vtec_significance,
+            vtec_action: self.vtec_action,
+            vtec_office: self.vtec_office,
+            etn: self.etn,
+            hvtec_nwslid: self.hvtec_nwslid,
+            hvtec_severity: self.hvtec_severity,
+            hvtec_cause: self.hvtec_cause,
+            hvtec_record: self.hvtec_record,
+            wind_hail_kind: self.wind_hail_kind,
+            lat: self.lat,
+            lon: self.lon,
+            distance_miles: self.distance_miles,
+            min_lat: self.min_lat,
+            max_lat: self.max_lat,
+            min_lon: self.min_lon,
+            max_lon: self.max_lon,
+            min_wind_mph: self.min_wind_mph,
+            min_hail_inches: self.min_hail_inches,
+            min_size: self.min_size,
+            max_size: self.max_size,
+            source_timestamp_after: self.source_timestamp_after,
+            source_timestamp_before: self.source_timestamp_before,
+            ingested_after: self.ingested_after,
+            ingested_before: self.ingested_before,
+            limit: limit.unwrap_or(default_limit),
+            cursor,
+        })
+    }
+}
+
+pub(crate) fn build_feature_list_query(
+    filters: ArchiveFilterInput,
+    kind: Option<String>,
+    default_limit: usize,
+    limit: Option<usize>,
+    cursor: Option<String>,
+) -> CliResult<FeatureListQuery> {
+    Ok(FeatureListQuery {
+        filters: filters.into_product_list_query(default_limit, limit, cursor)?,
+        kind: parse_optional_enum_arg("feature kind", kind.as_deref())?,
+    })
+}
+
+pub(crate) fn build_facet_aggregate_query(
+    filters: ArchiveFilterInput,
+    dimension: &str,
+    limit: Option<usize>,
+) -> CliResult<FacetAggregateQuery> {
+    Ok(FacetAggregateQuery {
+        filters: filters.into_product_list_query(100, Some(100), None)?,
+        dimension: parse_required_enum_arg("facet dimension", dimension)?,
+        limit: limit.unwrap_or(20),
+    })
+}
+
+pub(crate) fn build_timeseries_aggregate_query(
+    filters: ArchiveFilterInput,
+    measure: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    bucket: &str,
+) -> CliResult<TimeseriesAggregateQuery> {
+    Ok(TimeseriesAggregateQuery {
+        filters: filters.into_product_list_query(100, Some(100), None)?,
+        measure: parse_required_enum_arg("timeseries measure", measure)?,
+        start,
+        end,
+        bucket: parse_required_enum_arg("timeseries bucket", bucket)?,
+    })
+}
+
+pub(crate) fn build_cell_aggregate_query(
+    filters: ArchiveFilterInput,
+    measure: &str,
+    precision: u8,
+    limit: Option<usize>,
+) -> CliResult<CellAggregateQuery> {
+    Ok(CellAggregateQuery {
+        filters: filters.into_product_list_query(100, Some(100), None)?,
+        measure: parse_required_enum_arg("cell measure", measure)?,
+        precision,
+        limit: limit.unwrap_or(100),
+    })
+}
+
+pub(crate) fn parse_archive_bool(name: &str, raw: Option<&str>) -> CliResult<Option<bool>> {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) if value.eq_ignore_ascii_case("true") || value == "1" => Ok(Some(true)),
+        Some(value) if value.eq_ignore_ascii_case("false") || value == "0" => Ok(Some(false)),
+        Some(value) => Err(CliError::invalid_argument(format!(
+            "{name} must be one of: true, false, 1, 0; got `{value}`"
+        ))),
+        None => Ok(None),
+    }
+}
+
+fn parse_optional_enum_arg<T>(name: &str, raw: Option<&str>) -> CliResult<Option<T>>
+where
+    T: FromStr<Err = String>,
+{
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .parse::<T>()
+                .map_err(|message| CliError::invalid_argument(format!("invalid {name}: {message}")))
+        })
+        .transpose()
+}
+
+fn parse_required_enum_arg<T>(name: &str, raw: &str) -> CliResult<T>
+where
+    T: FromStr<Err = String>,
+{
+    raw.trim()
+        .parse::<T>()
+        .map_err(|message| CliError::invalid_argument(format!("invalid {name}: {message}")))
+}
+
+fn validate_archive_spatial_inputs(
+    lat: Option<f64>,
+    lon: Option<f64>,
+    distance_miles: Option<f64>,
+    min_lat: Option<f64>,
+    max_lat: Option<f64>,
+    min_lon: Option<f64>,
+    max_lon: Option<f64>,
+) -> CliResult<()> {
+    match (min_lat, max_lat, min_lon, max_lon) {
+        (None, None, None, None) => {}
+        (Some(min_lat), Some(max_lat), Some(min_lon), Some(max_lon)) => {
+            validate_lat("min_lat", min_lat)?;
+            validate_lat("max_lat", max_lat)?;
+            validate_lon("min_lon", min_lon)?;
+            validate_lon("max_lon", max_lon)?;
+            if min_lat > max_lat {
+                return Err(CliError::invalid_argument(
+                    "min_lat must be less than or equal to max_lat",
+                ));
+            }
+            if min_lon > max_lon {
+                return Err(CliError::invalid_argument(
+                    "min_lon must be less than or equal to max_lon",
+                ));
+            }
+        }
+        _ => {
+            return Err(CliError::invalid_argument(
+                "min_lat, max_lat, min_lon, and max_lon must be provided together",
+            ));
+        }
+    }
+
+    match (lat, lon) {
+        (Some(lat), Some(lon)) => {
+            validate_lat("lat", lat)?;
+            validate_lon("lon", lon)?;
+        }
+        (None, None) => {}
+        _ => {
+            return Err(CliError::invalid_argument(
+                "lat and lon must be provided together",
+            ));
+        }
+    }
+
+    if distance_miles.is_some() && (lat.is_none() || lon.is_none()) {
+        return Err(CliError::invalid_argument(
+            "distance_miles requires both lat and lon",
+        ));
+    }
+    if let Some(distance_miles) = distance_miles
+        && (!distance_miles.is_finite() || distance_miles <= 0.0)
+    {
+        return Err(CliError::invalid_argument(
+            "distance_miles must be a finite value greater than 0",
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_archive_size_inputs(min_size: Option<usize>, max_size: Option<usize>) -> CliResult<()> {
+    if min_size.zip(max_size).is_some_and(|(min, max)| min > max) {
+        return Err(CliError::invalid_argument(
+            "min_size must be less than or equal to max_size",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_lat(name: &str, value: f64) -> CliResult<()> {
+    if !value.is_finite() || !(-90.0..=90.0).contains(&value) {
+        return Err(CliError::invalid_argument(format!(
+            "{name} must be a finite value between -90 and 90"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_lon(name: &str, value: f64) -> CliResult<()> {
+    if !value.is_finite() || !(-180.0..=180.0).contains(&value) {
+        return Err(CliError::invalid_argument(format!(
+            "{name} must be a finite value between -180 and 180"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ArchiveFilterInput, build_feature_list_query};
+    use crate::live::server::types::ArchiveFilterParams;
+
+    #[test]
+    fn product_list_query_rejects_invalid_size_range() {
+        let error = ArchiveFilterInput {
+            min_size: Some(10),
+            max_size: Some(1),
+            ..ArchiveFilterInput::default()
+        }
+        .into_product_list_query(100, None, None)
+        .expect_err("invalid size range should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("min_size must be less than or equal to max_size")
+        );
+    }
+
+    #[test]
+    fn feature_list_query_preserves_artifact_kind_filter() {
+        let query = build_feature_list_query(
+            ArchiveFilterInput {
+                artifact_kind: Some("nws_text_product,cap_message".to_string()),
+                ..ArchiveFilterInput::default()
+            },
+            None,
+            100,
+            None,
+            None,
+        )
+        .expect("feature query should build");
+
+        assert_eq!(
+            query.filters.artifact_kind.as_deref(),
+            Some("nws_text_product,cap_message")
+        );
+    }
+
+    #[test]
+    fn archive_filter_params_inherit_size_range_validation() {
+        let error = ArchiveFilterParams {
+            min_size: Some(10),
+            max_size: Some(1),
+            ..ArchiveFilterParams::default()
+        }
+        .into_product_list_query(100, None, None)
+        .expect_err("http params should inherit validation");
+
+        assert!(error.contains("min_size must be less than or equal to max_size"));
+    }
+}

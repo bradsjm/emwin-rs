@@ -1,4 +1,7 @@
-use super::{CompletedFileEventPayload, EventFilter, EventKind, EventsQuery, TelemetryPayload};
+use super::{
+    ArchiveFilterParams, CompletedFileEventPayload, EventFilter, EventKind, EventsQuery,
+    TelemetryPayload,
+};
 use crate::live::server::server_http::event_matches_filter;
 use emwin_db::CompletedFileMetadata;
 use emwin_parser::{detail_product_v2, enrich_product, summarize_product_v2};
@@ -48,6 +51,10 @@ fn empty_events_query() -> EventsQuery {
         lat: None,
         lon: None,
         distance_miles: None,
+        min_lat: None,
+        max_lat: None,
+        min_lon: None,
+        max_lon: None,
         min_wind_mph: None,
         min_hail_inches: None,
         min_size: None,
@@ -207,7 +214,7 @@ fn events_filter_only_allows_matching_filenames() {
 #[test]
 fn events_filter_matches_structured_metadata_fields() {
     let filter = EventFilter::from_query(EventsQuery {
-        event: Some("file_complete".to_string()),
+        event: Some("product_available".to_string()),
         pil: Some("taf,afd".to_string()),
         office: Some("ffc".to_string()),
         office_state: Some("ga".to_string()),
@@ -307,6 +314,46 @@ fn events_filter_matches_issue_fields() {
     });
 
     assert!(event_matches_filter(&filter, &event));
+}
+
+#[test]
+fn archive_filter_params_reject_invalid_boolean_literals() {
+    let error = ArchiveFilterParams {
+        has_issues: Some("maybe".to_string()),
+        ..ArchiveFilterParams::default()
+    }
+    .into_product_list_query(100, None, None)
+    .expect_err("invalid boolean literal should fail");
+
+    assert!(error.contains("has_issues must be one of"));
+}
+
+#[test]
+fn archive_filter_params_reject_invalid_size_ranges() {
+    let error = ArchiveFilterParams {
+        min_size: Some(10),
+        max_size: Some(1),
+        ..ArchiveFilterParams::default()
+    }
+    .into_product_list_query(100, None, None)
+    .expect_err("invalid size range should fail");
+
+    assert!(error.contains("min_size must be less than or equal to max_size"));
+}
+
+#[test]
+fn archive_filter_params_preserve_artifact_kind() {
+    let query = ArchiveFilterParams {
+        artifact_kind: Some("nws_text_product,cap_message".to_string()),
+        ..ArchiveFilterParams::default()
+    }
+    .into_product_list_query(100, None, None)
+    .expect("query should build");
+
+    assert_eq!(
+        query.artifact_kind.as_deref(),
+        Some("nws_text_product,cap_message")
+    );
 }
 
 #[test]
@@ -464,13 +511,40 @@ fn events_filter_does_not_match_non_file_events_with_location_constraints() {
 }
 
 #[test]
+fn events_filter_matches_bbox_against_polygon_and_points() {
+    let polygon_event = file_complete_event("SVRPOLY.TXT");
+    let path_event = file_complete_event("SVRWIND.TXT");
+    let filter = event_filter(EventsQuery {
+        min_lat: Some(41.39),
+        max_lat: Some(41.46),
+        min_lon: Some(-96.14),
+        max_lon: Some(-96.07),
+        ..empty_events_query()
+    });
+
+    assert!(event_matches_filter(&filter, &polygon_event));
+    assert!(event_matches_filter(&filter, &path_event));
+}
+
+#[test]
+fn events_filter_rejects_products_outside_bbox() {
+    let event = file_complete_event("SVROAXNE.TXT");
+    let filter = event_filter(EventsQuery {
+        min_lat: Some(35.0),
+        max_lat: Some(35.1),
+        min_lon: Some(-82.1),
+        max_lon: Some(-82.0),
+        ..empty_events_query()
+    });
+
+    assert!(!event_matches_filter(&filter, &event));
+}
+
+#[test]
 fn file_complete_event_includes_download_url() {
     let value = file_complete_event("nested/my file.txt").to_json();
 
-    assert_eq!(
-        value["download_url"],
-        "/v1/live/files/nested%2Fmy%20file.txt"
-    );
+    assert_eq!(value["download_url"], "/v1/files/nested%2Fmy%20file.txt");
     assert_eq!(value["timestamp_utc"], 1);
     assert_eq!(value["product"]["schema_version"], 2);
     assert!(value["product"].get("facets").is_some());

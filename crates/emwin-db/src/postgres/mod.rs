@@ -5,6 +5,7 @@ use crate::writer::{BoxFuture, StorageBlobReader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Row};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -111,6 +112,67 @@ pub struct IncidentProductsCursor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductCursor {
+    pub source_timestamp_utc: i64,
+    pub product_id: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureKind {
+    Polygon,
+    TimeMotLocPath,
+    UgcPoint,
+    HvtecPoint,
+    SearchPoint,
+}
+
+impl FeatureKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Polygon => "polygon",
+            Self::TimeMotLocPath => "time_mot_loc_path",
+            Self::UgcPoint => "ugc_point",
+            Self::HvtecPoint => "hvtec_point",
+            Self::SearchPoint => "search_point",
+        }
+    }
+
+    pub fn ordinal(self) -> i16 {
+        match self {
+            Self::Polygon => 1,
+            Self::TimeMotLocPath => 2,
+            Self::UgcPoint => 3,
+            Self::HvtecPoint => 4,
+            Self::SearchPoint => 5,
+        }
+    }
+}
+
+impl FromStr for FeatureKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "polygon" => Ok(Self::Polygon),
+            "time_mot_loc_path" => Ok(Self::TimeMotLocPath),
+            "ugc_point" => Ok(Self::UgcPoint),
+            "hvtec_point" => Ok(Self::HvtecPoint),
+            "search_point" => Ok(Self::SearchPoint),
+            _ => Err(format!("invalid feature kind `{value}`")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeatureCursor {
+    pub source_timestamp_utc: i64,
+    pub product_id: i64,
+    pub feature_kind: FeatureKind,
+    pub feature_row_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchivedIssueCursor {
     pub source_timestamp_utc: i64,
     pub product_id: i64,
@@ -161,6 +223,312 @@ impl Default for IncidentProductsQuery {
             cursor: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProductListQuery {
+    pub filename: Option<String>,
+    pub source_receiver: Option<String>,
+    pub source: Option<String>,
+    pub pil: Option<String>,
+    pub family: Option<String>,
+    pub artifact_kind: Option<String>,
+    pub container: Option<String>,
+    pub wmo_prefix: Option<String>,
+    pub office: Option<String>,
+    pub office_city: Option<String>,
+    pub office_state: Option<String>,
+    pub bbb_kind: Option<String>,
+    pub cccc: Option<String>,
+    pub ttaaii: Option<String>,
+    pub afos: Option<String>,
+    pub bbb: Option<String>,
+    pub has_issues: Option<bool>,
+    pub issue_kind: Option<String>,
+    pub issue_code: Option<String>,
+    pub has_vtec: Option<bool>,
+    pub has_ugc: Option<bool>,
+    pub has_hvtec: Option<bool>,
+    pub has_latlon: Option<bool>,
+    pub has_time_mot_loc: Option<bool>,
+    pub has_wind_hail: Option<bool>,
+    pub state: Option<String>,
+    pub county: Option<String>,
+    pub zone: Option<String>,
+    pub fire_zone: Option<String>,
+    pub marine_zone: Option<String>,
+    pub vtec_phenomena: Option<String>,
+    pub vtec_significance: Option<String>,
+    pub vtec_action: Option<String>,
+    pub vtec_office: Option<String>,
+    pub etn: Option<String>,
+    pub hvtec_nwslid: Option<String>,
+    pub hvtec_severity: Option<String>,
+    pub hvtec_cause: Option<String>,
+    pub hvtec_record: Option<String>,
+    pub wind_hail_kind: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub distance_miles: Option<f64>,
+    pub min_lat: Option<f64>,
+    pub max_lat: Option<f64>,
+    pub min_lon: Option<f64>,
+    pub max_lon: Option<f64>,
+    pub min_wind_mph: Option<f64>,
+    pub min_hail_inches: Option<f64>,
+    pub min_size: Option<usize>,
+    pub max_size: Option<usize>,
+    pub source_timestamp_after: Option<i64>,
+    pub source_timestamp_before: Option<i64>,
+    pub ingested_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub ingested_before: Option<chrono::DateTime<chrono::Utc>>,
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+
+impl Default for ProductListQuery {
+    fn default() -> Self {
+        Self {
+            filename: None,
+            source_receiver: None,
+            source: None,
+            pil: None,
+            family: None,
+            artifact_kind: None,
+            container: None,
+            wmo_prefix: None,
+            office: None,
+            office_city: None,
+            office_state: None,
+            bbb_kind: None,
+            cccc: None,
+            ttaaii: None,
+            afos: None,
+            bbb: None,
+            has_issues: None,
+            issue_kind: None,
+            issue_code: None,
+            has_vtec: None,
+            has_ugc: None,
+            has_hvtec: None,
+            has_latlon: None,
+            has_time_mot_loc: None,
+            has_wind_hail: None,
+            state: None,
+            county: None,
+            zone: None,
+            fire_zone: None,
+            marine_zone: None,
+            vtec_phenomena: None,
+            vtec_significance: None,
+            vtec_action: None,
+            vtec_office: None,
+            etn: None,
+            hvtec_nwslid: None,
+            hvtec_severity: None,
+            hvtec_cause: None,
+            hvtec_record: None,
+            wind_hail_kind: None,
+            lat: None,
+            lon: None,
+            distance_miles: None,
+            min_lat: None,
+            max_lat: None,
+            min_lon: None,
+            max_lon: None,
+            min_wind_mph: None,
+            min_hail_inches: None,
+            min_size: None,
+            max_size: None,
+            source_timestamp_after: None,
+            source_timestamp_before: None,
+            ingested_after: None,
+            ingested_before: None,
+            limit: 100,
+            cursor: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FeatureListQuery {
+    pub filters: ProductListQuery,
+    pub kind: Option<FeatureKind>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FacetDimension {
+    Office,
+    Family,
+    ArtifactKind,
+    Phenomena,
+    Significance,
+    Status,
+    IssueKind,
+    IssueCode,
+}
+
+impl FromStr for FacetDimension {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "office" => Ok(Self::Office),
+            "family" => Ok(Self::Family),
+            "artifact_kind" => Ok(Self::ArtifactKind),
+            "phenomena" => Ok(Self::Phenomena),
+            "significance" => Ok(Self::Significance),
+            "status" => Ok(Self::Status),
+            "issue_kind" => Ok(Self::IssueKind),
+            "issue_code" => Ok(Self::IssueCode),
+            _ => Err(format!("invalid facet dimension `{value}`")),
+        }
+    }
+}
+
+impl FacetDimension {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Office => "office",
+            Self::Family => "family",
+            Self::ArtifactKind => "artifact_kind",
+            Self::Phenomena => "phenomena",
+            Self::Significance => "significance",
+            Self::Status => "status",
+            Self::IssueKind => "issue_kind",
+            Self::IssueCode => "issue_code",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FacetAggregateQuery {
+    pub filters: ProductListQuery,
+    pub dimension: FacetDimension,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeseriesMeasure {
+    ProductCount,
+    IssueCount,
+    IncidentCount,
+}
+
+impl FromStr for TimeseriesMeasure {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "product_count" => Ok(Self::ProductCount),
+            "issue_count" => Ok(Self::IssueCount),
+            "incident_count" => Ok(Self::IncidentCount),
+            _ => Err(format!("invalid timeseries measure `{value}`")),
+        }
+    }
+}
+
+impl TimeseriesMeasure {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProductCount => "product_count",
+            Self::IssueCount => "issue_count",
+            Self::IncidentCount => "incident_count",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeseriesBucket {
+    Hour,
+    Day,
+    Week,
+}
+
+impl TimeseriesBucket {
+    pub fn duration(self) -> chrono::Duration {
+        match self {
+            Self::Hour => chrono::Duration::hours(1),
+            Self::Day => chrono::Duration::days(1),
+            Self::Week => chrono::Duration::weeks(1),
+        }
+    }
+
+    pub fn postgres_interval(self) -> &'static str {
+        match self {
+            Self::Hour => "1 hour",
+            Self::Day => "1 day",
+            Self::Week => "7 days",
+        }
+    }
+}
+
+impl FromStr for TimeseriesBucket {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "hour" => Ok(Self::Hour),
+            "day" => Ok(Self::Day),
+            "week" => Ok(Self::Week),
+            _ => Err(format!("invalid timeseries bucket `{value}`")),
+        }
+    }
+}
+
+impl TimeseriesBucket {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hour => "hour",
+            Self::Day => "day",
+            Self::Week => "week",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimeseriesAggregateQuery {
+    pub filters: ProductListQuery,
+    pub measure: TimeseriesMeasure,
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub end: chrono::DateTime<chrono::Utc>,
+    pub bucket: TimeseriesBucket,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CellMeasure {
+    ProductCount,
+}
+
+impl FromStr for CellMeasure {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "product_count" => Ok(Self::ProductCount),
+            _ => Err(format!("invalid cell measure `{value}`")),
+        }
+    }
+}
+
+impl CellMeasure {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProductCount => "product_count",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CellAggregateQuery {
+    pub filters: ProductListQuery,
+    pub measure: CellMeasure,
+    pub precision: u8,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,6 +647,70 @@ pub struct ArchivedIssue {
     pub code: String,
     pub message: String,
     pub line: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ArchivedFeature {
+    pub feature_id: String,
+    pub feature_kind: FeatureKind,
+    pub product_id: i64,
+    pub source_timestamp_utc: i64,
+    pub geometry: Value,
+    pub properties: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct FacetAggregateBucket {
+    pub value: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct TimeseriesAggregateBucket {
+    pub bucket_start: chrono::DateTime<chrono::Utc>,
+    pub bucket_end: chrono::DateTime<chrono::Utc>,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+pub struct CellAggregateBucket {
+    pub cell: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AggregateCompleteness {
+    pub partial: bool,
+    pub approximate: bool,
+    pub reason: Option<String>,
+}
+
+impl AggregateCompleteness {
+    pub const fn exact() -> Self {
+        Self {
+            partial: false,
+            approximate: false,
+            reason: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FacetAggregateResult {
+    pub completeness: AggregateCompleteness,
+    pub items: Vec<FacetAggregateBucket>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TimeseriesAggregateResult {
+    pub completeness: AggregateCompleteness,
+    pub items: Vec<TimeseriesAggregateBucket>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CellAggregateResult {
+    pub completeness: AggregateCompleteness,
+    pub items: Vec<CellAggregateBucket>,
 }
 
 impl PostgresMetadataSink {
@@ -467,6 +899,21 @@ impl PostgresMetadataSink {
         }
     }
 
+    pub async fn list_archived_products(
+        &self,
+        query: ProductListQuery,
+    ) -> PersistResult<PaginatedResponse<ArchivedProductSummary>> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_archived_products_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
     pub async fn get_archived_product(
         &self,
         product_id: i64,
@@ -558,6 +1005,66 @@ impl PostgresMetadataSink {
             bytes,
             payload_storage_kind,
         }))
+    }
+
+    pub async fn list_archived_features(
+        &self,
+        query: FeatureListQuery,
+    ) -> PersistResult<PaginatedResponse<ArchivedFeature>> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_archived_features_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn list_facet_aggregate(
+        &self,
+        query: FacetAggregateQuery,
+    ) -> PersistResult<FacetAggregateResult> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_facet_aggregate_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn list_timeseries_aggregate(
+        &self,
+        query: TimeseriesAggregateQuery,
+    ) -> PersistResult<TimeseriesAggregateResult> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_timeseries_aggregate_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn list_cell_aggregate(
+        &self,
+        query: CellAggregateQuery,
+    ) -> PersistResult<CellAggregateResult> {
+        let pool = self.ensure_pool().await?;
+        let result = query::list_cell_aggregate_query(&pool, query).await;
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                self.handle_runtime_error(&err).await;
+                Err(err)
+            }
+        }
     }
 
     async fn handle_runtime_error(&self, err: &PersistError) {

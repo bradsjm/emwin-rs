@@ -4,12 +4,16 @@
 //! filtering, and ingest coordination live in neighboring modules.
 
 use super::types::{
-    ARCHIVE_API_PREFIX, AppState, ArchiveIssuePayload, ArchiveIssueResponse, ArchiveIssuesQuery,
-    ArchiveIssuesResponse, ArchiveProductDetailPayload, ArchiveProductResponse, BroadcastEvent,
-    ClientGuard, EventFilter, EventKind, EventsQuery, FilesResponse, HealthResponse,
+    API_PREFIX, AppState, ArchiveIssuePayload, ArchiveIssueResponse, ArchiveIssuesQuery,
+    ArchiveIssuesResponse, ArchiveProductDetailPayload, ArchiveProductResponse,
+    ArchiveProductSummaryPayload, ArchivedFeaturePayload, BroadcastEvent, CellAggregateHttpQuery,
+    CellAggregateResponse, ClientGuard, EventFilter, EventKind, EventsQuery,
+    FacetAggregateHttpQuery, FacetAggregateResponse, FeatureCollectionResponse,
+    FeaturesGeoJsonQuery, FeaturesQuery, FeaturesResponse, FilesResponse, HealthResponse,
     IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter, IncidentEventPayload,
     IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
-    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, LIVE_API_PREFIX,
+    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, ProductsQuery, ProductsResponse,
+    TimeseriesAggregateHttpQuery, TimeseriesAggregateResponse,
 };
 use crate::live::server_support::{
     build_bytes_download_response, build_file_download_response, filename_request_or_400,
@@ -33,7 +37,20 @@ use std::time::Duration;
 /// Builds the Axum router for live server mode.
 pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLayer) -> Router {
     let auth_enabled = state.openapi_auth_token.is_some();
-    let live_router = Router::new()
+    let api_router = Router::new()
+        .route("/products", get(products_handler))
+        .route("/products/{product_id}", get(archive_product_handler))
+        .route(
+            "/products/{product_id}/raw",
+            get(archive_product_raw_handler),
+        )
+        .route("/features", get(features_handler))
+        .route("/features/geojson", get(features_geojson_handler))
+        .route("/aggregates/facets", get(facet_aggregate_handler))
+        .route("/aggregates/timeseries", get(timeseries_aggregate_handler))
+        .route("/aggregates/cells", get(cell_aggregate_handler))
+        .route("/issues", get(archive_issues_handler))
+        .route("/issues/{issue_id}", get(archive_issue_handler))
         .route("/incidents", get(incidents_handler))
         .route(
             "/incidents/{office}/{phenomena}/{significance}/{etn}",
@@ -43,8 +60,8 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
             "/incidents/{office}/{phenomena}/{significance}/{etn}/products",
             get(incident_products_handler),
         )
-        .route("/incident-events", get(incident_events_handler))
-        .route("/events", get(events_handler))
+        .route("/streams/incidents", get(incident_events_handler))
+        .route("/streams/products", get(events_handler))
         .route("/files", get(files_handler))
         .route("/files/{*filename}", get(file_download_handler))
         .route("/health", get(health_handler))
@@ -53,23 +70,10 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
             Arc::clone(&state),
             require_bearer_auth,
         ));
-    let archive_router = Router::new()
-        .route("/issues", get(archive_issues_handler))
-        .route("/issues/{issue_id}", get(archive_issue_handler))
-        .route("/products/{product_id}", get(archive_product_handler))
-        .route(
-            "/products/{product_id}/raw",
-            get(archive_product_raw_handler),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_bearer_auth,
-        ));
 
     Router::new()
         .merge(super::openapi::swagger_ui_mount(auth_enabled))
-        .nest(LIVE_API_PREFIX, live_router)
-        .nest(ARCHIVE_API_PREFIX, archive_router)
+        .nest(API_PREFIX, api_router)
         .layer(cors)
         .with_state(state)
 }
@@ -121,8 +125,225 @@ fn parse_bearer_token(header_value: &str) -> Option<&str> {
 
 #[utoipa::path(
     get,
-    path = "/v1/live/incidents",
-    tag = "live",
+    path = "/v1/products",
+    tag = "products",
+    params(ProductsQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "List archived products.", body = super::openapi::ProductsResponseSchema),
+        (status = 400, description = "Product filter query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn products_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ProductsQuery>,
+) -> Result<Json<ProductsResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let product_query = query
+        .into_product_list_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let page = archive
+        .list_archived_products(product_query)
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(ProductsResponse {
+        page: emwin_db::PaginatedResponse {
+            items: page
+                .items
+                .into_iter()
+                .map(ArchiveProductSummaryPayload::from_product)
+                .collect(),
+            next_cursor: page.next_cursor,
+        },
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/features",
+    tag = "features",
+    params(FeaturesQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "List archived spatial features.", body = super::openapi::FeaturesResponseSchema),
+        (status = 400, description = "Feature query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn features_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<FeaturesQuery>,
+) -> Result<Json<FeaturesResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let feature_query = query
+        .into_feature_list_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let page = archive
+        .list_archived_features(feature_query)
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(FeaturesResponse {
+        page: emwin_db::PaginatedResponse {
+            items: page
+                .items
+                .into_iter()
+                .map(ArchivedFeaturePayload::from_feature)
+                .collect(),
+            next_cursor: page.next_cursor,
+        },
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/features/geojson",
+    tag = "features",
+    params(FeaturesGeoJsonQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "FeatureCollection view of archived spatial features.", body = super::openapi::FeatureCollectionSchema),
+        (status = 400, description = "Feature query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn features_geojson_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<FeaturesGeoJsonQuery>,
+) -> Result<Json<FeatureCollectionResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let feature_query = query
+        .into_feature_list_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let page = archive
+        .list_archived_features(feature_query)
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(FeatureCollectionResponse {
+        kind: "FeatureCollection",
+        features: page
+            .items
+            .into_iter()
+            .map(ArchivedFeaturePayload::from_feature)
+            .map(ArchivedFeaturePayload::into_geojson_feature)
+            .collect(),
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/aggregates/facets",
+    tag = "aggregates",
+    params(FacetAggregateHttpQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "Facet aggregation over archived products.", body = super::openapi::FacetAggregateResponseSchema),
+        (status = 400, description = "Aggregate query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn facet_aggregate_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<FacetAggregateHttpQuery>,
+) -> Result<Json<FacetAggregateResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let aggregate_query = query
+        .into_facet_aggregate_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let items = archive
+        .list_facet_aggregate(aggregate_query.clone())
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(FacetAggregateResponse {
+        dimension: aggregate_query.dimension.as_str().to_string(),
+        completeness: items.completeness,
+        items: items.items,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/aggregates/timeseries",
+    tag = "aggregates",
+    params(TimeseriesAggregateHttpQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "Timeseries aggregation over archived products.", body = super::openapi::TimeseriesAggregateResponseSchema),
+        (status = 400, description = "Aggregate query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn timeseries_aggregate_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TimeseriesAggregateHttpQuery>,
+) -> Result<Json<TimeseriesAggregateResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let aggregate_query = query
+        .into_timeseries_aggregate_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let items = archive
+        .list_timeseries_aggregate(aggregate_query.clone())
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(TimeseriesAggregateResponse {
+        measure: aggregate_query.measure.as_str().to_string(),
+        bucket: aggregate_query.bucket.as_str().to_string(),
+        start: aggregate_query.start,
+        end: aggregate_query.end,
+        completeness: items.completeness,
+        items: items.items,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/aggregates/cells",
+    tag = "aggregates",
+    description = "Returns uncursored geohash cell buckets for `product_count`. Each bucket counts distinct products per intersected geohash cell across persisted polygons, paths, and representative points after applying the requested spatial filters.",
+    params(CellAggregateHttpQuery),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 401, description = "Missing or invalid bearer token.", body = String),
+        (status = 200, description = "Cell aggregation over archived products.", body = super::openapi::CellAggregateResponseSchema),
+        (status = 400, description = "Aggregate query validation failed.", body = String),
+        (status = 503, description = "Archive metadata persistence is not configured.", body = String)
+    )
+)]
+pub(super) async fn cell_aggregate_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<CellAggregateHttpQuery>,
+) -> Result<Json<CellAggregateResponse>, (StatusCode, String)> {
+    let archive = archive_service(&state)?;
+    let aggregate_query = query
+        .into_cell_aggregate_query()
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let items = archive
+        .list_cell_aggregate(aggregate_query.clone())
+        .await
+        .map_err(map_archive_error)?;
+
+    Ok(Json(CellAggregateResponse {
+        measure: aggregate_query.measure.as_str().to_string(),
+        precision: aggregate_query.precision,
+        completeness: items.completeness,
+        items: items.items,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/incidents",
+    tag = "incidents",
     params(IncidentsQuery),
     security(("bearer_auth" = [])),
     responses(
@@ -166,8 +387,8 @@ pub(super) async fn incidents_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}",
-    tag = "live",
+    path = "/v1/incidents/{office}/{phenomena}/{significance}/{etn}",
+    tag = "incidents",
     security(("bearer_auth" = [])),
     params(
         ("office" = String, Path, description = "NWS office code"),
@@ -201,8 +422,8 @@ pub(super) async fn incident_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products",
-    tag = "live",
+    path = "/v1/incidents/{office}/{phenomena}/{significance}/{etn}/products",
+    tag = "incidents",
     security(("bearer_auth" = [])),
     params(
         ("office" = String, Path, description = "NWS office code"),
@@ -249,8 +470,8 @@ pub(super) async fn incident_products_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/archive/products/{product_id}",
-    tag = "archive",
+    path = "/v1/products/{product_id}",
+    tag = "products",
     security(("bearer_auth" = [])),
     params(("product_id" = i64, Path, description = "Archived product id")),
     responses(
@@ -281,8 +502,8 @@ pub(super) async fn archive_product_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/archive/issues",
-    tag = "archive",
+    path = "/v1/issues",
+    tag = "issues",
     params(ArchiveIssuesQuery),
     security(("bearer_auth" = [])),
     responses(
@@ -321,8 +542,8 @@ pub(super) async fn archive_issues_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/archive/issues/{issue_id}",
-    tag = "archive",
+    path = "/v1/issues/{issue_id}",
+    tag = "issues",
     security(("bearer_auth" = [])),
     params(("issue_id" = i64, Path, description = "Archived issue id")),
     responses(
@@ -353,8 +574,8 @@ pub(super) async fn archive_issue_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/archive/products/{product_id}/raw",
-    tag = "archive",
+    path = "/v1/products/{product_id}/raw",
+    tag = "products",
     security(("bearer_auth" = [])),
     params(("product_id" = i64, Path, description = "Archived product id")),
     responses(
@@ -386,8 +607,9 @@ pub(super) async fn archive_product_raw_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/events",
-    tag = "live",
+    path = "/v1/streams/products",
+    tag = "streams",
+    description = "Incremental SSE stream of completed products. Clients should fetch an initial snapshot from the resource endpoints, then attach the stream. `Last-Event-ID` is best-effort for short reconnect gaps only; lag warnings require a full resync.",
     params(EventsQuery),
     security(("bearer_auth" = [])),
     responses(
@@ -403,10 +625,6 @@ pub(super) async fn events_handler(
     headers: HeaderMap,
     Query(query): Query<EventsQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
-    reserve_client_slot(&state, peer)?;
-
-    let rx = state.event_tx.subscribe();
-    let shutdown_rx = state.shutdown_rx.clone();
     let last_id = headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())
@@ -424,6 +642,9 @@ pub(super) async fn events_handler(
     }
     let filter =
         EventFilter::try_from_query(query).map_err(|err| (StatusCode::BAD_REQUEST, err.message))?;
+    let guard = acquire_client_guard(&state, peer)?;
+    let rx = state.event_tx.subscribe();
+    let shutdown_rx = state.shutdown_rx.clone();
 
     let stream = futures::stream::unfold(
         StreamState {
@@ -433,10 +654,7 @@ pub(super) async fn events_handler(
             filter,
             shutdown_rx,
             peer,
-            _guard: Some(ClientGuard {
-                state: Arc::clone(&state),
-                peer,
-            }),
+            _guard: Some(guard),
         },
         move |mut st| async move {
             let rx = st.rx.as_mut()?;
@@ -446,6 +664,9 @@ pub(super) async fn events_handler(
                     received = rx.recv() => match received {
                     Ok(event) => {
                         if event.id <= st.last_id {
+                            continue;
+                        }
+                        if !matches!(event.kind, EventKind::FileComplete(_)) {
                             continue;
                         }
                         if !event_matches_filter(&st.filter, &event.kind) {
@@ -490,8 +711,9 @@ pub(super) async fn events_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/incident-events",
-    tag = "live",
+    path = "/v1/streams/incidents",
+    tag = "streams",
+    description = "Incremental SSE stream of persisted incident projection changes. Clients should fetch an initial snapshot from the incident resource endpoints, then attach the stream. `Last-Event-ID` is best-effort for short reconnect gaps only; lag warnings require a full resync.",
     params(IncidentEventsQuery),
     security(("bearer_auth" = [])),
     responses(
@@ -508,7 +730,7 @@ pub(super) async fn incident_events_handler(
     Query(query): Query<IncidentEventsQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
     let _ = archive_service(&state)?;
-    reserve_client_slot(&state, peer)?;
+    let guard = acquire_client_guard(&state, peer)?;
 
     let rx = state.incident_event_tx.subscribe();
     let shutdown_rx = state.shutdown_rx.clone();
@@ -527,10 +749,7 @@ pub(super) async fn incident_events_handler(
             filter,
             shutdown_rx,
             peer,
-            _guard: Some(ClientGuard {
-                state: Arc::clone(&state),
-                peer,
-            }),
+            _guard: Some(guard),
         },
         move |mut st| async move {
             let rx = st.rx.as_mut()?;
@@ -584,8 +803,8 @@ pub(super) async fn incident_events_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/files",
-    tag = "live",
+    path = "/v1/files",
+    tag = "operational",
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -606,8 +825,8 @@ pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<Fi
 
 #[utoipa::path(
     get,
-    path = "/v1/live/files/{filename}",
-    tag = "live",
+    path = "/v1/files/{filename}",
+    tag = "operational",
     security(("bearer_auth" = [])),
     params(("filename" = String, Path, description = "URL-encoded retained file path")),
     responses(
@@ -635,8 +854,8 @@ pub(super) async fn file_download_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/live/health",
-    tag = "admin",
+    path = "/v1/health",
+    tag = "operational",
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -667,8 +886,8 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
 
 #[utoipa::path(
     get,
-    path = "/v1/live/metrics",
-    tag = "admin",
+    path = "/v1/metrics",
+    tag = "operational",
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -740,6 +959,17 @@ fn reserve_client_slot(
 
     super::log_info(state.quiet, &format!("sse client connected peer={peer}"));
     Ok(())
+}
+
+fn acquire_client_guard(
+    state: &Arc<AppState>,
+    peer: SocketAddr,
+) -> Result<ClientGuard, (StatusCode, String)> {
+    reserve_client_slot(state, peer)?;
+    Ok(ClientGuard {
+        state: Arc::clone(state),
+        peer,
+    })
 }
 
 fn archive_service(
