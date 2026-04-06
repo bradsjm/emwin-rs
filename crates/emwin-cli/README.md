@@ -1,6 +1,6 @@
 # emwin-cli
 
-CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `emwin-parser`.
+CLI application for EMWIN live server workflows. Built on `emwin-api`, `emwin-protocol`, and `emwin-db`.
 
 ## Commands
 
@@ -10,7 +10,7 @@ CLI application for EMWIN live server workflows. Built on `emwin-protocol` and `
   - Supports archived products, issues, features, and aggregate reads.
 - `server`
   - Live command.
-  - Connects to EMWIN servers, exposes versioned HTTP and SSE endpoints, and retains recent files for `/v1/files` downloads.
+  - Connects to EMWIN servers and delegates the HTTP/SSE/OpenAPI server implementation to `emwin-api`.
   - Optional `--output-dir <PATH|s3://bucket[/prefix]>` persists completed payloads asynchronously.
 
 ## Output formats

@@ -1,6 +1,6 @@
 # emwin-rs
 
-Rust monorepo for EMWIN protocol decoding, client runtime, and CLI tooling.
+Rust monorepo for EMWIN protocol decoding, client runtime, HTTP API serving, and CLI tooling.
 
 ## Install
 
@@ -29,6 +29,14 @@ docker compose up --build
 - Set `EMWIN_USERNAME` in `.env.compose`; set `EMWIN_RECEIVER=wxwire` and `EMWIN_PASSWORD` only when using Weather Wire.
 - To point compose at a different S3-compatible target, set `EMWIN_OUTPUT_DIR=s3://bucket[/prefix]`; use `AWS_ENDPOINT_URL` to target MinIO or another custom endpoint with path-style addressing, set `AWS_REGION` or `AWS_DEFAULT_REGION` for region selection, and provide credentials with `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` when needed.
 - The HTTP server is exposed on `http://127.0.0.1:8080`, Postgres on `127.0.0.1:5432`, MinIO S3 on `http://127.0.0.1:9000`, and the MinIO console on `http://127.0.0.1:9001` by default.
+
+## Crates
+
+- `emwin-protocol`: protocol decoding, ingest runtimes, and relay primitives
+- `emwin-api`: reusable HTTP/SSE/OpenAPI server crate behind live server mode
+- `emwin-cli`: CLI entrypoint for archive queries, live server startup, and relay mode
+- `emwin-db`: persistence and archive query support
+- `emwin-parser`: text product enrichment and parsing
 
 ## Use `emwin-protocol` in your app
 
@@ -108,6 +116,8 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out -
 cargo run -p emwin-cli -- server --username you@example.com --output-dir s3://my-bucket/emwin --persist-database-url postgres://localhost/emwin
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password 'secret'
 ```
+
+`emwin-cli server` delegates the server implementation to `emwin-api`.
 
 Optional file persistence:
 

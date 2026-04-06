@@ -7,14 +7,15 @@ This file defines crate-local expectations for automated coding agents.
 
 - Crate: `emwin-cli` (binary crate).
 - Role: command-line UX, argument parsing, command dispatch, stdout/stderr contract.
-- Depends on `emwin-protocol` for protocol/runtime functionality.
+- Depends on `emwin-api` for server mode and `emwin-protocol` for relay/runtime functionality.
 
 ## Before You Change Code
 
 - Read root `AGENTS.md` first, then this file.
 - Keep CLI behavior changes explicit and test-covered.
 - Preserve output contract stability (especially JSON output fields).
-- Keep business/protocol logic in core crate, not in CLI command handlers.
+- Keep server implementation in `emwin-api`, not in this crate.
+- Keep business/protocol logic in core crates, not in CLI command handlers.
 
 ## Build, Lint, and Test Commands
 
@@ -86,8 +87,8 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out -
 
 - Keep command implementations in `src/cmd/*`.
 - Keep CLI argument parsing and command wiring in `src/main.rs`.
-- Keep output rendering/utilities in `src/output.rs`.
-- Keep serialization and presentation concerns in CLI crate.
+- Keep archive query serialization and presentation concerns in this crate.
+- Delegate server mode orchestration to `emwin-api`.
 - Do not duplicate protocol parsing/runtime logic from `emwin-protocol`.
 
 ## Code Style Guidelines
