@@ -1,55 +1,86 @@
-# Backend Requirements for Interactive Severe Weather Frontend
+# Backend Capabilities for Interactive Severe Weather Frontend
 
 ## Purpose
 
-This document defines the backend requirements for a future frontend built on top of `emwin-rs`.
-It distinguishes between:
+This document defines the current backend capabilities available to a frontend built on top of `emwin-rs`.
+It is grounded in the shipped `emwin-cli server` API and current archive/query capabilities, then calls out the smaller set of backend gaps that still remain for a more polished frontend.
 
-- capabilities already present in the current API
-- backend additions required for a high-quality interactive product
+The current backend already supports:
 
-The target outcome is a frontend that can show:
+- national and regional severe-weather exploration
+- live incident creation and update tracking
+- drill-down from incident to product to raw payload
+- historical product, issue, feature, and aggregate queries
 
-- the national and regional severe-weather picture
-- live incident creation and updates
-- hotspot concentration and trend changes
-- drill-down from map to incident to product to raw payload
+The current backend does not yet provide every frontend-shaped convenience surface. Those remaining gaps are listed explicitly below.
 
 ## Confirmed Current Backend Surface
 
-The current `emwin-cli server` API already exposes:
+The current `emwin-cli server` API exposes a product-first, resource-first `/v1/*` namespace:
 
-- `GET /v1/live/events`
-  - live SSE feed
-  - supports rich filtering over event name, filename, product metadata, header metadata, issue metadata, hazard/body presence, UGC geography, VTEC fields, HVTEC fields, wind/hail thresholds, point-radius location, and size
-- `GET /v1/live/incident-events`
-  - SSE feed for persisted incident projection changes
-- `GET /v1/live/incidents`
-  - paginated incident list
-- `GET /v1/live/incidents/{office}/{phenomena}/{significance}/{etn}`
+- `GET /`
+  - Swagger UI
+- `GET /openapi.json`
+  - generated OpenAPI document
+- `GET /v1/streams/products`
+  - incremental SSE stream of completed products
+  - completed-product event name is `product_available`
+  - supports rich filtering over event name, filename, product metadata, header metadata, issue metadata, hazard/body presence, UGC geography, VTEC fields, HVTEC fields, wind/hail thresholds, point-radius location, bounding box, and size
+- `GET /v1/streams/incidents`
+  - incremental SSE stream of persisted incident projection changes
+  - event name is `incident_change`
+  - incident actions are `created` and `updated`
+- `GET /v1/incidents`
+  - paginated incident list from the persisted incident projection
+- `GET /v1/incidents/{office}/{phenomena}/{significance}/{etn}`
   - incident detail
-- `GET /v1/live/incidents/{office}/{phenomena}/{significance}/{etn}/products`
-  - archived product timeline for one incident
-- `GET /v1/archive/products/{product_id}`
+- `GET /v1/incidents/{office}/{phenomena}/{significance}/{etn}/products`
+  - paginated archived product timeline for one incident
+- `GET /v1/products`
+  - paginated archived product list and search endpoint
+- `GET /v1/products/{product_id}`
   - archived product detail, including `product_json`
-- `GET /v1/archive/products/{product_id}/raw`
-  - raw payload bytes
-- `GET /v1/archive/issues`
-  - archived issue list
-- `GET /v1/archive/issues/{issue_id}`
+- `GET /v1/products/{product_id}/raw`
+  - raw archived payload bytes
+- `GET /v1/features`
+  - paginated archived spatial feature list
+- `GET /v1/features/geojson`
+  - bounded GeoJSON `FeatureCollection` over archived spatial features
+- `GET /v1/aggregates/facets`
+  - uncursored facet aggregation over archived products
+- `GET /v1/aggregates/timeseries`
+  - uncursored time-bucket aggregation over archived products and incidents
+- `GET /v1/aggregates/cells`
+  - uncursored geohash cell aggregation over archived spatial features
+- `GET /v1/issues`
+  - paginated archived issue list
+- `GET /v1/issues/{issue_id}`
   - archived issue detail
-- `GET /v1/live/files`
-  - retained live completed-file list
-- `GET /v1/live/files/{*filename}`
-  - retained live file download
-- `GET /v1/live/health`
-- `GET /v1/live/metrics`
+- `GET /v1/files`
+  - retained in-memory completed-file list
+- `GET /v1/files/{*filename}`
+  - retained in-memory file download
+- `GET /v1/health`
+  - server health summary
+- `GET /v1/metrics`
+  - JSON telemetry snapshot
 
-## Confirmed Current Data Model
+Completed work from [`PLAN.md`](/Users/jonathan/Code/emwin-rs/docs/PLAN.md) that is now shipped:
+
+- product-first resource API
+- archive product list/search
+- archive feature queries
+- GeoJSON feature collection output
+- generic aggregates
+- resource/stream naming cleanup
+- shared archive filter grammar reused across product, feature, and aggregate archive reads
+- `query` command parity for archive product, feature, and aggregate reads
+
+## Confirmed Current Data Model and Semantics
 
 ### Product Summary
 
-The live SSE `file_complete` payload and retained-file payload already expose a stable product summary model with:
+The `product_available` SSE payload and retained-file payload expose a stable product summary model with:
 
 - source
 - family
@@ -89,18 +120,18 @@ The live SSE `file_complete` payload and retained-file payload already expose a 
 
 ### Product Detail
 
-The archived product detail already exposes:
+The archived product detail exposed by `/v1/products/{product_id}` includes:
 
 - all summary fields
 - full parsed body when present
 - full specialized artifact when present
-- parse/QC issues
+- parse and QC issues
 - payload and metadata storage locations
 - raw payload download URL
 
 ### Incident Model
 
-The incident projection already exposes:
+The persisted incident projection exposed by `/v1/incidents` and `/v1/streams/incidents` includes:
 
 - office
 - phenomena
@@ -116,7 +147,106 @@ The incident projection already exposes:
 - latest product id
 - latest product timestamp
 
-### Hazard and Geometry Semantics Already Available
+### Archive Query and Filter Model
+
+`/v1/products` is a shipped archive product list and search surface.
+
+Current archive read capabilities:
+
+- cursor pagination on product, issue, feature, and incident-product list endpoints
+- one shared archive filter grammar reused across `/v1/products`, `/v1/features`, `/v1/features/geojson`, and `/v1/aggregates/*`
+- equivalent archive reads exposed through the `query` command directly against Postgres
+
+Archive filters currently cover:
+
+- metadata fields such as filename, source receiver, source, family, artifact kind, container, and office metadata
+- header fields such as `cccc`, `ttaaii`, `afos`, `bbb`, `pil`, and WMO prefix
+- issue fields such as issue kind and issue code
+- hazard/body presence fields such as `has_vtec`, `has_ugc`, `has_hvtec`, `has_latlon`, `has_time_mot_loc`, and `has_wind_hail`
+- geographic filters such as state, county, zone, fire zone, and marine zone
+- VTEC fields
+- HVTEC fields
+- wind and hail thresholds
+- point-radius spatial filters
+- bounding-box spatial filters
+- source timestamp bounds
+- ingest timestamp bounds
+- payload size bounds
+
+Validation semantics already implemented:
+
+- invalid archive booleans return `400`
+- invalid size ranges where `min_size > max_size` return `400`
+- archive-backed resource endpoints return `503` when Postgres-backed archive metadata is not configured
+
+### Feature API and Geometry Semantics
+
+The backend already exposes generic archived spatial features through `/v1/features` and `/v1/features/geojson`.
+
+Supported feature kinds:
+
+- `polygon`
+- `time_mot_loc_path`
+- `ugc_point`
+- `hvtec_point`
+- `search_point`
+
+Feature responses include:
+
+- geometry
+- source timestamp
+- feature properties
+- product linkage via `product_url` and `product_raw_url`
+
+Spatial filter semantics:
+
+- spatial filters apply to each returned geometry or counted feature contribution
+- they are not limited to product admission only
+
+### Aggregate API
+
+The backend already exposes generic archive aggregates:
+
+- `/v1/aggregates/facets`
+- `/v1/aggregates/timeseries`
+- `/v1/aggregates/cells`
+
+Aggregate responses include completeness metadata in the public schema:
+
+- `partial`
+- `approximate`
+- `reason`
+
+Currently supported facet dimensions:
+
+- `office`
+- `family`
+- `artifact_kind`
+- `phenomena`
+- `significance`
+- `status`
+- `issue_kind`
+- `issue_code`
+
+Currently supported timeseries measures:
+
+- `product_count`
+- `issue_count`
+- `incident_count`
+
+Currently supported timeseries buckets:
+
+- `hour`
+- `day`
+- `week`
+
+Currently supported cell measures:
+
+- `product_count`
+
+Cell aggregation currently counts distinct products per intersected geohash cell across persisted polygons, paths, and representative points.
+
+### Hazard and Parsing Semantics Already Available
 
 The parser already supports, when present in source products:
 
@@ -125,7 +255,7 @@ The parser already supports, when present in source products:
 - HVTEC data
 - `LAT...LON` polygons
 - `TIME...MOT...LOC` tracks and points
-- wind/hail threat tags and numeric thresholds
+- wind and hail threat tags and numeric thresholds
 - specialized severe-weather products including:
   - `lsr`
   - `mcd`
@@ -137,186 +267,90 @@ The parser already supports, when present in source products:
   - `sigmet`
   - `cwa`
 
-## Backend Requirements for Frontend MVP
+## Frontend Consumption Rules and Constraints
 
-The current API is enough for an MVP if the frontend is scoped correctly.
+The current backend is sufficient for a strong frontend if clients consume it as a resource API with incremental streams layered on top.
 
-### Required Existing Endpoints
+Recommended frontend usage:
 
-- Use `/v1/live/events` as the primary live data bus for map updates and stream views.
-- Use `/v1/live/incident-events` for incident lifecycle updates.
-- Use `/v1/live/incidents` for initial active incident load and filtered incident lists.
-- Use `/v1/live/incidents/{...}/products` for incident timeline drill-down.
-- Use `/v1/archive/products/{product_id}` for product detail inspection.
-- Use `/v1/archive/issues` and `/v1/archive/issues/{issue_id}` for data quality inspection.
+- use `/v1/incidents`, `/v1/products`, `/v1/features`, and `/v1/aggregates/*` for initial snapshots and historical reads
+- use `/v1/streams/products` for live completed-product updates
+- use `/v1/streams/incidents` for persisted incident lifecycle updates
+- use `/v1/incidents/{...}/products` for incident timeline drill-down
+- use `/v1/products/{product_id}` for lazy product detail fetches
+- use `/v1/issues` and `/v1/issues/{issue_id}` for parse and QC inspection
 
-### Required Server Configuration
+Stream contract constraints:
 
-- `--persist-database-url` must be enabled.
-  - Without it, incidents, incident events, archived products, and archived issues are unavailable.
-- `--openapi-auth-token` should be enabled in deployed environments.
-- `--cors-origin` must be configured for browser clients.
+- `/v1/streams/products` and `/v1/streams/incidents` are incremental streams, not durable replay logs
+- clients should fetch an initial snapshot from resource endpoints before attaching SSE
+- `Last-Event-ID` is best-effort only for short reconnect gaps
+- lag warnings require a full resync
 
-### Required Frontend Consumption Rules
+Rendering constraints:
 
-- Use summary payloads for list/map rendering.
-- Fetch archive detail lazily only when the user drills into a specific product.
-- Treat parser issues as first-class data, not as hidden logs.
-- Treat geometry as optional.
-  - Some products have polygons.
-  - Some only have points or keyed geography.
-  - Some outlook products may degrade to tokenized locations or non-geometric areal-outline mode.
+- use summary payloads for list and map rendering
+- fetch archived detail lazily when drilling into one product
+- treat parser issues as first-class data rather than hidden diagnostics
+- treat geometry as optional
+- some products have polygons
+- some only have points or keyed geography
+- some outlook products may degrade to tokenized locations or non-geometric areal-outline mode
 
-## Backend Additions Required for Full Product Quality
+Server configuration constraints:
 
-The current API is not sufficient for the complete target product.
+- `--persist-database-url` is required for `/v1/incidents`, `/v1/incidents/{...}`, `/v1/incidents/{...}/products`, `/v1/products`, `/v1/products/{product_id}`, `/v1/products/{product_id}/raw`, `/v1/issues`, `/v1/issues/{issue_id}`, `/v1/features`, `/v1/features/geojson`, `/v1/aggregates/*`, and `/v1/streams/incidents`
+- bearer auth remains optional but should be enabled in deployed environments
+- when `--openapi-auth-token` is configured, `Authorization: Bearer <token>` applies to all `/v1/*` routes
+- `GET /`, `GET /openapi.json`, and Swagger UI assets remain public
+- browser clients need `--cors-origin` when cross-origin access is required
+- `/v1/files` serves retained in-memory payloads, not archived S3 objects
 
-### 1. Aggregated Hotspot Endpoint
+## Remaining Backend Gaps
 
-Required because the current API is event- and incident-oriented, not hotspot-oriented.
+- frontend-specific derived map layer endpoint: not present
+- precomputed hotspot summary endpoint: not present
+- precomputed trend summary endpoint: not present
+- durable replay or event-log semantics for SSE: not present
+- richer cell measures such as issue or incident counts: not present
 
-Proposed capability:
+Additional detail on those gaps:
 
-- aggregate recent products and incidents into map cells or clusters
-- return counts by:
-  - active incidents
-  - new incidents in time window
-  - updated incidents in time window
-  - LSR count
-  - wind/hail exceedance count
-  - warning count by significance
-  - watch count
-- support:
-  - geographic bounds
-  - zoom/grid size
-  - rolling time window
-  - hazard/family filters
-
-Current status from source:
-
-- not present in the current API
-
-### 2. Trend Summary Endpoint
-
-Required because the frontend should not compute all national trend summaries from raw SSE alone.
-
-Proposed capability:
-
-- rolling national/regional summaries for:
-  - incident creation rate
-  - incident update rate
-  - active incidents by VTEC phenomena/significance
-  - LSR density over time
-  - severe wind/hail threshold counts over time
-  - outlook area counts by category
-
-Current status from source:
-
-- not present in the current API
-
-### 3. General Archive Product Search Endpoint
-
-Required for historical exploration outside one incident timeline.
-
-Proposed capability:
-
-- paginated archive product search by:
-  - time range
-  - family
-  - artifact kind
-  - office
-  - state
-  - UGC code
-  - VTEC fields
-  - HVTEC fields
-  - issue code
-  - wind/hail thresholds
-  - point-radius or bounding box
-
-Current status from source:
-
-- not confirmed from source
-- current archive HTTP surface is incident-first plus direct product lookup by id
-
-### 4. Derived Map Layer Endpoint
-
-Optional for MVP, required for a polished product.
-
-Proposed capability:
-
-- return frontend-ready map layers for:
-  - active warning polygons
-  - watch polygons
-  - SPC outlook polygons
-  - ERO outlook areas
-  - MCD polygons
-  - LSR points
-
-Reasoning:
-
-- this reduces frontend data-massaging and ensures consistent geometry normalization
-
-Current status from source:
-
-- not present in the current API
+- There is no dedicated frontend-shaped derived layer endpoint for opinionated map layers such as active warning polygons, watch polygons, or LSR-only bundles.
+- There is no dedicated hotspot endpoint with frontend-specific combined measures such as active incidents, updated incidents, warning counts, and threshold exceedance counts in one response.
+- There is no dedicated trend summary endpoint with precomposed national or regional summaries.
+- The aggregate API is generic but intentionally limited to the supported measures and dimensions listed above.
+- The backend currently answers aggregates directly from query-time reads rather than from durable rollups or replayable event-log infrastructure.
 
 ## Non-Functional Requirements
 
 ### Availability
 
 - live ingest must remain usable if archive reads are temporarily unavailable
-- frontend must handle `503` for archive-backed endpoints explicitly
+- archive-backed resource endpoints may return `503` when Postgres-backed metadata is unavailable
+- `/v1/files` and live ingest can continue to operate while archive persistence is degraded
 
 ### Authentication
 
-- bearer auth required in deployed environments
-- frontend must support authenticated SSE and JSON requests
+- bearer auth should be enabled in deployed environments
+- frontend clients must support authenticated SSE and JSON requests when `/v1/*` auth is configured
 
 ### Pagination
 
-- incident and issue/product list views must preserve cursor-based pagination
-- frontend state should keep cursors stable during drill-down
+- incident, product, issue, and feature list views preserve cursor-based pagination
+- frontend state should keep cursors stable during drill-down and refresh
 
 ### Resume and Recovery
 
-- SSE consumers should use `Last-Event-ID`
-- frontend should surface lag/drop conditions reported by SSE warning frames
+- SSE consumers may use `Last-Event-ID` only for short reconnect gaps
+- clients must resync from resource endpoints after lag warnings or detected gaps
 
 ### Data Quality
 
-- backend must preserve issue rows and issue codes
-- new derived analytics endpoints must carry quality metadata where aggregation is partial or degraded
+- backend preserves issue rows and issue codes as queryable data
+- aggregate responses carry completeness metadata when results are partial or approximate
 
 ### Performance
 
-- list and map endpoints must be usable at national scope
-- do not require the frontend to fetch full product detail for every visible object
-
-## Delivery Phases
-
-### Phase 1: Build Against Existing API
-
-Allowed scope:
-
-- live map
-- live incident list
-- incident drill-down
-- product drill-down
-- issue visibility
-- basic client-side trend summaries from currently loaded data
-
-### Phase 2: Backend Expansion
-
-Required before calling the product complete:
-
-- hotspot endpoint
-- trend endpoint
-- general archive product search
-- optionally derived map layers
-
-## Approval
-
-Approve backend work for the frontend initiative with this constraint:
-
-- the current API is sufficient for a strong incident-first MVP
-- the current API is not sufficient for full hotspot and historical trend exploration without additional backend work
+- list and map endpoints should be usable at national scope without fetching full product detail for every visible object
+- summary resources, generic feature resources, and generic aggregates are the intended building blocks for frontend overview screens
