@@ -1,6 +1,7 @@
-//! Render protocol events into CLI-facing JSON payloads.
+//! Render protocol events into API-facing JSON payloads.
 
-use emwin_parser::enrich_product;
+use emwin_db::CompletedFileMetadata;
+use emwin_protocol::ingest::ProductOrigin;
 use emwin_protocol::qbt_receiver::QbtFrameEvent;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,9 +31,13 @@ pub fn frame_event_to_json(event: &QbtFrameEvent, text_preview_chars: usize) -> 
             if let Some(preview) = text_preview(&seg.filename, &seg.content, text_preview_chars) {
                 value["preview"] = serde_json::Value::String(preview);
             }
-            if let Ok(product_json) =
-                serde_json::to_value(enrich_product(&seg.filename, &seg.content))
-            {
+            let metadata = CompletedFileMetadata::build(
+                &seg.filename,
+                unix_seconds(seg.timestamp_utc),
+                ProductOrigin::Qbt,
+                &seg.content,
+            );
+            if let Ok(product_json) = serde_json::to_value(metadata.product_detail) {
                 value["product"] = product_json;
             }
             value

@@ -1,17 +1,23 @@
 # emwin-api
 
-Reusable HTTP/SSE/OpenAPI server crate for EMWIN live ingest.
+HTTP/SSE/OpenAPI adapter crate for EMWIN live ingest.
 
 ## What it owns
 
-- Live ingest orchestration for QBT and Weather Wire server mode
 - Axum HTTP routes and SSE streams
 - OpenAPI generation and Swagger UI
-- Retained-file downloads and in-memory file cache
-- Background blob/database persistence wiring
-- API filter grammar shared by the HTTP surface and CLI archive query mode
+- HTTP auth, CORS, and response shaping
+- Retained-file downloads backed by `emwin-live`
+- Archive read endpoints backed by `emwin-db`
 
-`emwin-cli server` remains the primary process entrypoint and delegates into this crate.
+## What it does not own
+
+- Live ingest orchestration
+- Persistence runtime wiring
+- Archive filter/query contracts
+- CLI parsing or output formatting
+
+`emwin-cli server` starts `emwin-live::LiveRuntime`, then serves it through `emwin-api`.
 
 ## Validation
 

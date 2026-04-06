@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+emwin-live = { path = "../emwin-live" }
 emwin-protocol = { path = "../emwin-protocol", features = ["telemetry-serde"] }
-emwin-parser = { path = "../emwin-parser" }
 emwin-db = { path = "../emwin-db" }
 chrono.workspace = true
 tokio.workspace = true

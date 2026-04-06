@@ -9,14 +9,11 @@ use crate::cmd::query_output::{
 use crate::error::{CliError, CliResult};
 use chrono::{DateTime, Utc};
 use clap::{ArgGroup, Args, Subcommand};
-use emwin_api::archive_filter::{
-    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
-    build_feature_list_query, build_timeseries_aggregate_query,
-};
 use emwin_db::{
-    ArchivedIssueListQuery, CellAggregateQuery, FacetAggregateQuery, FeatureListQuery, IncidentKey,
-    IncidentListQuery, IncidentProductsQuery, PostgresConfig, PostgresMetadataSink,
-    ProductListQuery, TimeseriesAggregateQuery,
+    ArchiveFilterInput, ArchivedIssueListQuery, CellAggregateQuery, FacetAggregateQuery,
+    FeatureListQuery, IncidentKey, IncidentListQuery, IncidentProductsQuery, PostgresConfig,
+    PostgresMetadataSink, ProductListQuery, TimeseriesAggregateQuery, build_cell_aggregate_query,
+    build_facet_aggregate_query, build_feature_list_query, build_timeseries_aggregate_query,
 };
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -724,7 +721,7 @@ mod tests {
         IncidentLocatorArgs, incident_key, normalize_lower, normalize_upper, parse_rfc3339_utc,
     };
     use chrono::{TimeZone, Utc};
-    use emwin_api::archive_filter::parse_archive_bool;
+    use emwin_db::parse_archive_bool;
 
     #[test]
     fn parse_rfc3339_normalizes_to_utc() {

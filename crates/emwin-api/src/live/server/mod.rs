@@ -11,11 +11,10 @@ mod events;
 mod openapi;
 mod runtime;
 mod server_http;
-mod server_ingest;
 pub(crate) mod types;
 
-pub use runtime::run;
-pub use types::ServerOptions;
+pub use runtime::serve;
+pub use types::HttpServerOptions;
 
 pub(crate) use cors::build_cors_layer;
 pub(crate) use events::{publish, publish_incident_change};
@@ -28,22 +27,18 @@ fn log_info(quiet: bool, msg: &str) {
     }
 }
 
-fn log_error(msg: &str) {
-    tracing::error!("{msg}");
-}
-
 #[cfg(test)]
 mod test_support {
     use super::server_http;
     use super::types::AppState;
-    use crate::error::CliResult;
+    use crate::error::ApiResult;
     use axum::Router;
     use std::sync::Arc;
 
     pub(crate) fn build_router(
         state: Arc<AppState>,
         cors_origin: Option<String>,
-    ) -> CliResult<Router> {
+    ) -> ApiResult<Router> {
         let cors = super::build_cors_layer(cors_origin)?;
         Ok(server_http::build_router(state, cors))
     }

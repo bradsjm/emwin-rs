@@ -105,7 +105,7 @@ impl Commands {
     }
 }
 
-impl From<ReceiverKind> for emwin_api::ReceiverKind {
+impl From<ReceiverKind> for emwin_live::ReceiverKind {
     fn from(value: ReceiverKind) -> Self {
         match value {
             ReceiverKind::Qbt => Self::Qbt,
@@ -152,26 +152,30 @@ async fn main() -> crate::error::CliResult<()> {
             persist_database_url,
             openapi_auth_token,
         } => {
-            let options = emwin_api::ServerOptions {
+            let live = emwin_live::LiveRuntime::start(emwin_live::LiveOptions {
                 username,
                 password,
                 receiver: receiver.into(),
                 raw_servers: servers,
                 server_list_path,
-                bind,
-                cors_origin,
-                max_clients,
-                stats_interval_secs,
-                file_retention_secs,
-                max_retained_files,
                 output_dir,
                 post_process_archives,
                 quiet,
                 persistence_queue_capacity: persist_queue_capacity,
                 postgres_database_url: persist_database_url,
+                file_retention_secs,
+                max_retained_files,
+            })
+            .await?;
+            let options = emwin_api::HttpServerOptions {
+                bind,
+                cors_origin,
+                max_clients,
+                stats_interval_secs,
+                quiet,
                 openapi_auth_token,
             };
-            emwin_api::run(options).await.map_err(Into::into)
+            emwin_api::serve(options, live).await.map_err(Into::into)
         }
         Commands::Relay { options } => relay::runtime::run(options).await,
     }

@@ -1,4 +1,4 @@
-use super::test_state;
+use super::build_state;
 use crate::live::server::build_router;
 use crate::live::server::server_http::files_handler;
 use axum::Json;
@@ -6,28 +6,28 @@ use axum::body::{Body, to_bytes};
 use axum::extract::State;
 use axum::http::{Request, StatusCode};
 use emwin_protocol::ingest::ProductOrigin;
-use std::sync::Arc;
-use std::time::SystemTime;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn files_download_accepts_url_encoded_nested_filename() {
-    let state = test_state(10);
-    {
-        let mut guard = state
-            .retained_files
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.insert(
-            "nested/my file.txt".to_string(),
-            b"hello world".to_vec(),
-            1,
-            ProductOrigin::Qbt,
-            SystemTime::now(),
-        );
-    }
+    let state = build_state(
+        10,
+        emwin_live::LiveRuntime::new_for_tests(
+            vec![(
+                "nested/my file.txt".to_string(),
+                b"hello world".to_vec(),
+                1,
+                ProductOrigin::Qbt,
+            )],
+            emwin_live::LiveTelemetry::Unavailable,
+            None,
+            None,
+            None,
+        ),
+        None,
+    );
 
-    let app = build_router(Arc::clone(&state), None).expect("router should build");
+    let app = build_router(state.clone(), None).expect("router should build");
 
     let response = app
         .oneshot(
@@ -49,25 +49,27 @@ async fn files_download_accepts_url_encoded_nested_filename() {
 
 #[tokio::test]
 async fn files_endpoint_serializes_enriched_metadata() {
-    let state = test_state(10);
-    {
-        let mut guard = state
-            .retained_files
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.insert(
-            "TAFPDKGA.TXT".to_string(),
-            b"000
+    let state = build_state(
+        10,
+        emwin_live::LiveRuntime::new_for_tests(
+            vec![(
+                "TAFPDKGA.TXT".to_string(),
+                b"000
 FTUS42 KFFC 022320
 TAFPDK
 Body
 "
-            .to_vec(),
-            1,
-            ProductOrigin::Qbt,
-            SystemTime::now(),
-        );
-    }
+                .to_vec(),
+                1,
+                ProductOrigin::Qbt,
+            )],
+            emwin_live::LiveTelemetry::Unavailable,
+            None,
+            None,
+            None,
+        ),
+        None,
+    );
 
     let Json(response) = files_handler(State(state)).await;
     let file = &response.files[0];

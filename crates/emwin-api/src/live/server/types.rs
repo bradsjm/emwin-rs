@@ -3,30 +3,25 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
-use crate::archive_filter::{
-    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
+use crate::cmd::event_output::{frame_event_name, frame_event_to_json};
+use crate::live::server_support::file_download_url;
+use emwin_db::{
+    AggregateCompleteness, ArchiveFilterInput, ArchivedFeature, ArchivedIssue,
+    ArchivedProductDetail, ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata,
+    FacetAggregateBucket, IncidentChange, IncidentChangeAction, IncidentChangeTrigger,
+    IncidentDetail, IncidentSummary, PaginatedResponse, PersistenceStats,
+    TimeseriesAggregateBucket, build_cell_aggregate_query, build_facet_aggregate_query,
     build_feature_list_query, build_timeseries_aggregate_query,
 };
-use crate::cmd::event_output::{frame_event_name, frame_event_to_json};
-use crate::live::filter::{FileEventFilter, FileFilterInput};
-use crate::live::persistence::FilePersistenceProducer;
-use crate::live::server_support::{RetainedFiles, file_download_url};
-use emwin_db::{
-    AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedProductDetail,
-    ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata, FacetAggregateBucket,
-    IncidentChange, IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
-    PaginatedResponse, PersistenceStats, PostgresMetadataSink, TimeseriesAggregateBucket,
-};
-use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
-use emwin_protocol::wxwire_receiver::{WxWireReceiverFrameEvent, WxWireReceiverTelemetrySnapshot};
+use emwin_live::{FileEventFilter, FileFilterInput, LiveRuntime, LiveTelemetry};
+use emwin_protocol::qbt_receiver::QbtFrameEvent;
+use emwin_protocol::wxwire_receiver::WxWireReceiverFrameEvent;
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::Instant;
 use tokio::sync::{broadcast, watch};
 use utoipa::{IntoParams, ToSchema};
 
@@ -96,13 +91,7 @@ impl Serialize for CompletedFileEventPayload {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "receiver", rename_all = "snake_case")]
-pub(crate) enum TelemetryPayload {
-    Unavailable,
-    Qbt(QbtReceiverTelemetrySnapshot),
-    WxWire(WxWireReceiverTelemetrySnapshot),
-}
+pub(crate) type TelemetryPayload = LiveTelemetry;
 
 #[derive(Debug, Clone)]
 pub(crate) struct MetricsPayload {
@@ -199,7 +188,7 @@ impl EventKind {
                     "length": file.data.len(),
                     "subject": file.subject,
                     "id": file.id,
-                    "issue_utc": crate::live::shared::unix_seconds(file.issue_utc),
+                    "issue_utc": unix_seconds(file.issue_utc),
                     "ttaaii": file.ttaaii,
                     "cccc": file.cccc,
                     "awipsid": file.awipsid,
@@ -366,24 +355,15 @@ fn csv_i64_values(raw: Option<&str>) -> Option<BTreeSet<i64>> {
     (!values.is_empty()).then_some(values)
 }
 
-#[derive(Debug)]
 pub(crate) struct AppState {
+    pub(crate) live: LiveRuntime,
     pub(crate) event_tx: broadcast::Sender<BroadcastEvent>,
     pub(crate) incident_event_tx: broadcast::Sender<IncidentBroadcastEvent>,
     pub(crate) shutdown_rx: watch::Receiver<bool>,
-    pub(crate) retained_files: Mutex<RetainedFiles>,
-    pub(crate) telemetry: Mutex<TelemetryPayload>,
-    pub(crate) persistence: Option<FilePersistenceProducer>,
-    pub(crate) archive: Option<PostgresMetadataSink>,
     pub(crate) connected_clients: AtomicUsize,
     pub(crate) max_clients: usize,
     pub(crate) next_event_id: AtomicU64,
     pub(crate) next_incident_event_id: AtomicU64,
-    pub(crate) data_blocks_total: AtomicU64,
-    pub(crate) received_servers: AtomicUsize,
-    pub(crate) received_sat_servers: AtomicUsize,
-    pub(crate) started_at: Instant,
-    pub(crate) upstream_endpoint: Mutex<Option<String>>,
     pub(crate) openapi_auth_token: Option<String>,
     pub(crate) quiet: bool,
 }
@@ -1074,24 +1054,19 @@ pub(crate) fn archive_issue_url(issue_id: i64) -> String {
     format!("{API_PREFIX}/issues/{issue_id}")
 }
 
+fn unix_seconds(time: std::time::SystemTime) -> u64 {
+    time.duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone)]
-pub struct ServerOptions {
-    pub receiver: crate::ReceiverKind,
-    pub username: String,
-    pub password: Option<String>,
-    pub raw_servers: Vec<String>,
-    pub server_list_path: Option<String>,
-    pub output_dir: Option<String>,
+pub struct HttpServerOptions {
     pub bind: String,
     pub cors_origin: Option<String>,
     pub max_clients: usize,
     pub stats_interval_secs: u64,
-    pub file_retention_secs: u64,
-    pub max_retained_files: usize,
-    pub post_process_archives: bool,
     pub quiet: bool,
-    pub persistence_queue_capacity: usize,
-    pub postgres_database_url: Option<String>,
     pub openapi_auth_token: Option<String>,
 }
 

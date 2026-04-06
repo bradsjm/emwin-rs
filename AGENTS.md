@@ -9,6 +9,7 @@ Use this file as the operational contract for automated coding agents.
 - Toolchain target: stable Rust, workspace `rust-version = 1.94`.
 - Workspace members:
   - `crates/emwin-api`
+  - `crates/emwin-live`
   - `crates/emwin-protocol`
   - `crates/emwin-cli`
   - `crates/emwin-db`
@@ -43,6 +44,7 @@ cargo test --workspace
 ```bash
 cargo build --workspace
 cargo build -p emwin-api
+cargo build -p emwin-live
 cargo build -p emwin-protocol
 cargo build -p emwin-cli
 ```
@@ -52,6 +54,7 @@ cargo build -p emwin-cli
 ```bash
 cargo test -p emwin-protocol
 cargo test -p emwin-api
+cargo test -p emwin-live
 cargo test -p emwin-cli
 ```
 
@@ -176,6 +179,7 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out -
 - Keep protocol parsing concerns under `emwin-protocol/src/protocol`.
 - Keep QBT runtime orchestration under `emwin-protocol/src/client`.
 - Keep Weather Wire runtime concerns under `emwin-protocol/src/wxwire_receiver`.
+- Keep headless live ingest orchestration under `emwin-live/src`.
 - Keep HTTP server and OpenAPI concerns under `emwin-api/src/live/server`.
 - Keep CLI command handling under `emwin-cli/src/cmd`.
 - Do not leak CLI-only concerns into core library modules.

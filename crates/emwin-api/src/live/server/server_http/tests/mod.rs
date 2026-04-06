@@ -1,12 +1,9 @@
 use crate::live::server::types::{
     AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
-    TelemetryPayload,
 };
-use crate::live::server_support::RetainedFiles;
 use emwin_db::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
-use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, watch};
 
 mod auth;
@@ -15,78 +12,68 @@ mod events_and_incidents;
 mod files;
 mod metrics;
 
-fn test_state(max_clients: usize) -> Arc<AppState> {
+fn build_state(
+    max_clients: usize,
+    live: emwin_live::LiveRuntime,
+    token: Option<String>,
+) -> Arc<AppState> {
     let (_, shutdown_rx) = watch::channel(false);
     Arc::new(AppState {
+        live,
         event_tx: broadcast::channel(32).0,
         incident_event_tx: broadcast::channel(32).0,
         shutdown_rx,
-        retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
-        telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
-        persistence: None,
-        archive: None,
         connected_clients: AtomicUsize::new(0),
         max_clients,
         next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
-        data_blocks_total: AtomicU64::new(0),
-        received_servers: AtomicUsize::new(0),
-        received_sat_servers: AtomicUsize::new(0),
-        started_at: Instant::now(),
-        upstream_endpoint: std::sync::Mutex::new(None),
-        openapi_auth_token: None,
+        openapi_auth_token: token,
         quiet: true,
     })
+}
+
+fn test_state(max_clients: usize) -> Arc<AppState> {
+    build_state(
+        max_clients,
+        emwin_live::LiveRuntime::new_for_tests(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Unavailable,
+            None,
+            None,
+            None,
+        ),
+        None,
+    )
 }
 
 fn test_state_with_auth(max_clients: usize, token: &str) -> Arc<AppState> {
-    let (_, shutdown_rx) = watch::channel(false);
-    Arc::new(AppState {
-        event_tx: broadcast::channel(32).0,
-        incident_event_tx: broadcast::channel(32).0,
-        shutdown_rx,
-        retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
-        telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
-        persistence: None,
-        archive: None,
-        connected_clients: AtomicUsize::new(0),
+    build_state(
         max_clients,
-        next_event_id: AtomicU64::new(1),
-        next_incident_event_id: AtomicU64::new(1),
-        data_blocks_total: AtomicU64::new(0),
-        received_servers: AtomicUsize::new(0),
-        received_sat_servers: AtomicUsize::new(0),
-        started_at: Instant::now(),
-        upstream_endpoint: std::sync::Mutex::new(None),
-        openapi_auth_token: Some(token.to_string()),
-        quiet: true,
-    })
+        emwin_live::LiveRuntime::new_for_tests(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Unavailable,
+            None,
+            None,
+            None,
+        ),
+        Some(token.to_string()),
+    )
 }
 
 fn test_state_with_archive(max_clients: usize) -> Arc<AppState> {
-    let (_, shutdown_rx) = watch::channel(false);
-    Arc::new(AppState {
-        event_tx: broadcast::channel(32).0,
-        incident_event_tx: broadcast::channel(32).0,
-        shutdown_rx,
-        retained_files: std::sync::Mutex::new(RetainedFiles::new(32, Duration::from_secs(60))),
-        telemetry: std::sync::Mutex::new(TelemetryPayload::Unavailable),
-        persistence: None,
-        archive: Some(emwin_db::PostgresMetadataSink::new(
-            emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
-        )),
-        connected_clients: AtomicUsize::new(0),
+    build_state(
         max_clients,
-        next_event_id: AtomicU64::new(1),
-        next_incident_event_id: AtomicU64::new(1),
-        data_blocks_total: AtomicU64::new(0),
-        received_servers: AtomicUsize::new(0),
-        received_sat_servers: AtomicUsize::new(0),
-        started_at: Instant::now(),
-        upstream_endpoint: std::sync::Mutex::new(None),
-        openapi_auth_token: None,
-        quiet: true,
-    })
+        emwin_live::LiveRuntime::new_for_tests(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Unavailable,
+            Some(emwin_db::PostgresMetadataSink::new(
+                emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
+            )),
+            None,
+            None,
+        ),
+        None,
+    )
 }
 
 fn empty_events_query() -> EventsQuery {

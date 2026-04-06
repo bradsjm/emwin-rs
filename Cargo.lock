@@ -653,7 +653,7 @@ dependencies = [
  "chrono",
  "crc32fast",
  "emwin-db",
- "emwin-parser",
+ "emwin-live",
  "emwin-protocol",
  "futures",
  "serde",
@@ -682,6 +682,7 @@ dependencies = [
  "dotenvy",
  "emwin-api",
  "emwin-db",
+ "emwin-live",
  "emwin-protocol",
  "futures",
  "serde",
@@ -709,6 +710,30 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "emwin-live"
+version = "0.3.1"
+dependencies = [
+ "bytes",
+ "chrono",
+ "crc32fast",
+ "emwin-db",
+ "emwin-parser",
+ "emwin-protocol",
+ "futures",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tracing",
+ "url",
+ "zip 8.2.0",
 ]
 
 [[package]]

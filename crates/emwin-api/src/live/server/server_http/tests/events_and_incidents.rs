@@ -417,30 +417,17 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
     .await
     .expect("issue insert should succeed");
 
-    let (_, shutdown_rx) = tokio::sync::watch::channel(false);
-    let state = Arc::new(crate::live::server::types::AppState {
-        event_tx: tokio::sync::broadcast::channel(8).0,
-        incident_event_tx: tokio::sync::broadcast::channel(8).0,
-        shutdown_rx,
-        retained_files: std::sync::Mutex::new(crate::live::server_support::RetainedFiles::new(
-            8,
-            std::time::Duration::from_secs(60),
-        )),
-        telemetry: std::sync::Mutex::new(crate::live::server::types::TelemetryPayload::Unavailable),
-        persistence: None,
-        archive: Some(sink.clone()),
-        connected_clients: std::sync::atomic::AtomicUsize::new(0),
-        max_clients: 10,
-        next_event_id: std::sync::atomic::AtomicU64::new(1),
-        next_incident_event_id: std::sync::atomic::AtomicU64::new(1),
-        data_blocks_total: std::sync::atomic::AtomicU64::new(0),
-        received_servers: std::sync::atomic::AtomicUsize::new(0),
-        received_sat_servers: std::sync::atomic::AtomicUsize::new(0),
-        started_at: std::time::Instant::now(),
-        upstream_endpoint: std::sync::Mutex::new(None),
-        openapi_auth_token: None,
-        quiet: true,
-    });
+    let state = super::build_state(
+        10,
+        emwin_live::LiveRuntime::new_for_tests(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Unavailable,
+            Some(sink.clone()),
+            None,
+            None,
+        ),
+        None,
+    );
     let app = build_router(state, None).expect("router should build");
 
     let paths = vec![

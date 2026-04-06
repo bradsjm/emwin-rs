@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/emwin-api",
+    "crates/emwin-live",
     "crates/emwin-protocol",
     "crates/emwin-cli",
     "crates/emwin-db",

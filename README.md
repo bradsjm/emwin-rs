@@ -1,6 +1,6 @@
 # emwin-rs
 
-Rust monorepo for EMWIN protocol decoding, client runtime, HTTP API serving, and CLI tooling.
+Rust monorepo for EMWIN protocol decoding, live ingest orchestration, HTTP API serving, and CLI tooling.
 
 ## Install
 
@@ -33,7 +33,8 @@ docker compose up --build
 ## Crates
 
 - `emwin-protocol`: protocol decoding, ingest runtimes, and relay primitives
-- `emwin-api`: reusable HTTP/SSE/OpenAPI server crate behind live server mode
+- `emwin-live`: headless live ingest runtime for QBT and Weather Wire
+- `emwin-api`: HTTP/SSE/OpenAPI adapter over `emwin-live`
 - `emwin-cli`: CLI entrypoint for archive queries, live server startup, and relay mode
 - `emwin-db`: persistence and archive query support
 - `emwin-parser`: text product enrichment and parsing
@@ -117,7 +118,7 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir s3://my
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password 'secret'
 ```
 
-`emwin-cli server` delegates the server implementation to `emwin-api`.
+`emwin-cli server` composes `emwin-live` and `emwin-api`.
 
 Optional file persistence:
 

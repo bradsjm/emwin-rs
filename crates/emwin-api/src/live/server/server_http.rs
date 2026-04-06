@@ -813,10 +813,8 @@ pub(super) async fn incident_events_handler(
 )]
 pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<FilesResponse> {
     let files = state
-        .retained_files
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .list()
+        .live
+        .list_retained_files()
         .into_iter()
         .map(super::types::CompletedFilePayload::from_metadata)
         .collect();
@@ -843,10 +841,8 @@ pub(super) async fn file_download_handler(
     let normalized = filename_request_or_400(&filename)?;
 
     let file = state
-        .retained_files
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get(&normalized)
+        .live
+        .get_retained_file(&normalized)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(build_file_download_response(file))
@@ -864,23 +860,14 @@ pub(super) async fn file_download_handler(
 )]
 pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let connected_clients = state.connected_clients.load(Ordering::Relaxed);
-    let retained_files = state
-        .retained_files
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .len();
-    let upstream_endpoint = state
-        .upstream_endpoint
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .clone();
+    let snapshot = state.live.stats_snapshot();
 
     Json(HealthResponse {
         status: "ok",
         connected_clients,
-        retained_files,
-        uptime_secs: state.started_at.elapsed().as_secs(),
-        upstream_endpoint,
+        retained_files: snapshot.retained_files,
+        uptime_secs: snapshot.uptime_secs,
+        upstream_endpoint: snapshot.upstream_endpoint,
     })
 }
 
@@ -897,15 +884,8 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
 pub(super) async fn metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<super::types::MetricsPayload> {
-    let telemetry = state
-        .telemetry
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .clone();
-    let persistence = state
-        .persistence
-        .as_ref()
-        .map(|producer| producer.stats_snapshot());
+    let telemetry = state.live.telemetry_snapshot();
+    let persistence = state.live.stats_snapshot().persistence;
     Json(super::types::MetricsPayload {
         telemetry,
         persistence,
@@ -974,8 +954,8 @@ fn acquire_client_guard(
 
 fn archive_service(
     state: &Arc<AppState>,
-) -> Result<&emwin_db::PostgresMetadataSink, (StatusCode, String)> {
-    state.archive.as_ref().ok_or((
+) -> Result<emwin_db::PostgresMetadataSink, (StatusCode, String)> {
+    state.live.archive_sink().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
         "archive database is not configured".to_string(),
     ))

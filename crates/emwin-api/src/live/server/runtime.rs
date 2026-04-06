@@ -1,204 +1,78 @@
 use super::server_http;
-use super::server_ingest;
-use super::types::{AppState, ServerOptions, TelemetryPayload};
-use crate::ReceiverKind;
-use crate::live::config::{LiveConfigRequest, LiveReceiverConfig, build_live_receiver_config};
-use crate::live::persistence::{run_incident_cleanup_loop, start_runtime_with_postgres};
-use crate::live::server_support::RetainedFiles;
-use chrono::Utc;
+use super::types::{
+    AppState, EventKind, HttpServerOptions, IncidentEventPayload, TelemetryPayload,
+};
+use crate::error::{ApiError, ApiResult};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, AtomicUsize};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, watch};
 
 const EVENT_CHANNEL_CAPACITY: usize = 4096;
 
-pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
-    let ServerOptions {
-        receiver,
-        username,
-        password,
-        raw_servers,
-        server_list_path,
-        output_dir,
+pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) -> ApiResult<()> {
+    let HttpServerOptions {
         bind,
         cors_origin,
         max_clients,
         stats_interval_secs,
-        file_retention_secs,
-        max_retained_files,
-        post_process_archives,
         quiet,
-        persistence_queue_capacity,
-        postgres_database_url,
         openapi_auth_token,
     } = options;
 
-    if postgres_database_url.is_some() && output_dir.is_none() {
-        return Err(crate::error::CliError::invalid_argument(
-            "--persist-database-url requires --output-dir for blob storage",
-        ));
-    }
     if openapi_auth_token
         .as_deref()
         .is_some_and(|token| token.trim().is_empty())
     {
-        return Err(crate::error::CliError::invalid_argument(
+        return Err(ApiError::invalid_argument(
             "--openapi-auth-token must not be empty",
         ));
     }
 
-    let bind_addr = SocketAddr::from_str(&bind).map_err(|err| {
-        crate::error::CliError::invalid_argument(format!("invalid --bind value {bind}: {err}"))
-    })?;
-    let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let started_persistence = match output_dir {
-        Some(path) => Some(
-            start_runtime_with_postgres(
-                path,
-                persistence_queue_capacity,
-                postgres_database_url.as_deref(),
-                "emwin-cli-server",
-            )
-            .await?,
-        ),
-        None => None,
-    };
-    let cleanup_sink = started_persistence
-        .as_ref()
-        .and_then(|started| started.postgres_sink.clone());
-    let archive_sink = started_persistence
-        .as_ref()
-        .and_then(|started| started.postgres_sink.clone());
-    let persistence_runtime = started_persistence.map(|started| started.runtime);
-    let persistence_producer = persistence_runtime
-        .as_ref()
-        .map(|runtime| runtime.producer());
+    let bind_addr = SocketAddr::from_str(&bind)
+        .map_err(|err| ApiError::invalid_argument(format!("invalid --bind value {bind}: {err}")))?;
 
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = Arc::new(AppState {
+        live: live.clone(),
         event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         incident_event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         shutdown_rx: shutdown_rx.clone(),
-        retained_files: Mutex::new(RetainedFiles::new(
-            max_retained_files.max(1),
-            Duration::from_secs(file_retention_secs.max(1)),
-        )),
-        telemetry: Mutex::new(TelemetryPayload::Unavailable),
-        persistence: persistence_producer.clone(),
-        archive: archive_sink.clone(),
         connected_clients: AtomicUsize::new(0),
         max_clients: max_clients.max(1),
         next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
-        data_blocks_total: AtomicU64::new(0),
-        received_servers: AtomicUsize::new(0),
-        received_sat_servers: AtomicUsize::new(0),
-        started_at: Instant::now(),
-        upstream_endpoint: Mutex::new(None),
         openapi_auth_token,
         quiet,
     });
 
     let cors = super::build_cors_layer(cors_origin)?;
     let app = server_http::build_router(Arc::clone(&state), cors);
-
     let listener = TcpListener::bind(bind_addr).await?;
     super::log_info(quiet, &format!("server listening addr={bind_addr}"));
 
-    let incident_relay_task = archive_sink.clone().map(|sink| {
-        tokio::spawn(server_ingest::run_incident_event_relay_loop(
-            sink,
+    let event_relay_task = tokio::spawn(run_event_relay_loop(
+        live.subscribe_events(),
+        Arc::clone(&state),
+        shutdown_rx.clone(),
+    ));
+    let incident_relay_task = live.subscribe_incident_changes().map(|rx| {
+        tokio::spawn(run_incident_relay_loop(
+            rx,
             Arc::clone(&state),
             shutdown_rx.clone(),
         ))
     });
-
-    if let Some(postgres_sink) = archive_sink.as_ref() {
-        match postgres_sink.expire_active_incidents(Utc::now()).await {
-            Ok(result) if result.expired_count > 0 => {
-                tracing::info!(
-                    backend = "database",
-                    target = %postgres_sink.describe_target(),
-                    expired_count = result.expired_count,
-                    "expired stale incidents during startup"
-                );
-            }
-            Ok(_) => {}
-            Err(err) => {
-                tracing::warn!(
-                    backend = "database",
-                    target = %postgres_sink.describe_target(),
-                    stage = "incident_cleanup",
-                    error = %err,
-                    "startup incident cleanup skipped; will retry in background"
-                );
-            }
-        }
-    }
-
-    let ingest_task = match receiver {
-        ReceiverKind::Qbt => {
-            let LiveReceiverConfig::Qbt(config) = build_live_receiver_config(LiveConfigRequest {
-                receiver: ReceiverKind::Qbt,
-                username: Some(username),
-                password,
-                raw_servers,
-                server_list_path,
-                idle_timeout_secs: 90,
-                qbt_watchdog_timeout_secs: 20,
-                username_context: "server mode",
-                password_context: "server mode",
-            })?
-            else {
-                unreachable!("qbt server mode must build qbt config");
-            };
-            tokio::spawn(server_ingest::run_qbt_ingest_loop(
-                config,
-                Arc::clone(&state),
-                post_process_archives,
-                persistence_producer.clone(),
-                shutdown_rx.clone(),
-            ))
-        }
-        ReceiverKind::Wxwire => {
-            let LiveReceiverConfig::WxWire(config) =
-                build_live_receiver_config(LiveConfigRequest {
-                    receiver: ReceiverKind::Wxwire,
-                    username: Some(username),
-                    password,
-                    raw_servers,
-                    server_list_path,
-                    idle_timeout_secs: 90,
-                    qbt_watchdog_timeout_secs: 0,
-                    username_context: "wxwire server mode",
-                    password_context: "wxwire server mode",
-                })?
-            else {
-                unreachable!("wxwire server mode must build wxwire config");
-            };
-            tokio::spawn(server_ingest::run_wxwire_ingest_loop(
-                config,
-                Arc::clone(&state),
-                post_process_archives,
-                persistence_producer.clone(),
-                shutdown_rx.clone(),
-            ))
-        }
-    };
-    let stats_task = tokio::spawn(server_ingest::run_stats_loop(
+    let stats_task = tokio::spawn(run_stats_loop(
+        live.clone(),
         Arc::clone(&state),
         stats_interval_secs,
-        persistence_producer.clone(),
         shutdown_rx.clone(),
     ));
-    let cleanup_task =
-        cleanup_sink.map(|sink| tokio::spawn(run_incident_cleanup_loop(sink, shutdown_rx.clone())));
-    let mut http_shutdown_rx = shutdown_rx.clone();
 
+    let mut http_shutdown_rx = shutdown_rx.clone();
     let serve = async move {
         axum::serve(
             listener,
@@ -227,78 +101,147 @@ pub async fn run(options: ServerOptions) -> crate::error::CliResult<()> {
         let _ = shutdown_tx.send(true);
     }
 
-    let ingest_result = ingest_task.await;
-    let stats_result = stats_task.await;
-    let cleanup_result = match cleanup_task {
-        Some(task) => Some(task.await),
-        None => None,
-    };
-    let incident_relay_result = match incident_relay_task {
-        Some(task) => Some(task.await),
-        None => None,
-    };
-    let _persistence_shutdown_stats = match persistence_runtime {
-        Some(runtime) => Some(crate::live::persistence::shutdown_runtime(runtime).await?),
-        None => None,
-    };
+    await_task(event_relay_task, "event relay").await?;
+    if let Some(task) = incident_relay_task {
+        await_task(task, "incident relay").await?;
+    }
+    await_task(stats_task, "stats").await?;
+    live.shutdown().await?;
 
     if let Err(err) = serve_result {
-        return Err(crate::error::CliError::runtime(format!(
-            "http server failed: {err}"
-        )));
+        return Err(ApiError::runtime(format!("http server failed: {err}")));
     }
-    match ingest_result {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "ingest task failed: {err}"
-            )));
-        }
-        Err(err) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "ingest task join failed: {err}"
-            )));
-        }
-    }
-    match stats_result {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "stats task failed: {err}"
-            )));
-        }
-        Err(err) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "stats task join failed: {err}"
-            )));
-        }
-    }
-    match cleanup_result {
-        Some(Ok(Ok(()))) | None => {}
-        Some(Ok(Err(err))) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "cleanup task failed: {err}"
-            )));
-        }
-        Some(Err(err)) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "cleanup task join failed: {err}"
-            )));
-        }
-    }
-    match incident_relay_result {
-        Some(Ok(Ok(()))) | None => {}
-        Some(Ok(Err(err))) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "incident relay task failed: {err}"
-            )));
-        }
-        Some(Err(err)) => {
-            return Err(crate::error::CliError::runtime(format!(
-                "incident relay task join failed: {err}"
-            )));
-        }
-    }
+
     tracing::info!("server stopped");
     Ok(())
+}
+
+async fn run_event_relay_loop(
+    mut rx: broadcast::Receiver<emwin_live::LiveBroadcastEvent>,
+    state: Arc<AppState>,
+    mut shutdown_rx: watch::Receiver<bool>,
+) -> ApiResult<()> {
+    loop {
+        tokio::select! {
+            _ = shutdown_rx.changed() => break,
+            received = rx.recv() => match received {
+                Ok(event) => super::publish(&state, map_live_event(event.kind)),
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(dropped)) => {
+                    super::log_info(state.quiet, &format!("event relay lagged dropped={dropped}"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn run_incident_relay_loop(
+    mut rx: broadcast::Receiver<emwin_live::IncidentBroadcastEvent>,
+    state: Arc<AppState>,
+    mut shutdown_rx: watch::Receiver<bool>,
+) -> ApiResult<()> {
+    loop {
+        tokio::select! {
+            _ = shutdown_rx.changed() => break,
+            received = rx.recv() => match received {
+                Ok(event) => super::publish_incident_change(
+                    &state,
+                    IncidentEventPayload::from_change(event.change),
+                ),
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(dropped)) => {
+                    super::log_info(state.quiet, &format!("incident relay lagged dropped={dropped}"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn run_stats_loop(
+    live: emwin_live::LiveRuntime,
+    state: Arc<AppState>,
+    stats_interval_secs: u64,
+    mut shutdown_rx: watch::Receiver<bool>,
+) -> ApiResult<()> {
+    if stats_interval_secs == 0 {
+        let _ = shutdown_rx.changed().await;
+        return Ok(());
+    }
+
+    let mut interval =
+        tokio::time::interval(std::time::Duration::from_secs(stats_interval_secs.max(1)));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        tokio::select! {
+            _ = shutdown_rx.changed() => break,
+            _ = interval.tick() => {
+                if state.quiet {
+                    continue;
+                }
+
+                let snapshot = live.stats_snapshot();
+                let connected_clients = state.connected_clients.load(Ordering::Relaxed);
+                if let Some(persistence) = snapshot.persistence {
+                    tracing::info!(
+                        uptime_secs = snapshot.uptime_secs,
+                        data_blocks_total = snapshot.data_blocks_total,
+                        received_servers = snapshot.received_servers,
+                        received_sat_servers = snapshot.received_sat_servers,
+                        retained_files = snapshot.retained_files,
+                        connected_clients,
+                        upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),
+                        persistence_queue_len = persistence.queue_len,
+                        persistence_queue_capacity = persistence.queue_capacity,
+                        persistence_enqueued_total = persistence.enqueued_total,
+                        persistence_evicted_total = persistence.evicted_total,
+                        persistence_persisted_total = persistence.persisted_total,
+                        persistence_failed_total = persistence.failed_total,
+                        "server stats snapshot"
+                    );
+                } else {
+                    tracing::info!(
+                        uptime_secs = snapshot.uptime_secs,
+                        data_blocks_total = snapshot.data_blocks_total,
+                        received_servers = snapshot.received_servers,
+                        received_sat_servers = snapshot.received_sat_servers,
+                        retained_files = snapshot.retained_files,
+                        connected_clients,
+                        upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),
+                        "server stats snapshot"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn map_live_event(kind: emwin_live::LiveEventKind) -> EventKind {
+    match kind {
+        emwin_live::LiveEventKind::Connected { endpoint } => EventKind::Connected { endpoint },
+        emwin_live::LiveEventKind::Disconnected => EventKind::Disconnected,
+        emwin_live::LiveEventKind::QbtFrame(frame) => EventKind::QbtFrame(frame),
+        emwin_live::LiveEventKind::WxWireFrame(frame) => EventKind::WxWireFrame(frame),
+        emwin_live::LiveEventKind::ProductAvailable(metadata) => EventKind::FileComplete(Box::new(
+            super::types::CompletedFileEventPayload::from_metadata(*metadata),
+        )),
+        emwin_live::LiveEventKind::Telemetry(value) => EventKind::Telemetry(match value {
+            emwin_live::LiveTelemetry::Unavailable => TelemetryPayload::Unavailable,
+            emwin_live::LiveTelemetry::Qbt(snapshot) => TelemetryPayload::Qbt(snapshot),
+            emwin_live::LiveTelemetry::WxWire(snapshot) => TelemetryPayload::WxWire(snapshot),
+        }),
+        emwin_live::LiveEventKind::Error { message } => EventKind::Error { message },
+    }
+}
+
+async fn await_task(task: tokio::task::JoinHandle<ApiResult<()>>, name: &str) -> ApiResult<()> {
+    match task.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(err)) => Err(ApiError::runtime(format!("{name} task failed: {err}"))),
+        Err(err) => Err(ApiError::runtime(format!("{name} task join failed: {err}"))),
+    }
 }

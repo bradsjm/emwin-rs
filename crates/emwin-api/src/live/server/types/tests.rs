@@ -4,7 +4,6 @@ use super::{
 };
 use crate::live::server::server_http::event_matches_filter;
 use emwin_db::CompletedFileMetadata;
-use emwin_parser::{detail_product_v2, enrich_product, summarize_product_v2};
 use emwin_protocol::ingest::ProductOrigin;
 
 fn empty_events_query() -> EventsQuery {
@@ -178,16 +177,7 @@ AKC090-051300-
         b"ignored".as_slice()
     };
 
-    let product = enrich_product(filename, data);
-    let metadata = CompletedFileMetadata {
-        filename: filename.to_string(),
-        size: 11,
-        timestamp_utc: 1,
-        origin: ProductOrigin::Qbt,
-        product_summary: summarize_product_v2(&product),
-        product_detail: detail_product_v2(&product),
-        product,
-    };
+    let metadata = CompletedFileMetadata::build(filename, 1, ProductOrigin::Qbt, data);
 
     EventKind::FileComplete(Box::new(CompletedFileEventPayload::from_metadata(metadata)))
 }

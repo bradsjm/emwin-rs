@@ -2,7 +2,7 @@ use axum::http::HeaderValue;
 use axum::http::header::AUTHORIZATION;
 use tower_http::cors::{Any, CorsLayer};
 
-pub(crate) fn build_cors_layer(cors_origin: Option<String>) -> crate::error::CliResult<CorsLayer> {
+pub(crate) fn build_cors_layer(cors_origin: Option<String>) -> crate::error::ApiResult<CorsLayer> {
     if let Some(origin) = cors_origin {
         if origin == "*" {
             return Ok(CorsLayer::new()
@@ -12,7 +12,7 @@ pub(crate) fn build_cors_layer(cors_origin: Option<String>) -> crate::error::Cli
         }
 
         let header_value = HeaderValue::from_str(&origin).map_err(|err| {
-            crate::error::CliError::invalid_argument(format!(
+            crate::error::ApiError::invalid_argument(format!(
                 "invalid --cors-origin value {origin}: {err}"
             ))
         })?;
