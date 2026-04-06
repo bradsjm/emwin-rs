@@ -1,30 +1,38 @@
 [package]
-name = "emwin-cli"
+name = "emwin-api"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-readme.workspace = true
+readme = "README.md"
 repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-emwin-api = { path = "../emwin-api" }
 emwin-protocol = { path = "../emwin-protocol", features = ["telemetry-serde"] }
+emwin-parser = { path = "../emwin-parser" }
 emwin-db = { path = "../emwin-db" }
 chrono.workspace = true
 tokio.workspace = true
-clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 futures.workspace = true
 axum.workspace = true
+tokio-stream.workspace = true
+tower-http.workspace = true
+bytes.workspace = true
 thiserror.workspace = true
-dotenvy.workspace = true
+utoipa.workspace = true
+utoipa-swagger-ui.workspace = true
+url.workspace = true
+crc32fast.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+tempfile = "3"
+tower.workspace = true
+sqlx.workspace = true
