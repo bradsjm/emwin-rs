@@ -6,7 +6,7 @@ This file defines crate-local expectations for automated coding agents.
 ## Scope
 
 - Crate: `emwin-protocol` (library crate).
-- Role: protocol parsing/encoding, client runtime orchestration, stream/file assembly.
+- Role: QBT and Weather Wire receiver implementations plus the unified ingest abstraction over both.
 - Normative protocol authority:
   - `docs/EMWIN QBT TCP Protocol.md` for QBT/EMWIN
   - `docs/weather-wire.md` for Weather Wire/XMPP
@@ -80,10 +80,13 @@ cargo test -p emwin-protocol <test_name> -- --nocapture
 
 ## Crate Architecture Boundaries
 
-- Keep protocol concerns in `src/protocol/*`.
-- Keep runtime/client lifecycle in `src/client/*`.
-- Keep file assembly concerns in `src/file/*`.
-- Keep streaming abstractions in `src/stream/*`.
+- Keep unified ingest models and adapters in `src/ingest/*`.
+- Keep QBT receiver concerns under `src/qbt_receiver/*`.
+- Keep QBT protocol handling under `src/qbt_receiver/protocol/*`.
+- Keep QBT runtime/client lifecycle under `src/qbt_receiver/client/*`.
+- Keep QBT file assembly under `src/qbt_receiver/file/*`.
+- Keep QBT relay and stream abstractions under `src/qbt_receiver/relay/*` and `src/qbt_receiver/stream/*`.
+- Keep Weather Wire receiver concerns under `src/wxwire_receiver/*`.
 - Keep public exports curated in `src/lib.rs`.
 - Do not introduce CLI presentation/output concerns in this crate.
 

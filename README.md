@@ -45,7 +45,7 @@ Add the crate from this monorepo:
 
 ```toml
 [dependencies]
-emwin-protocol = { git = "https://github.com/bradsjm/emwin-rs", tag = "v0.1.0", package = "emwin-protocol" }
+emwin-protocol = { git = "https://github.com/bradsjm/emwin-rs", tag = "v0.3.1", package = "emwin-protocol" }
 ```
 
 Use the unified ingest API from the crate root:
@@ -165,7 +165,7 @@ Server endpoints:
 - `GET /v1/incidents/{office}/{phenomena}/{significance}/{etn}/products` - archived products linked to one incident
 - `GET /v1/products` - archived product list/search with cursor pagination
 - `GET /v1/products/{product_id}` - persisted archived product detail
-- `GET /v1/products/{product_id}/raw` - persisted archived payload bytes proxied through the CLI
+- `GET /v1/products/{product_id}/raw` - persisted archived payload bytes
 - `GET /v1/features` - archived spatial feature list with cursor pagination
 - `GET /v1/features/geojson` - bounded GeoJSON `FeatureCollection` over archived features
 - `GET /v1/aggregates/facets` - archive facet buckets with completeness metadata
