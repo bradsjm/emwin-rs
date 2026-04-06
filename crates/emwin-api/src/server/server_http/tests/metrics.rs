@@ -1,5 +1,5 @@
 use super::build_state;
-use crate::live::server::build_router;
+use crate::server::build_router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use emwin_db::{

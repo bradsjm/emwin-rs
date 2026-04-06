@@ -180,7 +180,7 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out -
 - Keep QBT runtime orchestration under `emwin-protocol/src/client`.
 - Keep Weather Wire runtime concerns under `emwin-protocol/src/wxwire_receiver`.
 - Keep headless live ingest orchestration under `emwin-live/src`.
-- Keep HTTP server and OpenAPI concerns under `emwin-api/src/live/server`.
+- Keep HTTP server and OpenAPI concerns under `emwin-api/src/server`.
 - Keep CLI command handling under `emwin-cli/src/cmd`.
 - Do not leak CLI-only concerns into core library modules.
 

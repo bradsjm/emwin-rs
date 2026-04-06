@@ -2,11 +2,9 @@ use super::{
     archive_issue_payload, empty_events_query, incident_event_payload, test_state,
     test_state_with_archive,
 };
-use crate::live::server::build_router;
-use crate::live::server::server_http::{
-    archive_issue_handler, events_handler, incident_events_handler,
-};
-use crate::live::server::types::IncidentEventsQuery;
+use crate::server::build_router;
+use crate::server::server_http::{archive_issue_handler, events_handler, incident_events_handler};
+use crate::server::types::IncidentEventsQuery;
 use axum::body::to_bytes;
 use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, Request, StatusCode};
@@ -40,7 +38,7 @@ async fn events_handler_invalid_query_does_not_leak_client_slot() {
         State(Arc::clone(&state)),
         ConnectInfo("127.0.0.1:4000".parse().expect("valid socket addr")),
         HeaderMap::new(),
-        Query(crate::live::server::types::EventsQuery {
+        Query(crate::server::types::EventsQuery {
             min_size: Some(10),
             max_size: Some(1),
             ..empty_events_query()

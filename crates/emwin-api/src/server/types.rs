@@ -3,8 +3,8 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
-use crate::cmd::event_output::{frame_event_name, frame_event_to_json};
-use crate::live::server_support::file_download_url;
+use crate::server::event_output::{frame_event_name, frame_event_to_json};
+use crate::server_support::file_download_url;
 use emwin_db::{
     AggregateCompleteness, ArchiveFilterInput, ArchivedFeature, ArchivedIssue,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata,

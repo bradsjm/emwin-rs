@@ -1,5 +1,5 @@
 use super::test_state_with_auth;
-use crate::live::server::build_router;
+use crate::server::build_router;
 use axum::body::Body;
 use axum::extract::connect_info::MockConnectInfo;
 use axum::http::header::{

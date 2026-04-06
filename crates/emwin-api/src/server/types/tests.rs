@@ -2,7 +2,7 @@ use super::{
     ArchiveFilterParams, CompletedFileEventPayload, EventFilter, EventKind, EventsQuery,
     TelemetryPayload,
 };
-use crate::live::server::server_http::event_matches_filter;
+use crate::server::server_http::event_matches_filter;
 use emwin_db::CompletedFileMetadata;
 use emwin_protocol::ingest::ProductOrigin;
 

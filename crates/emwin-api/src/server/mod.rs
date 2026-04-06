@@ -7,6 +7,7 @@
 //! - Supports CORS for browser clients
 
 mod cors;
+mod event_output;
 mod events;
 mod openapi;
 mod runtime;

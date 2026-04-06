@@ -1,4 +1,4 @@
-use crate::live::server::types::API_PREFIX;
+use crate::server::types::API_PREFIX;
 use axum::body::Body;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};

@@ -1,11 +1,11 @@
-//! Render protocol events into API-facing JSON payloads.
+//! Render receiver frame events into API-facing JSON payloads.
 
 use emwin_db::CompletedFileMetadata;
 use emwin_protocol::ingest::ProductOrigin;
 use emwin_protocol::qbt_receiver::QbtFrameEvent;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Returns the stable event name used by CLI JSON output.
+/// Returns the stable event name used by API JSON output.
 pub fn frame_event_name(event: &QbtFrameEvent) -> &'static str {
     match event {
         QbtFrameEvent::DataBlock(_) => "data_block",
@@ -15,7 +15,7 @@ pub fn frame_event_name(event: &QbtFrameEvent) -> &'static str {
     }
 }
 
-/// Converts a frame event into the JSON shape used by the CLI.
+/// Converts a frame event into the JSON shape used by the API.
 pub fn frame_event_to_json(event: &QbtFrameEvent, text_preview_chars: usize) -> serde_json::Value {
     match event {
         QbtFrameEvent::DataBlock(seg) => {

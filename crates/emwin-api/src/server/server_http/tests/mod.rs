@@ -1,4 +1,4 @@
-use crate::live::server::types::{
+use crate::server::types::{
     AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
 };
 use emwin_db::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};

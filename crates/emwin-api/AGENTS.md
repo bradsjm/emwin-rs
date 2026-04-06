@@ -28,7 +28,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Architecture Boundaries
 
-- Keep routing/handler concerns under `src/live/server/*`.
+- Keep routing/handler concerns under `src/server/*`.
 - Keep persistence wiring and runtime fanout out of this crate.
 - Keep HTTP-local serialization and auth middleware in this crate.
 - Keep public exports curated in `src/lib.rs`.
