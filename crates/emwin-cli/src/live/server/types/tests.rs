@@ -329,19 +329,6 @@ fn archive_filter_params_reject_invalid_boolean_literals() {
 }
 
 #[test]
-fn archive_filter_params_reject_invalid_size_ranges() {
-    let error = ArchiveFilterParams {
-        min_size: Some(10),
-        max_size: Some(1),
-        ..ArchiveFilterParams::default()
-    }
-    .into_product_list_query(100, None, None)
-    .expect_err("invalid size range should fail");
-
-    assert!(error.contains("min_size must be less than or equal to max_size"));
-}
-
-#[test]
 fn archive_filter_params_preserve_artifact_kind() {
     let query = ArchiveFilterParams {
         artifact_kind: Some("nws_text_product,cap_message".to_string()),

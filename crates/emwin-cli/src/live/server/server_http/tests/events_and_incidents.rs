@@ -273,29 +273,23 @@ async fn archive_routes_reject_invalid_boolean_filters() {
 }
 
 #[tokio::test]
-async fn archive_routes_reject_invalid_size_ranges() {
+async fn archive_product_route_rejects_invalid_size_range() {
     let state = test_state_with_archive(10);
     let app = build_router(state, None).expect("router should build");
 
-    for path in [
-        "/v1/products?min_size=10&max_size=1",
-        "/v1/features?min_size=10&max_size=1",
-        "/v1/aggregates/facets?dimension=office&min_size=10&max_size=1",
-    ] {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(path)
-                    .method("GET")
-                    .body(axum::body::Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should succeed");
+    let path = "/v1/products?min_size=10&max_size=1";
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(path)
+                .method("GET")
+                .body(axum::body::Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
-    }
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
 }
 
 #[tokio::test]
@@ -326,8 +320,7 @@ async fn archive_routes_reject_invalid_enum_filters() {
 }
 
 #[tokio::test]
-async fn archive_backed_feature_and_aggregate_routes_return_success_when_test_database_is_configured()
- {
+async fn archive_product_and_issue_routes_return_success_when_test_database_is_configured() {
     let Some(database_url) = std::env::var("EMWIN_PG_TEST_DATABASE_URL").ok() else {
         return;
     };
@@ -456,11 +449,6 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
         format!("/v1/products/{product_id}/raw"),
         format!("/v1/issues?product_id={product_id}"),
         format!("/v1/issues/{issue_id}"),
-        "/v1/features?office=KOAX&artifact_kind=nws_text_product".to_string(),
-        "/v1/features/geojson?office=KOAX&artifact_kind=nws_text_product".to_string(),
-        "/v1/aggregates/facets?dimension=office&office=KOAX&artifact_kind=nws_text_product".to_string(),
-        "/v1/aggregates/timeseries?measure=product_count&office=KOAX&artifact_kind=nws_text_product&start=2025-03-05T11:00:00Z&end=2025-03-05T13:00:00Z&bucket=hour".to_string(),
-        "/v1/aggregates/cells?measure=product_count&office=KOAX&artifact_kind=nws_text_product&precision=5".to_string(),
     ];
     for path in paths {
         let response = app
@@ -513,13 +501,6 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
                 format!("/v1/issues/{issue_id}"),
                 "path={path}"
             );
-        } else if path.contains("/aggregates/") {
-            assert_eq!(json["partial"], false, "path={path}");
-            assert_eq!(json["approximate"], false, "path={path}");
-            assert!(json["reason"].is_null(), "path={path}");
-            if path.contains("/aggregates/facets") {
-                assert_eq!(json["items"][0]["value"], "KOAX", "path={path}");
-            }
         }
     }
 
