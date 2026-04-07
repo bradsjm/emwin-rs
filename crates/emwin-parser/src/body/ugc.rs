@@ -541,8 +541,9 @@ fn parse_expire_time(expire_code: &str, valid_time: DateTime<Utc>) -> Option<Dat
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::TimeZone;
+    use chrono::{DateTime, TimeZone, Utc};
+
+    use super::{UgcArea, parse_ugc_sections, parse_ugc_sections_with_issues};
 
     fn ids(areas: &[UgcArea]) -> Vec<u16> {
         areas.iter().map(|area| area.id).collect()

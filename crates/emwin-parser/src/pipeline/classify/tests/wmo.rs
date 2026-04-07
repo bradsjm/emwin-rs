@@ -1,4 +1,4 @@
-use super::*;
+use super::{ClassificationCandidate, NormalizedInput, ParsedEnvelope, classify};
 
 #[test]
 fn wmo_metar_strategy_returns_metar_candidate() {

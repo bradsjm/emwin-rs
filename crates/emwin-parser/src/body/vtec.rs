@@ -283,7 +283,7 @@ fn invalid_etn_issue(raw: &str) -> ProductParseIssue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{parse_vtec_codes, parse_vtec_codes_with_issues};
 
     #[test]
     fn parse_single_vtec() {

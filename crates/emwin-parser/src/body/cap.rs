@@ -567,7 +567,10 @@ fn parse_cap_time(value: &str) -> Option<DateTime<Utc>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use chrono::Utc;
+
+    use super::{parse_cap_body_with_issues, parse_cap_event_motion};
+    use crate::body::BodyExtractorId;
 
     const CAP_WARNING: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">

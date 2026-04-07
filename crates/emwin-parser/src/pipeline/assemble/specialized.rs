@@ -1,10 +1,17 @@
 use super::super::candidate::{
     BodyContributionRequest, Cf6Candidate, CliCandidate, CwaCandidate, DcpCandidate, DsmCandidate,
-    EroCandidate, FdCandidate, HmlCandidate, LsrCandidate, MetarCandidate, MosCandidate,
-    PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, SpcOutlookCandidate, TafCandidate,
-    TextGenericCandidate, WwpCandidate,
+    EroCandidate, FdCandidate, HmlCandidate, LsrCandidate, McdCandidate, MetarCandidate,
+    MosCandidate, PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, SpcOutlookCandidate,
+    TafCandidate, TextGenericCandidate, WwpCandidate,
 };
-use super::*;
+use super::{
+    EnrichmentBase, assemble_optional_body, build_enrichment, container_from_filename,
+    office_for_headers, wmo_office_entry,
+};
+use crate::{
+    ProductArtifact, ProductEnrichment, ProductEnrichmentSource, ProductParseIssue,
+    TextProductHeader, WmoHeader,
+};
 
 struct SpecializedAssemblyInput {
     source: ProductEnrichmentSource,

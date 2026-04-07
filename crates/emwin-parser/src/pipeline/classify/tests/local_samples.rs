@@ -1,4 +1,4 @@
-use super::*;
+use super::{ClassificationCandidate, NormalizedInput, ParsedEnvelope, classify};
 
 #[test]
 fn local_lsr_sample_returns_lsr_candidate() {

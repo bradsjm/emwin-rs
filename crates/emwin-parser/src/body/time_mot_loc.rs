@@ -523,7 +523,9 @@ fn round_coordinate(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use chrono::{DateTime, Utc};
+
+    use super::{parse_time_mot_loc_entries, parse_time_mot_loc_entries_with_issues};
 
     fn reference_time() -> DateTime<Utc> {
         chrono::DateTime::parse_from_rfc3339("2026-03-06T23:15:00Z")

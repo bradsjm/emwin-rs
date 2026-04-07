@@ -3,6 +3,15 @@
 //! This module groups the streaming decoder, connection-management logic, file assembly, and relay
 //! support needed for the EMWIN QBT feed. The public API exposes stable runtime types while
 //! keeping lower-level protocol helpers available through curated re-exports.
+//!
+//! Module ownership is split by responsibility:
+//! - `client`: upstream connection lifecycle, reconnects, watchdogs, and event fan-out
+//! - `config`: runtime bounds and decoder policy configuration
+//! - `file`: completed-file and segment assembly
+//! - `protocol`: wire framing, auth, checksums, compression, and server-list parsing
+//! - `relay`: downstream relay runtime and health reporting
+//! - `stream`: raw file and segment stream adapters
+//! - `error`: typed runtime and protocol errors
 
 mod client;
 mod config;

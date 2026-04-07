@@ -1,4 +1,10 @@
-use super::*;
+use super::{
+    BodyExtractorId, ClassificationCandidate, NormalizedInput, ParsedEnvelope,
+    TextClassificationContext, TextProductHeader, Utc, body_extraction_plan, classify,
+    classify_text_cf6, classify_text_dsm, classify_text_fd, classify_text_lsr, classify_text_mos,
+    classify_text_pirep, classify_text_saw, classify_text_sel, resolved_text_product_policy,
+    with_specialized_context,
+};
 
 #[test]
 fn saw_strategy_requires_matching_catalog_routing() {

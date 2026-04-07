@@ -3,6 +3,14 @@
 //! This module combines the custom transport, decoder, and reconnect logic needed for NWWS/Weather
 //! Wire reception. It keeps XMPP details local and exposes the same style of runtime API as the
 //! QBT receiver.
+//!
+//! Module ownership is split by responsibility:
+//! - `client`: connection lifecycle, reconnect behavior, and event dispatch
+//! - `transport`: XMPP stream framing, stanza buffering, and room-join flow
+//! - `codec`: Weather Wire stanza decoding into typed frame events
+//! - `model`: file, frame, and warning payload types
+//! - `config`: validated receiver configuration
+//! - `error`: typed runtime errors
 
 mod client;
 mod codec;

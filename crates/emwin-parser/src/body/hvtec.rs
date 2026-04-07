@@ -241,7 +241,9 @@ fn invalid_time_issue(code: &'static str, raw: &str) -> ProductParseIssue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        HvtecCause, HvtecRecord, HvtecSeverity, parse_hvtec_codes, parse_hvtec_codes_with_issues,
+    };
 
     #[test]
     fn parse_single_hvtec() {

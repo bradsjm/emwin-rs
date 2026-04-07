@@ -1,4 +1,4 @@
-use super::*;
+use super::{ClassificationCandidate, NormalizedInput, ParsedEnvelope, classify};
 
 #[test]
 fn malformed_lsr_stays_in_family_with_issue() {

@@ -1,6 +1,10 @@
 use super::super::candidate::{MalformedFamilyCandidate, UnsupportedWmoCandidate};
-use super::*;
+use super::{
+    EnrichmentBase, assemble_optional_body, build_enrichment, container_from_filename,
+    detected_container, office_for_headers, wmo_office_entry,
+};
 use crate::data::NonTextProductMeta;
+use crate::{ParserError, ProductEnrichment, ProductEnrichmentSource, ProductParseIssue};
 
 /// Assembles a recognized supported family that could not produce a structured artifact.
 pub(super) fn assemble_from_malformed_family(

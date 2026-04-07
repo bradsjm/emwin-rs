@@ -1,4 +1,10 @@
-use super::*;
+use super::{
+    BbbKind, BodyExtractorId, ClassificationCandidate, FdCandidate, NormalizedInput,
+    ParsedEnvelope, ProductEnrichmentSource, TextProductHeader, TimeZone, Utc,
+    body_extraction_plan, build_body_request, classify, classify_text_cf6, classify_text_cwa,
+    classify_text_dsm, classify_text_hml, classify_text_lsr, classify_text_mos, classify_text_wwp,
+    with_specialized_context,
+};
 
 #[test]
 fn specialized_candidate_can_carry_body_request_when_metadata_enables_catalog_body_behavior() {

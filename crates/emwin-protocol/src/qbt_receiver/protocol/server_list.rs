@@ -92,7 +92,7 @@ pub fn parse_simple_server_list(content: &str) -> QbtServerList {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::parse_server_list_frame;
 
     #[test]
     fn server_list_simple_parse() {

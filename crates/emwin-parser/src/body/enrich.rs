@@ -452,7 +452,9 @@ fn collect_duplicate_ugc_codes(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use chrono::Utc;
+
+    use super::{BodyExtractorId, body_extraction_plan, enrich_body, enrich_body_from_plan};
 
     const VTEC_EVENTS_ONLY: &[BodyExtractorId] = &[BodyExtractorId::VtecEvents];
     const UGC_AND_TIME_MOT_LOC_EXTRACTORS: &[BodyExtractorId] =

@@ -1,19 +1,19 @@
-use chrono::{TimeZone, Utc};
+pub(super) use chrono::{TimeZone, Utc};
 
-use super::classify;
-use super::common::build_body_request;
-use super::context::TextClassificationContext;
-use super::text::{
+pub(super) use super::classify;
+pub(super) use super::common::build_body_request;
+pub(super) use super::context::TextClassificationContext;
+pub(super) use super::text::{
     classify_text_cf6, classify_text_cwa, classify_text_dsm, classify_text_fd, classify_text_hml,
     classify_text_lsr, classify_text_mos, classify_text_pirep, classify_text_saw,
     classify_text_sel, classify_text_wwp,
 };
-use crate::body::{BodyExtractorId, body_extraction_plan};
-use crate::data::resolved_text_product_policy;
-use crate::header::BbbKind;
-use crate::pipeline::candidate::{ClassificationCandidate, FdCandidate};
-use crate::pipeline::{NormalizedInput, ParsedEnvelope};
-use crate::{ProductEnrichmentSource, TextProductHeader};
+pub(super) use crate::body::{BodyExtractorId, body_extraction_plan};
+pub(super) use crate::data::resolved_text_product_policy;
+pub(super) use crate::header::BbbKind;
+pub(super) use crate::pipeline::candidate::{ClassificationCandidate, FdCandidate};
+pub(super) use crate::pipeline::{NormalizedInput, ParsedEnvelope};
+pub(super) use crate::{ProductEnrichmentSource, TextProductHeader};
 
 fn with_specialized_context<T>(
     pil: &'static str,

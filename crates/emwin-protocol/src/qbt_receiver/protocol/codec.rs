@@ -508,8 +508,13 @@ fn trim_text_padding(content: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        QbtDecodeConfig, QbtFrameDecoder, QbtFrameEvent, QbtProtocolDecoder, QbtProtocolWarning,
+        SYNC_BYTES, V1_BODY_SIZE,
+    };
+    use crate::qbt_receiver::QbtV2CompressionPolicy;
     use crate::qbt_receiver::protocol::checksum::calculate_qbt_checksum;
+    use bytes::Bytes;
     use flate2::{Compression, write::ZlibEncoder};
     use std::io::Write;
 

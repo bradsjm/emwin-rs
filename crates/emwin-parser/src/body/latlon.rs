@@ -532,7 +532,7 @@ fn round_coordinate(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{parse_latlon_polygons, parse_latlon_polygons_with_issues};
 
     #[test]
     fn parse_simple_polygon_4digit() {

@@ -1,4 +1,4 @@
-use super::*;
+use super::{ClassificationCandidate, NormalizedInput, ParsedEnvelope, classify};
 
 #[test]
 fn afos_fd_strategy_returns_fd_candidate() {

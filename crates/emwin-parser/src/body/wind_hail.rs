@@ -285,7 +285,7 @@ fn invalid_wind_hail_issue(raw: &str) -> ProductParseIssue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{WindHailKind, parse_wind_hail_entries, parse_wind_hail_entries_with_issues};
 
     #[test]
     fn parse_legacy_wind_hail_tags() {
