@@ -1,16 +1,8 @@
 use crate::file_pipeline::build_completed_file_metadata;
-use emwin_db::CompletedFileMetadata;
 use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::{CompletedFileMetadata, RetainedFile};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
-
-/// File retained in memory for later download or listing.
-#[derive(Debug, Clone)]
-pub struct RetainedFile {
-    pub data: Vec<u8>,
-    pub completed_at: SystemTime,
-    pub metadata: CompletedFileMetadata,
-}
 
 /// Bounded in-memory store for completed files.
 #[derive(Debug)]

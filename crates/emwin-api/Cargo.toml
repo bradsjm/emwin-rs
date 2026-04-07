@@ -10,8 +10,7 @@ homepage.workspace = true
 
 [dependencies]
 emwin-live = { path = "../emwin-live" }
-emwin-protocol = { path = "../emwin-protocol", features = ["telemetry-serde"] }
-emwin-db = { path = "../emwin-db" }
+emwin-service = { path = "../emwin-service" }
 chrono.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -21,18 +20,15 @@ futures.workspace = true
 axum.workspace = true
 tokio-stream.workspace = true
 tower-http.workspace = true
-bytes.workspace = true
 thiserror.workspace = true
 utoipa.workspace = true
 utoipa-swagger-ui.workspace = true
-url.workspace = true
-crc32fast.workspace = true
-zip.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+emwin-db = { path = "../emwin-db" }
+sqlx.workspace = true
 tempfile = "3"
 tower.workspace = true
-sqlx.workspace = true

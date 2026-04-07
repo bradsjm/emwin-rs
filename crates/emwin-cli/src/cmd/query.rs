@@ -9,11 +9,12 @@ use crate::cmd::query_output::{
 use crate::error::{CliError, CliResult};
 use chrono::{DateTime, Utc};
 use clap::{ArgGroup, Args, Subcommand};
-use emwin_db::{
+use emwin_db::{PostgresConfig, PostgresMetadataSink};
+use emwin_service::{
     ArchiveFilterInput, ArchivedIssueListQuery, CellAggregateQuery, FacetAggregateQuery,
-    FeatureListQuery, IncidentKey, IncidentListQuery, IncidentProductsQuery, PostgresConfig,
-    PostgresMetadataSink, ProductListQuery, TimeseriesAggregateQuery, build_cell_aggregate_query,
-    build_facet_aggregate_query, build_feature_list_query, build_timeseries_aggregate_query,
+    FeatureListQuery, IncidentKey, IncidentListQuery, IncidentProductsQuery, ProductListQuery,
+    TimeseriesAggregateQuery, build_cell_aggregate_query, build_facet_aggregate_query,
+    build_feature_list_query, build_timeseries_aggregate_query,
 };
 use std::fs::File;
 use std::io::{self, BufWriter, Write};

@@ -6,10 +6,10 @@
 use crate::error::{LiveError, LiveResult};
 use crate::file_pipeline::build_persist_request;
 use emwin_db::{
-    BlobWriter, CompletedFileMetadata, FilesystemBlobWriter, IncidentCleanupResult,
-    NoopMetadataSink, PersistRequest, PersistenceConfig, PersistenceProducer, PersistenceRuntime,
-    PersistenceStats, PostgresConfig, PostgresMetadataSink, S3BlobWriter,
+    BlobWriter, FilesystemBlobWriter, NoopMetadataSink, PersistRequest, PersistenceConfig,
+    PersistenceProducer, PersistenceRuntime, PostgresConfig, PostgresMetadataSink, S3BlobWriter,
 };
+use emwin_service::{CompletedFileMetadata, IncidentCleanupResult, PersistenceStats};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -159,7 +159,18 @@ pub(crate) fn enqueue_completed_product(
 pub(crate) async fn shutdown_runtime(
     runtime: FilePersistenceRuntime,
 ) -> LiveResult<PersistenceStats> {
-    runtime.shutdown().await.map_err(Into::into)
+    runtime
+        .shutdown()
+        .await
+        .map(|stats| PersistenceStats {
+            queue_len: stats.queue_len,
+            queue_capacity: stats.queue_capacity,
+            enqueued_total: stats.enqueued_total,
+            evicted_total: stats.evicted_total,
+            persisted_total: stats.persisted_total,
+            failed_total: stats.failed_total,
+        })
+        .map_err(Into::into)
 }
 
 pub(crate) async fn run_incident_cleanup_loop(

@@ -3,8 +3,7 @@ use super::{
     TelemetryPayload,
 };
 use crate::server::server_http::event_matches_filter;
-use emwin_db::CompletedFileMetadata;
-use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::{CompletedFileMetadata, SourceKind};
 
 fn empty_events_query() -> EventsQuery {
     EventsQuery {
@@ -177,7 +176,7 @@ AKC090-051300-
         b"ignored".as_slice()
     };
 
-    let metadata = CompletedFileMetadata::build(filename, 1, ProductOrigin::Qbt, data);
+    let metadata = CompletedFileMetadata::build(filename, 1, SourceKind::Qbt, data);
 
     EventKind::FileComplete(Box::new(CompletedFileEventPayload::from_metadata(metadata)))
 }

@@ -1,6 +1,6 @@
 //! JSON and raw output helpers for archive query commands.
 
-use emwin_db::{
+use emwin_service::{
     AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedProductDetail,
     ArchivedProductSummary, CellAggregateBucket, FacetAggregateBucket, IncidentDetail,
     IncidentSummary, PaginatedResponse, TimeseriesAggregateBucket,
@@ -434,7 +434,7 @@ mod tests {
         IncidentsResponse, write_json,
     };
     use chrono::{TimeZone, Utc};
-    use emwin_db::{
+    use emwin_service::{
         ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary, IncidentDetail,
         IncidentSummary, PaginatedResponse,
     };

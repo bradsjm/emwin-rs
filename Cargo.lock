@@ -649,12 +649,10 @@ name = "emwin-api"
 version = "0.3.1"
 dependencies = [
  "axum",
- "bytes",
  "chrono",
- "crc32fast",
  "emwin-db",
  "emwin-live",
- "emwin-protocol",
+ "emwin-service",
  "futures",
  "serde",
  "serde_json",
@@ -666,10 +664,8 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
- "url",
  "utoipa",
  "utoipa-swagger-ui",
- "zip 8.2.0",
 ]
 
 [[package]]
@@ -684,7 +680,7 @@ dependencies = [
  "emwin-db",
  "emwin-live",
  "emwin-protocol",
- "futures",
+ "emwin-service",
  "serde",
  "serde_json",
  "thiserror",
@@ -701,6 +697,7 @@ dependencies = [
  "chrono",
  "emwin-parser",
  "emwin-protocol",
+ "emwin-service",
  "rust-s3",
  "serde",
  "serde_json",
@@ -722,6 +719,7 @@ dependencies = [
  "emwin-db",
  "emwin-parser",
  "emwin-protocol",
+ "emwin-service",
  "futures",
  "serde",
  "serde_json",
@@ -730,7 +728,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
- "tower",
  "tracing",
  "url",
  "zip 8.2.0",
@@ -773,6 +770,21 @@ dependencies = [
  "tokio-util",
  "tracing",
  "xmpp-parsers",
+]
+
+[[package]]
+name = "emwin-service"
+version = "0.3.1"
+dependencies = [
+ "base64",
+ "chrono",
+ "emwin-parser",
+ "futures",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

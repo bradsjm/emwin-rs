@@ -5,7 +5,7 @@ use axum::Json;
 use axum::body::{Body, to_bytes};
 use axum::extract::State;
 use axum::http::{Request, StatusCode};
-use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::SourceKind;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -17,7 +17,7 @@ async fn files_download_accepts_url_encoded_nested_filename() {
                 "nested/my file.txt".to_string(),
                 b"hello world".to_vec(),
                 1,
-                ProductOrigin::Qbt,
+                SourceKind::Qbt,
             )],
             emwin_live::LiveTelemetry::Unavailable,
             None,
@@ -61,7 +61,7 @@ Body
 "
                 .to_vec(),
                 1,
-                ProductOrigin::Qbt,
+                SourceKind::Qbt,
             )],
             emwin_live::LiveTelemetry::Unavailable,
             None,

@@ -33,10 +33,11 @@ docker compose up --build
 ## Crates
 
 - `emwin-protocol`: protocol decoding, ingest runtimes, and relay primitives
+- `emwin-service`: shared service contracts and DTOs for live/archive adapters
 - `emwin-live`: headless live ingest runtime for QBT and Weather Wire
 - `emwin-api`: HTTP/SSE/OpenAPI adapter over `emwin-live`
 - `emwin-cli`: CLI entrypoint for archive queries, live server startup, and relay mode
-- `emwin-db`: persistence and archive query support
+- `emwin-db`: persistence runtime and Postgres-backed archive service implementation
 - `emwin-parser`: text product enrichment and parsing
 
 ## Use `emwin-protocol` in your app
@@ -77,7 +78,7 @@ For active development against local changes, use a path dependency instead:
 
 ```toml
 [dependencies]
-emwin-protocol = { path = "../emwin-rs/crates/emwin-protocol" }
+emwin-protocol = { path = "../emwin-rs/crates/emwin-protocol", default-features = false, features = ["qbt"] }
 ```
 
 `emwin-protocol` protocol feature flags:
@@ -86,6 +87,8 @@ emwin-protocol = { path = "../emwin-rs/crates/emwin-protocol" }
 [dependencies]
 emwin-protocol = { path = "../emwin-rs/crates/emwin-protocol", default-features = false, features = ["qbt"] }
 ```
+
+Receiver implementations are opt-in. `emwin-protocol` now defaults to no transport features, so downstream crates must explicitly enable `qbt` and/or `wxwire`.
 
 ## Quick start
 

@@ -11,6 +11,7 @@ Use this file as the operational contract for automated coding agents.
   - `crates/emwin-api`
   - `crates/emwin-live`
   - `crates/emwin-protocol`
+  - `crates/emwin-service`
   - `crates/emwin-cli`
   - `crates/emwin-db`
   - `crates/emwin-parser`

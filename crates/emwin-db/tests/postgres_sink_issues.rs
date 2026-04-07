@@ -1,6 +1,7 @@
 mod common;
 
 use common::*;
+use emwin_service::{ArchivedIssueListQuery, SourceKind};
 
 #[tokio::test]
 async fn archived_issue_queries_return_list_and_detail() {
@@ -21,7 +22,7 @@ async fn archived_issue_queries_return_list_and_detail() {
     let issue_id = product_issue_id(&sink, product_id).await;
 
     let issues = sink
-        .list_archived_issues(emwin_db::ArchivedIssueListQuery {
+        .list_archived_issues(ArchivedIssueListQuery {
             product_id: Some(product_id),
             ..Default::default()
         })
@@ -77,14 +78,14 @@ async fn archived_issue_queries_support_filters_and_cursor_pagination() {
         let metadata = emwin_db::CompletedFileMetadata::build(
             filename,
             1_741_180_000 + u64::try_from(index).expect("index should fit") * 60,
-            emwin_protocol::ingest::ProductOrigin::Qbt,
+            SourceKind::Qbt,
             b"000 \nINVALID HEADER\nAFDBOX\nBody\n",
         );
         persist_metadata(&sink, metadata).await;
     }
 
     let first_page = sink
-        .list_archived_issues(emwin_db::ArchivedIssueListQuery {
+        .list_archived_issues(ArchivedIssueListQuery {
             kind: Some("text_product_parse".to_string()),
             code: Some("invalid_wmo_header".to_string()),
             limit: 2,
@@ -96,7 +97,7 @@ async fn archived_issue_queries_support_filters_and_cursor_pagination() {
     assert!(first_page.next_cursor.is_some());
 
     let second_page = sink
-        .list_archived_issues(emwin_db::ArchivedIssueListQuery {
+        .list_archived_issues(ArchivedIssueListQuery {
             kind: Some("text_product_parse".to_string()),
             code: Some("invalid_wmo_header".to_string()),
             limit: 2,

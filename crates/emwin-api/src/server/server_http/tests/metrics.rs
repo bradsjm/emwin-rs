@@ -6,7 +6,7 @@ use emwin_db::{
     BlobEntry, BlobRole, CompletedFileMetadata, NoopMetadataSink, PersistRequest,
     PersistenceConfig, PersistenceRuntime,
 };
-use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::SourceKind;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
@@ -22,7 +22,7 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
     let metadata = CompletedFileMetadata::build(
         "TEST.TXT",
         1,
-        ProductOrigin::Qbt,
+        SourceKind::Qbt,
         b"000 \nFTUS42 KFFC 022320\nTAFPDK\nBody\n",
     );
     let request = PersistRequest {

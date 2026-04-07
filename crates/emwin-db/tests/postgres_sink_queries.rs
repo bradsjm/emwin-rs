@@ -2,6 +2,7 @@ mod common;
 
 use chrono::TimeZone;
 use common::*;
+use emwin_service::{self as service, SourceKind};
 
 #[tokio::test]
 async fn archive_read_queries_return_incident_and_product_views() {
@@ -52,7 +53,7 @@ async fn archive_read_queries_return_incident_and_product_views() {
     .await;
 
     let incidents = sink
-        .list_incidents(emwin_db::IncidentListQuery {
+        .list_incidents(service::IncidentListQuery {
             office: Some("KOAX".to_string()),
             limit: 10,
             ..Default::default()
@@ -63,7 +64,7 @@ async fn archive_read_queries_return_incident_and_product_views() {
     assert_eq!(incidents.items[0].latest_product_id, second_id);
 
     let incident = sink
-        .get_incident(&emwin_db::IncidentKey {
+        .get_incident(&service::IncidentKey {
             office: key.office.to_string(),
             phenomena: key.phenomena.to_string(),
             significance: key.significance.to_string(),
@@ -77,13 +78,13 @@ async fn archive_read_queries_return_incident_and_product_views() {
 
     let products = sink
         .list_incident_products(
-            &emwin_db::IncidentKey {
+            &service::IncidentKey {
                 office: key.office.to_string(),
                 phenomena: key.phenomena.to_string(),
                 significance: key.significance.to_string(),
                 etn: key.etn,
             },
-            emwin_db::IncidentProductsQuery::default(),
+            service::IncidentProductsQuery::default(),
         )
         .await
         .expect("incident products query should succeed");
@@ -156,7 +157,7 @@ async fn incident_list_pagination_uses_last_returned_item_for_cursor() {
     }
 
     let first_page = sink
-        .list_incidents(emwin_db::IncidentListQuery {
+        .list_incidents(service::IncidentListQuery {
             office: Some("KOAX".to_string()),
             limit: 2,
             ..Default::default()
@@ -177,7 +178,7 @@ async fn incident_list_pagination_uses_last_returned_item_for_cursor() {
     );
 
     let second_page = sink
-        .list_incidents(emwin_db::IncidentListQuery {
+        .list_incidents(service::IncidentListQuery {
             office: Some("KOAX".to_string()),
             limit: 2,
             cursor: first_page.next_cursor,
@@ -240,13 +241,13 @@ async fn incident_products_pagination_uses_last_returned_item_for_cursor() {
 
     let first_page = sink
         .list_incident_products(
-            &emwin_db::IncidentKey {
+            &service::IncidentKey {
                 office: key.office.to_string(),
                 phenomena: key.phenomena.to_string(),
                 significance: key.significance.to_string(),
                 etn: key.etn,
             },
-            emwin_db::IncidentProductsQuery {
+            service::IncidentProductsQuery {
                 limit: 2,
                 ..Default::default()
             },
@@ -268,13 +269,13 @@ async fn incident_products_pagination_uses_last_returned_item_for_cursor() {
 
     let second_page = sink
         .list_incident_products(
-            &emwin_db::IncidentKey {
+            &service::IncidentKey {
                 office: key.office.to_string(),
                 phenomena: key.phenomena.to_string(),
                 significance: key.significance.to_string(),
                 etn: key.etn,
             },
-            emwin_db::IncidentProductsQuery {
+            service::IncidentProductsQuery {
                 limit: 2,
                 cursor: first_page.next_cursor,
             },
@@ -338,7 +339,7 @@ async fn archived_product_list_supports_filters_and_cursor_pagination() {
             emwin_db::CompletedFileMetadata::build(
                 filenames[2],
                 1_741_182_600,
-                emwin_protocol::ingest::ProductOrigin::Qbt,
+                SourceKind::Qbt,
                 b"000\nWUUS52 KGSP 051200\nFFWGSP\n\nFlash Flood Warning\nNational Weather Service Greenville-Spartanburg SC\n1200 PM EST Wed Mar 5 2025\n\nSCC045-051300-\n/O.NEW.KGSP.FF.W.0001.250305T1200Z-250305T1800Z/\n",
             ),
         )
@@ -346,7 +347,7 @@ async fn archived_product_list_supports_filters_and_cursor_pagination() {
     );
 
     let first_page = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             office: Some("KOAX".to_string()),
             artifact_kind: Some("nws_text_product".to_string()),
             limit: 1,
@@ -360,7 +361,7 @@ async fn archived_product_list_supports_filters_and_cursor_pagination() {
     assert!(first_page.next_cursor.is_some());
 
     let second_page = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             office: Some("KOAX".to_string()),
             artifact_kind: Some("nws_text_product".to_string()),
             limit: 1,
@@ -374,7 +375,7 @@ async fn archived_product_list_supports_filters_and_cursor_pagination() {
     assert_eq!(second_page.next_cursor, None);
 
     let issue_filtered = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             office: Some("KGSP".to_string()),
             artifact_kind: Some("nws_text_product".to_string()),
             vtec_action: Some("NEW".to_string()),
@@ -404,7 +405,7 @@ async fn archived_product_list_supports_bounding_box_filters() {
         emwin_db::CompletedFileMetadata::build(
             filenames[0],
             1_741_182_900,
-            emwin_protocol::ingest::ProductOrigin::Qbt,
+            SourceKind::Qbt,
             br#"000
 WUUS53 KOAX 051200
 SVROAX
@@ -426,7 +427,7 @@ LAT...LON 4143 9613 4145 9610 4140 9608 4138 9612
         emwin_db::CompletedFileMetadata::build(
             filenames[1],
             1_741_183_200,
-            emwin_protocol::ingest::ProductOrigin::Qbt,
+            SourceKind::Qbt,
             br#"000
 WUUS52 KGSP 051200
 SVRGSP
@@ -445,7 +446,7 @@ LAT...LON 3500 8200 3502 8198 3501 8195 3498 8197
     .await;
 
     let filtered = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             min_lat: Some(41.0),
             max_lat: Some(42.0),
             min_lon: Some(-97.0),
@@ -483,7 +484,7 @@ async fn archived_product_list_matches_office_city_case_insensitively() {
     .await;
 
     let filtered = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             office_city: Some("omaha/valley".to_string()),
             ..Default::default()
         })
@@ -551,8 +552,8 @@ async fn archived_features_support_pagination_and_kind_filtering() {
     .expect("second search point insert should succeed");
 
     let first_page = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 office: Some("KOAX".to_string()),
                 artifact_kind: Some("nws_text_product".to_string()),
                 limit: 2,
@@ -567,8 +568,8 @@ async fn archived_features_support_pagination_and_kind_filtering() {
     assert!(first_page.next_cursor.is_some());
 
     let second_page = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 office: Some("KOAX".to_string()),
                 artifact_kind: Some("nws_text_product".to_string()),
                 limit: 2,
@@ -589,18 +590,18 @@ async fn archived_features_support_pagination_and_kind_filtering() {
         second_page
             .items
             .iter()
-            .any(|item| item.feature_kind == emwin_db::FeatureKind::Polygon)
+            .any(|item| item.feature_kind == service::FeatureKind::Polygon)
     );
 
     let search_points = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 office: Some("KOAX".to_string()),
                 artifact_kind: Some("nws_text_product".to_string()),
                 limit: 10,
                 ..Default::default()
             },
-            kind: Some(emwin_db::FeatureKind::SearchPoint),
+            kind: Some(service::FeatureKind::SearchPoint),
         })
         .await
         .expect("filtered features should succeed");
@@ -609,7 +610,7 @@ async fn archived_features_support_pagination_and_kind_filtering() {
         search_points
             .items
             .iter()
-            .all(|item| item.feature_kind == emwin_db::FeatureKind::SearchPoint)
+            .all(|item| item.feature_kind == service::FeatureKind::SearchPoint)
     );
 
     cleanup_rows(&sink, &filenames, &[]).await;
@@ -647,8 +648,8 @@ async fn archived_features_bbox_filters_only_return_matching_geometries() {
     .expect("search point inserts should succeed");
 
     let filtered = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 min_lat: Some(41.0),
                 max_lat: Some(42.0),
                 min_lon: Some(-97.0),
@@ -656,7 +657,7 @@ async fn archived_features_bbox_filters_only_return_matching_geometries() {
                 limit: 10,
                 ..Default::default()
             },
-            kind: Some(emwin_db::FeatureKind::SearchPoint),
+            kind: Some(service::FeatureKind::SearchPoint),
         })
         .await
         .expect("bbox filtered features should succeed");
@@ -665,7 +666,7 @@ async fn archived_features_bbox_filters_only_return_matching_geometries() {
     assert_eq!(filtered.items[0].product_id, product_id);
     assert_eq!(
         filtered.items[0].feature_kind,
-        emwin_db::FeatureKind::SearchPoint
+        service::FeatureKind::SearchPoint
     );
 
     cleanup_rows(&sink, &filenames, &[]).await;
@@ -710,8 +711,8 @@ async fn archived_features_point_radius_requires_polygon_containment() {
     .expect("search point insert should succeed");
 
     let filtered = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 lat: Some(41.50),
                 lon: Some(-95.99),
                 distance_miles: Some(5.0),
@@ -726,14 +727,14 @@ async fn archived_features_point_radius_requires_polygon_containment() {
         filtered
             .items
             .iter()
-            .any(|item| item.feature_kind == emwin_db::FeatureKind::SearchPoint),
+            .any(|item| item.feature_kind == service::FeatureKind::SearchPoint),
         "nearby point feature should match"
     );
     assert!(
         filtered
             .items
             .iter()
-            .all(|item| item.feature_kind != emwin_db::FeatureKind::Polygon),
+            .all(|item| item.feature_kind != service::FeatureKind::Polygon),
         "polygon should not match when point lies outside it"
     );
 
@@ -779,8 +780,8 @@ async fn archived_cell_aggregate_counts_only_matching_geometries() {
     .expect("search point insert should succeed");
 
     let cells = sink
-        .list_cell_aggregate(emwin_db::CellAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_cell_aggregate(service::CellAggregateQuery {
+            filters: service::ProductListQuery {
                 min_lat: Some(41.0),
                 max_lat: Some(42.0),
                 min_lon: Some(-97.0),
@@ -788,7 +789,7 @@ async fn archived_cell_aggregate_counts_only_matching_geometries() {
                 limit: 100,
                 ..Default::default()
             },
-            measure: emwin_db::CellMeasure::ProductCount,
+            measure: service::CellMeasure::ProductCount,
             precision: 5,
             limit: 10,
         })
@@ -852,13 +853,13 @@ async fn archived_cell_aggregate_counts_polygon_and_path_products() {
     .expect("path insert should succeed");
 
     let cells = sink
-        .list_cell_aggregate(emwin_db::CellAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_cell_aggregate(service::CellAggregateQuery {
+            filters: service::ProductListQuery {
                 office: Some("KOAX".to_string()),
                 limit: 100,
                 ..Default::default()
             },
-            measure: emwin_db::CellMeasure::ProductCount,
+            measure: service::CellMeasure::ProductCount,
             precision: 5,
             limit: 20,
         })
@@ -909,13 +910,13 @@ async fn archived_aggregates_apply_issue_and_vtec_row_filters() {
     .expect("issue inserts should succeed");
 
     let issue_facets = sink
-        .list_facet_aggregate(emwin_db::FacetAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_facet_aggregate(service::FacetAggregateQuery {
+            filters: service::ProductListQuery {
                 issue_code: Some("invalid_wmo_header".to_string()),
                 limit: 100,
                 ..Default::default()
             },
-            dimension: emwin_db::FacetDimension::IssueCode,
+            dimension: service::FacetDimension::IssueCode,
             limit: 20,
         })
         .await
@@ -925,13 +926,13 @@ async fn archived_aggregates_apply_issue_and_vtec_row_filters() {
     assert_eq!(issue_facets.items[0].count, 1);
 
     let issue_timeseries = sink
-        .list_timeseries_aggregate(emwin_db::TimeseriesAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_timeseries_aggregate(service::TimeseriesAggregateQuery {
+            filters: service::ProductListQuery {
                 issue_code: Some("invalid_wmo_header".to_string()),
                 limit: 100,
                 ..Default::default()
             },
-            measure: emwin_db::TimeseriesMeasure::IssueCount,
+            measure: service::TimeseriesMeasure::IssueCount,
             start: chrono::Utc
                 .timestamp_opt(1_741_181_800, 0)
                 .single()
@@ -940,7 +941,7 @@ async fn archived_aggregates_apply_issue_and_vtec_row_filters() {
                 .timestamp_opt(1_741_185_400, 0)
                 .single()
                 .expect("valid end"),
-            bucket: emwin_db::TimeseriesBucket::Hour,
+            bucket: service::TimeseriesBucket::Hour,
         })
         .await
         .expect("issue timeseries should succeed");
@@ -954,13 +955,13 @@ async fn archived_aggregates_apply_issue_and_vtec_row_filters() {
     );
 
     let incident_timeseries = sink
-        .list_timeseries_aggregate(emwin_db::TimeseriesAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_timeseries_aggregate(service::TimeseriesAggregateQuery {
+            filters: service::ProductListQuery {
                 vtec_action: Some("NEW".to_string()),
                 limit: 100,
                 ..Default::default()
             },
-            measure: emwin_db::TimeseriesMeasure::IncidentCount,
+            measure: service::TimeseriesMeasure::IncidentCount,
             start: chrono::Utc
                 .timestamp_opt(1_741_181_800, 0)
                 .single()
@@ -969,7 +970,7 @@ async fn archived_aggregates_apply_issue_and_vtec_row_filters() {
                 .timestamp_opt(1_741_185_400, 0)
                 .single()
                 .expect("valid end"),
-            bucket: emwin_db::TimeseriesBucket::Hour,
+            bucket: service::TimeseriesBucket::Hour,
         })
         .await
         .expect("incident timeseries should succeed");
@@ -992,7 +993,7 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
     };
 
     let invalid_cursor = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             cursor: Some("%%%".to_string()),
             ..Default::default()
         })
@@ -1001,8 +1002,8 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
     assert!(invalid_cursor.to_string().contains("invalid cursor"));
 
     let invalid_feature_cursor = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 cursor: Some("%%%".to_string()),
                 ..Default::default()
             },
@@ -1017,7 +1018,7 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
     );
 
     let partial_bbox = sink
-        .list_archived_products(emwin_db::ProductListQuery {
+        .list_archived_products(service::ProductListQuery {
             min_lat: Some(41.0),
             max_lat: Some(42.0),
             min_lon: Some(-97.0),
@@ -1032,8 +1033,8 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
     );
 
     let invalid_distance = sink
-        .list_archived_features(emwin_db::FeatureListQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_archived_features(service::FeatureListQuery {
+            filters: service::ProductListQuery {
                 lat: Some(41.0),
                 lon: Some(-96.0),
                 distance_miles: Some(0.0),
@@ -1050,12 +1051,12 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
     );
 
     let missing_lon = sink
-        .list_cell_aggregate(emwin_db::CellAggregateQuery {
-            filters: emwin_db::ProductListQuery {
+        .list_cell_aggregate(service::CellAggregateQuery {
+            filters: service::ProductListQuery {
                 lat: Some(41.0),
                 ..Default::default()
             },
-            measure: emwin_db::CellMeasure::ProductCount,
+            measure: service::CellMeasure::ProductCount,
             precision: 5,
             limit: 10,
         })
@@ -1075,9 +1076,9 @@ async fn archived_timeseries_rejects_oversized_bucket_count() {
     };
 
     let error = sink
-        .list_timeseries_aggregate(emwin_db::TimeseriesAggregateQuery {
-            filters: emwin_db::ProductListQuery::default(),
-            measure: emwin_db::TimeseriesMeasure::ProductCount,
+        .list_timeseries_aggregate(service::TimeseriesAggregateQuery {
+            filters: service::ProductListQuery::default(),
+            measure: service::TimeseriesMeasure::ProductCount,
             start: chrono::Utc
                 .timestamp_opt(1_741_181_800, 0)
                 .single()
@@ -1086,7 +1087,7 @@ async fn archived_timeseries_rejects_oversized_bucket_count() {
                 .timestamp_opt(1_744_872_600, 0)
                 .single()
                 .expect("valid end"),
-            bucket: emwin_db::TimeseriesBucket::Hour,
+            bucket: service::TimeseriesBucket::Hour,
         })
         .await
         .expect_err("oversized timeseries should fail");

@@ -9,9 +9,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-emwin-protocol = { path = "../emwin-protocol", features = ["telemetry-serde"] }
+emwin-protocol = { path = "../emwin-protocol", default-features = false, features = ["qbt", "wxwire", "telemetry-serde"] }
 emwin-parser = { path = "../emwin-parser" }
 emwin-db = { path = "../emwin-db" }
+emwin-service = { path = "../emwin-service" }
 chrono.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -30,5 +31,4 @@ workspace = true
 
 [dev-dependencies]
 tempfile = "3"
-tower.workspace = true
 sqlx.workspace = true

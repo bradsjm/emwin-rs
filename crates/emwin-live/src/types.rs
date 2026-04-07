@@ -1,9 +1,9 @@
 use crate::persistence::FilePersistenceProducer;
 use crate::retained::RetainedFiles;
-use emwin_db::{CompletedFileMetadata, IncidentChange, PersistenceStats, PostgresMetadataSink};
-use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtReceiverTelemetrySnapshot};
-use emwin_protocol::wxwire_receiver::{WxWireReceiverFrameEvent, WxWireReceiverTelemetrySnapshot};
-use serde::Serialize;
+use emwin_db::PostgresMetadataSink;
+pub(crate) use emwin_service::{
+    IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveStatsSnapshot, LiveTelemetry,
+};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
@@ -30,48 +30,6 @@ pub struct LiveOptions {
     pub postgres_database_url: Option<String>,
     pub file_retention_secs: u64,
     pub max_retained_files: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct LiveBroadcastEvent {
-    pub id: u64,
-    pub kind: LiveEventKind,
-}
-
-#[derive(Debug, Clone)]
-pub struct IncidentBroadcastEvent {
-    pub id: u64,
-    pub change: IncidentChange,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "receiver", rename_all = "snake_case")]
-pub enum LiveTelemetry {
-    Unavailable,
-    Qbt(QbtReceiverTelemetrySnapshot),
-    WxWire(WxWireReceiverTelemetrySnapshot),
-}
-
-#[derive(Debug, Clone)]
-pub enum LiveEventKind {
-    Connected { endpoint: String },
-    Disconnected,
-    QbtFrame(QbtFrameEvent),
-    WxWireFrame(WxWireReceiverFrameEvent),
-    ProductAvailable(Box<CompletedFileMetadata>),
-    Telemetry(LiveTelemetry),
-    Error { message: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LiveStatsSnapshot {
-    pub uptime_secs: u64,
-    pub data_blocks_total: u64,
-    pub received_servers: usize,
-    pub received_sat_servers: usize,
-    pub retained_files: usize,
-    pub upstream_endpoint: Option<String>,
-    pub persistence: Option<PersistenceStats>,
 }
 
 #[derive(Debug)]

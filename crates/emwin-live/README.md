@@ -9,6 +9,7 @@ Headless live ingest runtime for EMWIN.
 - In-memory retained-file state
 - Async blob and metadata persistence wiring
 - Live event fanout and runtime telemetry snapshots
+- Service-facing live/archive adapters over internal protocol and persistence details
 
 ## Validation
 

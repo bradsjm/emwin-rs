@@ -9,6 +9,7 @@ use axum::body::to_bytes;
 use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, Request, StatusCode};
 use emwin_db::MetadataSink;
+use emwin_service::{CompletedFileMetadata, SourceKind};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tempfile::tempdir;
@@ -356,12 +357,8 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
     std::fs::write(&payload_path, payload_bytes).expect("payload file should write");
     std::fs::write(&metadata_path, b"{\"ok\":true}").expect("metadata file should write");
 
-    let metadata = emwin_db::CompletedFileMetadata::build(
-        filename,
-        1_741_182_000,
-        emwin_protocol::ingest::ProductOrigin::Qbt,
-        payload_bytes,
-    );
+    let metadata =
+        CompletedFileMetadata::build(filename, 1_741_182_000, SourceKind::Qbt, payload_bytes);
     let filename_key = metadata.filename.clone();
     let timestamp = i64::try_from(metadata.timestamp_utc).expect("timestamp should fit");
     sink.persist(emwin_db::PersistedRequest {

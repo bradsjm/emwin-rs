@@ -6,7 +6,7 @@ Agent guide for `crates/emwin-api`.
 
 - Crate: `emwin-api` (library crate).
 - Role: HTTP API, SSE streams, OpenAPI surface, auth/CORS, and retained-file downloads.
-- Depends on `emwin-live` for live runtime state and `emwin-db` for archive query access.
+- Depends on `emwin-live` for runtime services and `emwin-service` for shared contracts. `emwin-db` is test-only here.
 
 ## Before You Change Code
 
@@ -14,7 +14,7 @@ Agent guide for `crates/emwin-api`.
 - Keep HTTP behavior and payload shapes stable unless the task explicitly changes them.
 - Keep command-line parsing concerns in `emwin-cli`.
 - Keep live runtime orchestration in `emwin-live`; this crate adapts it at the HTTP boundary.
-- Keep archive query contracts in `emwin-db`, not in this crate.
+- Keep archive query contracts in `emwin-service`, not in this crate.
 
 ## Build, Lint, and Test Commands
 

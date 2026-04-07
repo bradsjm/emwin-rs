@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+emwin-service = { path = "../emwin-service" }
 emwin-parser = { path = "../emwin-parser" }
 emwin-protocol = { path = "../emwin-protocol", features = ["telemetry-serde"] }
 base64.workspace = true

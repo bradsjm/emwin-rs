@@ -30,6 +30,8 @@ pub enum CliError {
     #[error(transparent)]
     Persistence(#[from] emwin_db::PersistError),
     #[error(transparent)]
+    Service(#[from] emwin_service::ServiceError),
+    #[error(transparent)]
     Live(#[from] emwin_live::LiveError),
     #[error(transparent)]
     Api(#[from] emwin_api::ApiError),

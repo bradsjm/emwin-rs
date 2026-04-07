@@ -6,13 +6,13 @@ Agent guide for `crates/emwin-live`.
 
 - Crate: `emwin-live` (library crate).
 - Role: headless live ingest runtime, retention, persistence wiring, runtime telemetry, and event fanout.
-- Depends on `emwin-protocol` for receiver/runtime events, `emwin-parser` for completed-product enrichment, and `emwin-db` for persistence and shared metadata/query types.
+- Depends on `emwin-protocol` for receiver/runtime events, `emwin-parser` for completed-product enrichment, `emwin-service` for public contracts, and `emwin-db` for persistence implementations.
 
 ## Before You Change Code
 
 - Read root `AGENTS.md` first.
 - Keep `emwin-live` narrow. It is a headless runtime crate, not a general shared-logic bucket.
-- Keep HTTP concerns in `emwin-api`, CLI parsing/output in `emwin-cli`, and archive query contracts in `emwin-db`.
+- Keep HTTP concerns in `emwin-api`, CLI parsing/output in `emwin-cli`, and shared contracts in `emwin-service`.
 - Keep receiver orchestration and completed-product handling here rather than drifting back into adapter crates.
 - Preserve shutdown, retry, and bounded-channel behavior unless the task explicitly changes it.
 

@@ -2,7 +2,7 @@ mod common;
 
 use chrono::{TimeZone, Utc};
 use common::*;
-use emwin_db::{IncidentChangeAction, IncidentChangeTrigger};
+use emwin_service::{IncidentChangeAction, IncidentChangeTrigger};
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]

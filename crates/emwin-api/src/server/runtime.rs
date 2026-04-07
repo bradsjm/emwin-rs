@@ -1,7 +1,5 @@
 use super::server_http;
-use super::types::{
-    AppState, EventKind, HttpServerOptions, IncidentEventPayload, TelemetryPayload,
-};
+use super::types::{AppState, EventKind, HttpServerOptions, IncidentEventPayload};
 use crate::error::{ApiError, ApiResult};
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -224,16 +222,11 @@ fn map_live_event(kind: emwin_live::LiveEventKind) -> EventKind {
     match kind {
         emwin_live::LiveEventKind::Connected { endpoint } => EventKind::Connected { endpoint },
         emwin_live::LiveEventKind::Disconnected => EventKind::Disconnected,
-        emwin_live::LiveEventKind::QbtFrame(frame) => EventKind::QbtFrame(frame),
-        emwin_live::LiveEventKind::WxWireFrame(frame) => EventKind::WxWireFrame(frame),
+        emwin_live::LiveEventKind::ReceiverFrame(frame) => EventKind::ReceiverFrame(frame),
         emwin_live::LiveEventKind::ProductAvailable(metadata) => EventKind::FileComplete(Box::new(
             super::types::CompletedFileEventPayload::from_metadata(*metadata),
         )),
-        emwin_live::LiveEventKind::Telemetry(value) => EventKind::Telemetry(match value {
-            emwin_live::LiveTelemetry::Unavailable => TelemetryPayload::Unavailable,
-            emwin_live::LiveTelemetry::Qbt(snapshot) => TelemetryPayload::Qbt(snapshot),
-            emwin_live::LiveTelemetry::WxWire(snapshot) => TelemetryPayload::WxWire(snapshot),
-        }),
+        emwin_live::LiveEventKind::Telemetry(value) => EventKind::Telemetry(value),
         emwin_live::LiveEventKind::Error { message } => EventKind::Error { message },
     }
 }

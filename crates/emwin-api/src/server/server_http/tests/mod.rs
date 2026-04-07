@@ -1,7 +1,7 @@
 use crate::server::types::{
     AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
 };
-use emwin_db::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
+use emwin_service::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use tokio::sync::{broadcast, watch};

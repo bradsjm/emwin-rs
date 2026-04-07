@@ -34,9 +34,11 @@ Core Rust library for EMWIN protocol parsing, client runtime, and file assembly.
 
 This crate uses Cargo features to enable receiver implementations:
 
-- `qbt` (enabled by default): QBT satellite receiver
-- `wxwire` (enabled by default): Weather Wire receiver
+- `qbt`: QBT satellite receiver
+- `wxwire`: Weather Wire receiver
 - `telemetry-serde`: Enable serialization for telemetry snapshots
+
+No transport feature is enabled by default. Downstream crates must explicitly select `qbt`, `wxwire`, or both.
 
 ## Quick Start
 
@@ -44,7 +46,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-emwin-protocol = { git = "https://github.com/bradsjm/emwin-rs" }
+emwin-protocol = { git = "https://github.com/bradsjm/emwin-rs", default-features = false, features = ["qbt"] }
 ```
 
 ## Examples

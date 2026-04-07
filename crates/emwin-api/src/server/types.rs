@@ -3,19 +3,16 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
-use crate::server::event_output::{frame_event_name, frame_event_to_json};
 use crate::server_support::file_download_url;
-use emwin_db::{
+use emwin_live::{FileEventFilter, FileFilterInput, LiveRuntime, LiveTelemetry};
+use emwin_service::{
     AggregateCompleteness, ArchiveFilterInput, ArchivedFeature, ArchivedIssue,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata,
     FacetAggregateBucket, IncidentChange, IncidentChangeAction, IncidentChangeTrigger,
-    IncidentDetail, IncidentSummary, PaginatedResponse, PersistenceStats,
+    IncidentDetail, IncidentSummary, PaginatedResponse, PersistenceStats, ReceiverFrame,
     TimeseriesAggregateBucket, build_cell_aggregate_query, build_facet_aggregate_query,
     build_feature_list_query, build_timeseries_aggregate_query,
 };
-use emwin_live::{FileEventFilter, FileFilterInput, LiveRuntime, LiveTelemetry};
-use emwin_protocol::qbt_receiver::QbtFrameEvent;
-use emwin_protocol::wxwire_receiver::WxWireReceiverFrameEvent;
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeSet;
@@ -152,24 +149,18 @@ impl IncidentEventPayload {
 pub(crate) enum EventKind {
     Connected { endpoint: String },
     Disconnected,
-    QbtFrame(QbtFrameEvent),
-    WxWireFrame(WxWireReceiverFrameEvent),
+    ReceiverFrame(ReceiverFrame),
     FileComplete(Box<CompletedFileEventPayload>),
     Telemetry(TelemetryPayload),
     Error { message: String },
 }
 
 impl EventKind {
-    pub(crate) fn event_name(&self) -> &'static str {
+    pub(crate) fn event_name(&self) -> &str {
         match self {
             Self::Connected { .. } => "connected",
             Self::Disconnected => "disconnected",
-            Self::QbtFrame(frame) => frame_event_name(frame),
-            Self::WxWireFrame(frame) => match frame {
-                WxWireReceiverFrameEvent::File(_) => "file",
-                WxWireReceiverFrameEvent::Warning(_) => "warning",
-                _ => "unknown",
-            },
+            Self::ReceiverFrame(frame) => frame.event_name.as_str(),
             Self::FileComplete(_) => "product_available",
             Self::Telemetry(_) => "telemetry",
             Self::Error { .. } => "error",
@@ -180,27 +171,7 @@ impl EventKind {
         match self {
             Self::Connected { endpoint } => serde_json::json!({ "endpoint": endpoint }),
             Self::Disconnected => serde_json::json!({}),
-            Self::QbtFrame(frame) => frame_event_to_json(frame, 0),
-            Self::WxWireFrame(frame) => match frame {
-                WxWireReceiverFrameEvent::File(file) => serde_json::json!({
-                    "type": "file",
-                    "filename": file.filename,
-                    "length": file.data.len(),
-                    "subject": file.subject,
-                    "id": file.id,
-                    "issue_utc": unix_seconds(file.issue_utc),
-                    "ttaaii": file.ttaaii,
-                    "cccc": file.cccc,
-                    "awipsid": file.awipsid,
-                }),
-                WxWireReceiverFrameEvent::Warning(warning) => serde_json::json!({
-                    "type": "warning",
-                    "warning": format!("{warning:?}"),
-                }),
-                _ => serde_json::json!({
-                    "type": "unknown",
-                }),
-            },
+            Self::ReceiverFrame(frame) => frame.payload.clone(),
             Self::FileComplete(file) => {
                 serde_json::to_value(file).unwrap_or_else(|_| serde_json::json!({}))
             }
@@ -447,7 +418,7 @@ impl ArchiveFilterParams {
         default_limit: usize,
         limit: Option<usize>,
         cursor: Option<String>,
-    ) -> Result<emwin_db::ProductListQuery, String> {
+    ) -> Result<emwin_service::ProductListQuery, String> {
         ArchiveFilterInput::from(self)
             .into_product_list_query(default_limit, limit, cursor)
             .map_err(|err| err.to_string())
@@ -526,7 +497,7 @@ pub(crate) struct ProductsQuery {
 }
 
 impl ProductsQuery {
-    pub(crate) fn into_product_list_query(self) -> Result<emwin_db::ProductListQuery, String> {
+    pub(crate) fn into_product_list_query(self) -> Result<emwin_service::ProductListQuery, String> {
         self.filters
             .into_product_list_query(100, self.limit, self.cursor)
     }
@@ -543,7 +514,7 @@ pub(crate) struct FeaturesQuery {
 }
 
 impl FeaturesQuery {
-    pub(crate) fn into_feature_list_query(self) -> Result<emwin_db::FeatureListQuery, String> {
+    pub(crate) fn into_feature_list_query(self) -> Result<emwin_service::FeatureListQuery, String> {
         build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, self.cursor)
             .map_err(|err| err.to_string())
     }
@@ -559,7 +530,7 @@ pub(crate) struct FeaturesGeoJsonQuery {
 }
 
 impl FeaturesGeoJsonQuery {
-    pub(crate) fn into_feature_list_query(self) -> Result<emwin_db::FeatureListQuery, String> {
+    pub(crate) fn into_feature_list_query(self) -> Result<emwin_service::FeatureListQuery, String> {
         build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, None)
             .map_err(|err| err.to_string())
     }
@@ -577,7 +548,7 @@ pub(crate) struct FacetAggregateHttpQuery {
 impl FacetAggregateHttpQuery {
     pub(crate) fn into_facet_aggregate_query(
         self,
-    ) -> Result<emwin_db::FacetAggregateQuery, String> {
+    ) -> Result<emwin_service::FacetAggregateQuery, String> {
         build_facet_aggregate_query(self.filters.into(), &self.dimension, self.limit)
             .map_err(|err| err.to_string())
     }
@@ -597,7 +568,7 @@ pub(crate) struct TimeseriesAggregateHttpQuery {
 impl TimeseriesAggregateHttpQuery {
     pub(crate) fn into_timeseries_aggregate_query(
         self,
-    ) -> Result<emwin_db::TimeseriesAggregateQuery, String> {
+    ) -> Result<emwin_service::TimeseriesAggregateQuery, String> {
         build_timeseries_aggregate_query(
             self.filters.into(),
             &self.measure,
@@ -620,7 +591,9 @@ pub(crate) struct CellAggregateHttpQuery {
 }
 
 impl CellAggregateHttpQuery {
-    pub(crate) fn into_cell_aggregate_query(self) -> Result<emwin_db::CellAggregateQuery, String> {
+    pub(crate) fn into_cell_aggregate_query(
+        self,
+    ) -> Result<emwin_service::CellAggregateQuery, String> {
         build_cell_aggregate_query(
             self.filters.into(),
             &self.measure,
@@ -1052,12 +1025,6 @@ pub(crate) fn archive_product_raw_url(product_id: i64) -> String {
 
 pub(crate) fn archive_issue_url(issue_id: i64) -> String {
     format!("{API_PREFIX}/issues/{issue_id}")
-}
-
-fn unix_seconds(time: std::time::SystemTime) -> u64 {
-    time.duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_secs())
-        .unwrap_or(0)
 }
 
 #[derive(Debug, Clone)]

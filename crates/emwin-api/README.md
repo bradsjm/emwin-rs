@@ -8,13 +8,13 @@ HTTP/SSE/OpenAPI adapter crate for EMWIN live ingest.
 - OpenAPI generation and Swagger UI
 - HTTP auth, CORS, and response shaping
 - Retained-file downloads backed by `emwin-live`
-- Archive read endpoints backed by `emwin-db`
+- Archive read endpoints backed by the service surface exposed through `emwin-live`
 
 ## What it does not own
 
 - Live ingest orchestration
 - Persistence runtime wiring
-- Archive filter/query contracts
+- Archive filter/query contracts and service DTO definitions
 - CLI parsing or output formatting
 
 `emwin-cli server` starts `emwin-live::LiveRuntime`, then serves it through `emwin-api`.

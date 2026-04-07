@@ -5,7 +5,7 @@ use emwin_parser::{
     GenericBody, HvtecCode, ProductBody, ProductHeaderV2, TimeMotLocEntry, UgcArea, UgcSection,
     VtecCode, VtecEventBody,
 };
-use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::SourceKind;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -731,18 +731,18 @@ fn flatten_header(header: Option<&ProductHeaderV2>) -> HeaderColumns {
     }
 }
 
-fn source_receiver(origin: &ProductOrigin) -> &'static str {
+fn source_receiver(origin: &SourceKind) -> &'static str {
     match origin {
-        ProductOrigin::Qbt => "qbt",
-        ProductOrigin::WxWire { .. } => "wxwire",
+        SourceKind::Qbt => "qbt",
+        SourceKind::WxWire { .. } => "wxwire",
         _ => "unknown",
     }
 }
 
-fn source_message_id(origin: &ProductOrigin) -> Option<String> {
+fn source_message_id(origin: &SourceKind) -> Option<String> {
     match origin {
-        ProductOrigin::Qbt => None,
-        ProductOrigin::WxWire { message_id, .. } => Some(message_id.clone()),
+        SourceKind::Qbt => None,
+        SourceKind::WxWire { message_id, .. } => Some(message_id.clone()),
         _ => None,
     }
 }

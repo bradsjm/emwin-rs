@@ -32,7 +32,7 @@ use self::size::SizeRange;
 use self::vtec::VtecFilter;
 use self::wind_hail::WindHailFilter;
 use crate::retained::wildcard_match;
-use emwin_db::CompletedFileMetadata;
+use emwin_service::CompletedFileMetadata;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FileEventFilter {

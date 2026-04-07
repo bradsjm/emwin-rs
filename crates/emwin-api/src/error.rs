@@ -18,7 +18,7 @@ pub enum ApiError {
     #[error(transparent)]
     Live(#[from] emwin_live::LiveError),
     #[error(transparent)]
-    Persistence(#[from] emwin_db::PersistError),
+    Service(#[from] emwin_service::ServiceError),
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("runtime failure: {0}")]

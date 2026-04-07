@@ -8,8 +8,9 @@ use emwin_protocol::ingest::{
     IngestConfig, IngestError, IngestEvent, IngestReceiver, IngestTelemetry, IngestWarning,
     ProductOrigin,
 };
-use emwin_protocol::qbt_receiver::{QbtFrameEvent, QbtProtocolWarning, QbtReceiverConfig};
-use emwin_protocol::wxwire_receiver::{WxWireReceiverConfig, WxWireReceiverFrameEvent};
+use emwin_protocol::qbt_receiver::{QbtProtocolWarning, QbtReceiverConfig};
+use emwin_protocol::wxwire_receiver::WxWireReceiverConfig;
+use emwin_service::ReceiverFrame;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -127,8 +128,10 @@ fn handle_ingest_event(
         }
         Ok(IngestEvent::Telemetry(snapshot)) => {
             let telemetry = match snapshot {
-                IngestTelemetry::Qbt(value) => LiveTelemetry::Qbt(value),
-                IngestTelemetry::WxWire(value) => LiveTelemetry::WxWire(value),
+                IngestTelemetry::Qbt(value) => LiveTelemetry::Qbt(serde_json::to_value(value)?),
+                IngestTelemetry::WxWire(value) => {
+                    LiveTelemetry::WxWire(serde_json::to_value(value)?)
+                }
                 _ => LiveTelemetry::Unavailable,
             };
             let mut guard = state
@@ -207,13 +210,27 @@ fn handle_ingest_event(
                 }
                 publish(
                     state,
-                    LiveEventKind::QbtFrame(QbtFrameEvent::Warning(value)),
+                    LiveEventKind::ReceiverFrame(ReceiverFrame {
+                        receiver: "qbt".to_string(),
+                        event_name: "warning".to_string(),
+                        payload: serde_json::json!({
+                            "type": "warning",
+                            "warning": format!("{value:?}"),
+                        }),
+                    }),
                 );
             }
             IngestWarning::WxWire(value) => {
                 publish(
                     state,
-                    LiveEventKind::WxWireFrame(WxWireReceiverFrameEvent::Warning(value)),
+                    LiveEventKind::ReceiverFrame(ReceiverFrame {
+                        receiver: "wxwire".to_string(),
+                        event_name: "warning".to_string(),
+                        payload: serde_json::json!({
+                            "type": "warning",
+                            "warning": format!("{value:?}"),
+                        }),
+                    }),
                 );
             }
             _ => publish(

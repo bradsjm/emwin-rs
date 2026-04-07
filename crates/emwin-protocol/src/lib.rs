@@ -6,8 +6,8 @@
 //!
 //! # Features
 //!
-//! - **qbt** (default): EMWIN QBT satellite feed receiver
-//! - **wxwire** (default): Weather Wire/XMPP receiver
+//! - **qbt**: EMWIN QBT satellite feed receiver
+//! - **wxwire**: Weather Wire/XMPP receiver
 //! - **telemetry-serde**: Enable serde serialization for telemetry types
 //!
 //! # Example
@@ -41,6 +41,7 @@
 pub mod ingest;
 #[cfg(feature = "qbt")]
 pub mod qbt_receiver;
+#[cfg(any(feature = "qbt", feature = "wxwire"))]
 mod runtime_support;
 #[cfg(feature = "wxwire")]
 pub mod wxwire_receiver;

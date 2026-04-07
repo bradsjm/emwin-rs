@@ -6,8 +6,9 @@
 
 use chrono::{DateTime, Utc};
 use crc32fast::Hasher;
-use emwin_db::{BlobEntry, BlobRole, CompletedFileMetadata, PersistRequest};
+use emwin_db::{BlobEntry, BlobRole, PersistRequest};
 use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::{CompletedFileMetadata, SourceKind};
 use std::path::{Path, PathBuf};
 
 use crate::error::LiveResult;
@@ -79,7 +80,7 @@ pub(crate) fn build_completed_file_metadata(
     origin: ProductOrigin,
     data: &[u8],
 ) -> CompletedFileMetadata {
-    CompletedFileMetadata::build(filename, timestamp_utc, origin, data)
+    CompletedFileMetadata::build(filename, timestamp_utc, source_kind(origin), data)
 }
 
 #[cfg(test)]
@@ -170,11 +171,28 @@ fn timestamp_utc(timestamp_utc: u64) -> DateTime<Utc> {
         .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
 }
 
-fn origin_segment(origin: &ProductOrigin) -> &'static str {
+fn origin_segment(origin: &SourceKind) -> &'static str {
     match origin {
-        ProductOrigin::Qbt => "qbt",
-        ProductOrigin::WxWire { .. } => "wxwire",
-        _ => "unknown",
+        SourceKind::Qbt => "qbt",
+        SourceKind::WxWire { .. } => "wxwire",
+        SourceKind::Unknown => "unknown",
+    }
+}
+
+fn source_kind(origin: ProductOrigin) -> SourceKind {
+    match origin {
+        ProductOrigin::Qbt => SourceKind::Qbt,
+        ProductOrigin::WxWire {
+            message_id,
+            subject,
+            delay_stamp_utc,
+        } => SourceKind::WxWire {
+            message_id,
+            subject,
+            delay_stamp_utc,
+        },
+        #[allow(unreachable_patterns)]
+        _ => SourceKind::Unknown,
     }
 }
 

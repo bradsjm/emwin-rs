@@ -2,11 +2,10 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use emwin_db::{
-    BlobRole, BlobStorageKind, BlobWriter, CompletedFileMetadata, IncidentChange,
-    IncidentChangeAction, IncidentChangeTrigger, MetadataSink, PersistedRequest, PostgresConfig,
-    PostgresMetadataSink, StoredBlob,
+    BlobRole, BlobStorageKind, BlobWriter, CompletedFileMetadata, MetadataSink, PersistedRequest,
+    PostgresConfig, PostgresMetadataSink, StoredBlob,
 };
-use emwin_protocol::ingest::ProductOrigin;
+use emwin_service::{IncidentChange, IncidentChangeAction, IncidentChangeTrigger, SourceKind};
 use sqlx::Row;
 use tokio::sync::broadcast;
 use tokio::time::{Duration, timeout};
@@ -49,7 +48,7 @@ pub(crate) fn sample_metadata() -> CompletedFileMetadata {
     CompletedFileMetadata::build(
         "FFWOAXNE.TXT",
         1_704_070_800,
-        ProductOrigin::Qbt,
+        SourceKind::Qbt,
         br#"000
 WUUS53 KOAX 051200
 FFWOAX
@@ -149,7 +148,7 @@ pub(crate) fn build_vtec_metadata(
     CompletedFileMetadata::build(
         filename,
         timestamp_utc,
-        ProductOrigin::Qbt,
+        SourceKind::Qbt,
         bulletin.as_bytes(),
     )
 }

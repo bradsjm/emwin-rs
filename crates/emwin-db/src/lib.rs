@@ -65,18 +65,7 @@ pub use archive_filter::{
 };
 pub use error::{PersistError, PersistResult};
 pub use metadata::CompletedFileMetadata;
-pub use postgres::{
-    AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedIssueCursor,
-    ArchivedIssueListQuery, ArchivedPayload, ArchivedProductDetail, ArchivedProductSummary,
-    CellAggregateBucket, CellAggregateQuery, CellAggregateResult, CellMeasure,
-    FacetAggregateBucket, FacetAggregateQuery, FacetAggregateResult, FacetDimension, FeatureCursor,
-    FeatureKind, FeatureListQuery, IncidentChange, IncidentChangeAction, IncidentChangeTrigger,
-    IncidentCleanupResult, IncidentCursor, IncidentDetail, IncidentKey, IncidentListQuery,
-    IncidentProductsCursor, IncidentProductsQuery, IncidentSummary, PaginatedResponse,
-    PostgresConfig, PostgresMetadataSink, ProductCursor, ProductListQuery,
-    TimeseriesAggregateBucket, TimeseriesAggregateQuery, TimeseriesAggregateResult,
-    TimeseriesBucket, TimeseriesMeasure,
-};
+pub use postgres::{PostgresConfig, PostgresMetadataSink};
 pub use runtime::{
     EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest, PersistedRequest,
     PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,

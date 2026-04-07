@@ -27,6 +27,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
+use emwin_service::{ArchiveQueryService, ServiceError};
 use futures::Stream;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -150,7 +151,7 @@ pub(super) async fn products_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(ProductsResponse {
-        page: emwin_db::PaginatedResponse {
+        page: emwin_service::PaginatedResponse {
             items: page
                 .items
                 .into_iter()
@@ -188,7 +189,7 @@ pub(super) async fn features_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(FeaturesResponse {
-        page: emwin_db::PaginatedResponse {
+        page: emwin_service::PaginatedResponse {
             items: page
                 .items
                 .into_iter()
@@ -358,7 +359,7 @@ pub(super) async fn incidents_handler(
 ) -> Result<Json<IncidentsResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
     let page = archive
-        .list_incidents(emwin_db::IncidentListQuery {
+        .list_incidents(emwin_service::IncidentListQuery {
             office: query.office,
             phenomena: query.phenomena,
             significance: query.significance,
@@ -374,7 +375,7 @@ pub(super) async fn incidents_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(IncidentsResponse {
-        page: emwin_db::PaginatedResponse {
+        page: emwin_service::PaginatedResponse {
             items: page
                 .items
                 .into_iter()
@@ -448,7 +449,7 @@ pub(super) async fn incident_products_handler(
     let page = archive
         .list_incident_products(
             &key,
-            emwin_db::IncidentProductsQuery {
+            emwin_service::IncidentProductsQuery {
                 limit: query.limit.unwrap_or(100),
                 cursor: query.cursor,
             },
@@ -457,7 +458,7 @@ pub(super) async fn incident_products_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(IncidentProductsResponse {
-        page: emwin_db::PaginatedResponse {
+        page: emwin_service::PaginatedResponse {
             items: page
                 .items
                 .into_iter()
@@ -518,7 +519,7 @@ pub(super) async fn archive_issues_handler(
 ) -> Result<Json<ArchiveIssuesResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
     let page = archive
-        .list_archived_issues(emwin_db::ArchivedIssueListQuery {
+        .list_archived_issues(emwin_service::ArchivedIssueListQuery {
             product_id: query.product_id,
             kind: query.kind,
             code: query.code,
@@ -529,7 +530,7 @@ pub(super) async fn archive_issues_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(ArchiveIssuesResponse {
-        page: emwin_db::PaginatedResponse {
+        page: emwin_service::PaginatedResponse {
             items: page
                 .items
                 .into_iter()
@@ -729,7 +730,12 @@ pub(super) async fn incident_events_handler(
     headers: HeaderMap,
     Query(query): Query<IncidentEventsQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
-    let _ = archive_service(&state)?;
+    if state.live.subscribe_incident_changes().is_none() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "archive database is not configured".to_string(),
+        ));
+    }
     let guard = acquire_client_guard(&state, peer)?;
 
     let rx = state.incident_event_tx.subscribe();
@@ -954,11 +960,8 @@ fn acquire_client_guard(
 
 fn archive_service(
     state: &Arc<AppState>,
-) -> Result<emwin_db::PostgresMetadataSink, (StatusCode, String)> {
-    state.live.archive_sink().ok_or((
-        StatusCode::SERVICE_UNAVAILABLE,
-        "archive database is not configured".to_string(),
-    ))
+) -> Result<&emwin_live::LiveRuntime, (StatusCode, String)> {
+    Ok(&state.live)
 }
 
 fn normalize_incident_key(
@@ -966,8 +969,8 @@ fn normalize_incident_key(
     phenomena: String,
     significance: String,
     etn: i64,
-) -> emwin_db::IncidentKey {
-    emwin_db::IncidentKey {
+) -> emwin_service::IncidentKey {
+    emwin_service::IncidentKey {
         office: office.trim().to_ascii_uppercase(),
         phenomena: phenomena.trim().to_ascii_uppercase(),
         significance: significance.trim().to_ascii_uppercase(),
@@ -975,11 +978,13 @@ fn normalize_incident_key(
     }
 }
 
-fn map_archive_error(err: emwin_db::PersistError) -> (StatusCode, String) {
+fn map_archive_error(err: ServiceError) -> (StatusCode, String) {
     match err {
-        emwin_db::PersistError::InvalidRequest(message)
-        | emwin_db::PersistError::InvalidConfig(message) => (StatusCode::BAD_REQUEST, message),
-        emwin_db::PersistError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+        ServiceError::InvalidRequest(message) | ServiceError::InvalidConfig(message) => {
+            (StatusCode::BAD_REQUEST, message)
+        }
+        ServiceError::NotConfigured(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
+        ServiceError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
             (StatusCode::NOT_FOUND, io.to_string())
         }
         other => (StatusCode::BAD_GATEWAY, other.to_string()),
