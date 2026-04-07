@@ -7,8 +7,6 @@ x-emwin-service: &emwin-service
   depends_on:
     postgres:
       condition: service_healthy
-    minio-create-bucket:
-      condition: service_completed_successfully
   init: true
   env_file:
     - .env.compose
@@ -60,29 +58,8 @@ services:
     tmpfs:
       - /data:rw,size=512m
 
-  minio-create-bucket:
-    image: minio/mc
-    depends_on:
-      minio:
-        condition: service_started
-    restart: "no"
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - >-
-        until mc alias set local http://minio:9000
-        "${MINIO_ROOT_USER:-emwinminio}"
-        "${MINIO_ROOT_PASSWORD:-emwinminiosecret}"; do sleep 1; done
-        && mc mb --ignore-existing local/${MINIO_BUCKET:-emwin}
-
   emwin-server:
     <<: *emwin-service
     command: ["server"]
     ports:
       - "${EMWIN_HTTP_PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 20s
