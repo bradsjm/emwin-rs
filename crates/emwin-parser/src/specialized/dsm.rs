@@ -1,9 +1,9 @@
 //! Parsing for Daily Summary Message collectives.
 
 use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, Utc};
-use regex::Regex;
 use serde::Serialize;
-use std::sync::OnceLock;
+
+use crate::ProductParseIssue;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DsmBulletin {
@@ -33,63 +33,146 @@ pub struct DsmSummary {
     pub max_gust_dir_degrees: Option<u16>,
 }
 
-pub(crate) fn parse_dsm_bulletin(text: &str, reference_time: DateTime<Utc>) -> Option<DsmBulletin> {
+pub(crate) fn parse_dsm_bulletin(
+    text: &str,
+    reference_time: DateTime<Utc>,
+) -> Option<(DsmBulletin, Vec<ProductParseIssue>)> {
     let normalized = text
         .chars()
         .filter(|ch| !ch.is_ascii_control() || matches!(ch, '\n' | '\r'))
         .collect::<String>()
-        .replace(['\r', '\n'], "");
+        .replace('\r', "");
     let mut summaries = Vec::new();
+    let mut issues = Vec::new();
+
     for token in normalized
         .split('=')
         .map(str::trim)
-        .filter(|t| !t.is_empty())
+        .filter(|token| !token.is_empty())
     {
-        if let Some(summary) = parse_summary(token, reference_time) {
-            summaries.push(summary);
+        match parse_summary(token, reference_time) {
+            Some(summary) => summaries.push(summary),
+            None if token
+                .chars()
+                .any(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit()) =>
+            {
+                issues.push(ProductParseIssue::new(
+                    "dsm_parse",
+                    "invalid_dsm_summary",
+                    "could not parse DSM summary token",
+                    Some(compact_ascii_whitespace(token)),
+                ))
+            }
+            None => {}
         }
     }
-    (!summaries.is_empty()).then_some(DsmBulletin { summaries })
+
+    (!summaries.is_empty()).then_some((DsmBulletin { summaries }, issues))
 }
 
 fn parse_summary(token: &str, reference_time: DateTime<Utc>) -> Option<DsmSummary> {
-    let caps = dsm_re().captures(token)?;
-    let station = caps.name("station")?.as_str().to_string();
-    let month = caps.name("month")?.as_str().parse::<u32>().ok()?;
-    let day = caps.name("day")?.as_str().parse::<u32>().ok()?;
+    let compact = compact_ascii_whitespace(token);
+    let mut parts = compact.split_whitespace();
+    let station = parts.next()?;
+    if !is_station(station) || parts.next()? != "DS" {
+        return None;
+    }
+    let next = parts.next()?;
+    let (month_day, remainder_tokens) = if is_collection_time(next) {
+        (parts.next()?, parts.collect::<Vec<_>>())
+    } else {
+        (next, parts.collect::<Vec<_>>())
+    };
+    let (day, month) = parse_day_month(month_day)?;
     let year = infer_year(reference_time, month);
     let date = NaiveDate::from_ymd_opt(year, month, day)?;
-    let timestring = |name: &str| -> Option<String> {
-        let token = caps.name(name)?.as_str();
-        let time = NaiveTime::parse_from_str(token, "%H%M").ok()?;
-        Some(date.and_time(time).and_utc().to_rfc3339())
-    };
-    let hourly = (1..=24)
-        .map(|idx| precip_hundredths(caps.name(&format!("p{idx:02}"))?.as_str()))
+    let payload = remainder_tokens.join("");
+    let fields = payload.split('/').map(str::trim).collect::<Vec<_>>();
+    if fields.len() < 32 {
+        return None;
+    }
+
+    let (max_temp_f, max_temp_time) = parse_temp_and_time(fields[0], date)?;
+    let (min_temp_f, min_temp_time) = parse_temp_and_time(fields[1], date)?;
+    let coop_max_temp_f = number_i16(required_field(&fields, 3)?)?;
+    let coop_min_temp_f = number_i16(required_field(&fields, 4)?)?;
+    let (min_sea_level_pressure_mb_tenths, min_slp_time) =
+        parse_slp_and_time(required_field(&fields, 6)?, date)?;
+    let precip_day_inches = precip_hundredths(required_field(&fields, 7)?)?;
+    let hourly_precip_inches = (8..32)
+        .map(|idx| precip_hundredths(required_field(&fields, idx)?))
         .collect::<Option<Vec<_>>>()?;
+
+    let avg_wind_mph = fields.get(32).and_then(|value| number_f32(value));
+    let (max_wind_dir_degrees, max_wind_mph, max_wind_time) = fields
+        .get(33)
+        .and_then(|value| parse_wind_triplet(value, date))
+        .unwrap_or((None, None, None));
+    let (max_gust_dir_degrees, max_gust_mph, max_gust_time) = fields
+        .get(34)
+        .and_then(|value| parse_wind_triplet(value, date))
+        .unwrap_or((None, None, None));
+
     Some(DsmSummary {
-        station,
+        station: station.to_string(),
         date: date.to_string(),
-        max_temp_f: number_i16(caps.name("high")?.as_str()),
-        max_temp_time: time_or_missing(caps.name("hightime").map(|m| m.as_str()), date),
-        min_temp_f: number_i16(caps.name("low")?.as_str()),
-        min_temp_time: time_or_missing(caps.name("lowtime").map(|m| m.as_str()), date),
-        coop_max_temp_f: number_i16(caps.name("coophigh")?.as_str()),
-        coop_min_temp_f: number_i16(caps.name("cooplow")?.as_str()),
-        min_sea_level_pressure_mb_tenths: number_i32(caps.name("minslp")?.as_str()),
-        min_slp_time: time_or_missing(caps.name("slptime").map(|m| m.as_str()), date),
-        precip_day_inches: precip_hundredths(caps.name("pday")?.as_str())?,
-        hourly_precip_inches: hourly,
-        avg_wind_mph: caps
-            .name("avg_sped")
-            .and_then(|value| number_f32(value.as_str())),
-        max_wind_mph: number_f32_opt(caps.name("sped_max").map(|m| m.as_str())),
-        max_wind_time: timestring("time_sped_max"),
-        max_wind_dir_degrees: wind_dir(caps.name("drct_sped_max").map(|m| m.as_str())),
-        max_gust_mph: number_f32_opt(caps.name("sped_gust_max").map(|m| m.as_str())),
-        max_gust_time: timestring("time_sped_gust_max"),
-        max_gust_dir_degrees: wind_dir(caps.name("drct_gust_max").map(|m| m.as_str())),
+        max_temp_f,
+        max_temp_time,
+        min_temp_f,
+        min_temp_time,
+        coop_max_temp_f,
+        coop_min_temp_f,
+        min_sea_level_pressure_mb_tenths,
+        min_slp_time,
+        precip_day_inches,
+        hourly_precip_inches,
+        avg_wind_mph,
+        max_wind_mph,
+        max_wind_time,
+        max_wind_dir_degrees,
+        max_gust_mph,
+        max_gust_time,
+        max_gust_dir_degrees,
     })
+}
+
+fn compact_ascii_whitespace(text: &str) -> String {
+    let mut compacted = String::with_capacity(text.len());
+    let mut pending_space = false;
+
+    for ch in text.chars() {
+        if ch.is_ascii_whitespace() {
+            pending_space = true;
+            continue;
+        }
+        if pending_space && !compacted.is_empty() {
+            compacted.push(' ');
+        }
+        pending_space = false;
+        compacted.push(ch);
+    }
+
+    compacted
+}
+
+fn required_field<'a>(fields: &'a [&'a str], index: usize) -> Option<&'a str> {
+    fields.get(index).copied()
+}
+
+fn is_station(token: &str) -> bool {
+    token.len() == 4
+        && token
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
+}
+
+fn is_collection_time(token: &str) -> bool {
+    token.len() == 4 && token.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn parse_day_month(token: &str) -> Option<(u32, u32)> {
+    let (day, month) = token.split_once('/')?;
+    Some((day.parse().ok()?, month.parse().ok()?))
 }
 
 fn infer_year(reference_time: DateTime<Utc>, month: u32) -> i32 {
@@ -100,39 +183,75 @@ fn infer_year(reference_time: DateTime<Utc>, month: u32) -> i32 {
     }
 }
 
-fn dsm_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(
-        r"^(?P<station>[A-Z][A-Z0-9]{3})\s+DS\s+(?:COR\s+)?(?:\d{4}\s+)?(?P<day>\d\d)/(?P<month>\d\d)\s+(?:(?P<highmiss>M)|(?P<high>-?\d+)(?P<hightime>\d{4}))/\s*(?:(?P<lowmiss>M)|(?P<low>-?\d+)(?P<lowtime>\d{4}))//\s*(?P<coophigh>-?\d+|M)/\s*(?P<cooplow>-?\d+|M)//(?P<minslp>M|[-0-9]{3,4})(?P<slptime>\d{3,4})?/(?P<pday>T|M|[0-9]{1,4})/(?P<p01>T|M|-|[0-9]{1,4})/(?P<p02>T|M|-|[0-9]{1,4})/(?P<p03>T|M|-|[0-9]{1,4})/(?P<p04>T|M|-|[0-9]{1,4})/(?P<p05>T|M|-|[0-9]{1,4})/(?P<p06>T|M|-|[0-9]{1,4})/(?P<p07>T|M|-|[0-9]{1,4})/(?P<p08>T|M|-|[0-9]{1,4})/(?P<p09>T|M|-|[0-9]{1,4})/(?P<p10>T|M|-|[0-9]{1,4})/(?P<p11>T|M|-|[0-9]{1,4})/(?P<p12>T|M|-|[0-9]{1,4})/(?P<p13>T|M|-|[0-9]{1,4})/(?P<p14>T|M|-|[0-9]{1,4})/(?P<p15>T|M|-|[0-9]{1,4})/(?P<p16>T|M|-|[0-9]{1,4})/(?P<p17>T|M|-|[0-9]{1,4})/(?P<p18>T|M|-|[0-9]{1,4})/(?P<p19>T|M|-|[0-9]{1,4})/(?P<p20>T|M|-|[0-9]{1,4})/(?P<p21>T|M|-|[0-9]{1,4})/(?P<p22>T|M|-|[0-9]{1,4})/(?P<p23>T|M|-|[0-9]{1,4})/(?P<p24>T|M|-|[0-9]{1,4})(?:/(?P<avg_sped>M|-|\d{2,3})?)?/(?:(?P<drct_sped_max>\d{2})(?P<sped_max>\d{2,3})(?P<time_sped_max>\d{4})/(?P<drct_gust_max>\d{2})(?P<sped_gust_max>\d{2,3})(?P<time_sped_gust_max>\d{4}))?(?:/(?:[A-Z0-9-]{1,4}|M|T))*/*$",
-    ).expect("valid DSM regex"))
+fn parse_temp_and_time(token: &str, date: NaiveDate) -> Option<(Option<i16>, Option<String>)> {
+    if token == "M" {
+        return Some((None, None));
+    }
+    if token.len() < 5 {
+        return None;
+    }
+    let split_at = token.len().checked_sub(4)?;
+    let value = token.get(..split_at)?;
+    let time = token.get(split_at..)?;
+    Some((number_i16(value)?, time_or_missing(Some(time), date)))
 }
 
-fn number_i16(value: &str) -> Option<i16> {
+fn parse_slp_and_time(token: &str, date: NaiveDate) -> Option<(Option<i32>, Option<String>)> {
+    if token == "M" {
+        return Some((None, None));
+    }
+    if token.len() <= 4 {
+        return Some((number_i32(token)?, None));
+    }
+    let split_at = token.len().checked_sub(4)?;
+    let value = token.get(..split_at)?;
+    let time = token.get(split_at..)?;
+    Some((number_i32(value)?, time_or_missing(Some(time), date)))
+}
+
+fn parse_wind_triplet(
+    token: &str,
+    date: NaiveDate,
+) -> Option<(Option<u16>, Option<f32>, Option<String>)> {
+    let token = token.trim();
+    if matches!(token, "" | "M" | "-" | "N" | "NN") {
+        return Some((None, None, None));
+    }
+    if token.len() < 8 {
+        return None;
+    }
+    let dir = token.get(..2)?;
+    let time = token.get(token.len() - 4..)?;
+    let speed = token.get(2..token.len() - 4)?;
+    Some((
+        wind_dir(Some(dir)),
+        number_f32(speed),
+        time_or_missing(Some(time), date),
+    ))
+}
+
+fn number_i16(value: &str) -> Option<Option<i16>> {
     if value == "M" {
-        None
+        Some(None)
     } else {
-        value.parse().ok()
+        value.parse().ok().map(Some)
     }
 }
 
-fn number_i32(value: &str) -> Option<i32> {
+fn number_i32(value: &str) -> Option<Option<i32>> {
     if value == "M" {
-        None
+        Some(None)
     } else {
-        value.parse().ok()
+        value.parse().ok().map(Some)
     }
 }
 
 fn number_f32(value: &str) -> Option<f32> {
-    if matches!(value, "M" | "-") {
+    if matches!(value, "" | "M" | "-" | "N" | "NN") {
         None
     } else {
         value.parse().ok()
     }
-}
-
-fn number_f32_opt(value: Option<&str>) -> Option<f32> {
-    value.and_then(number_f32)
 }
 
 fn precip_hundredths(value: &str) -> Option<Option<f32>> {
@@ -152,6 +271,9 @@ fn wind_dir(value: Option<&str>) -> Option<u16> {
 
 fn time_or_missing(value: Option<&str>, date: NaiveDate) -> Option<String> {
     let token = value?;
+    if token == "M" {
+        return None;
+    }
     let token = if token.len() == 3 {
         format!("0{token}")
     } else {
@@ -169,9 +291,32 @@ mod tests {
     #[test]
     fn parses_dsm_fixture() {
         let text = "KGUP DS 1700 09/03 671441/ 160639// 67/ 16//9861654/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/-/-/-/-/-/-/-/-/23211342/23291333=";
-        let bulletin = parse_dsm_bulletin(text, Utc::now()).expect("dsm bulletin");
+        let (bulletin, issues) = parse_dsm_bulletin(text, Utc::now()).expect("dsm bulletin");
+        assert!(issues.is_empty());
         assert_eq!(bulletin.summaries.len(), 1);
         assert_eq!(bulletin.summaries[0].station, "KGUP");
         assert_eq!(bulletin.summaries[0].hourly_precip_inches.len(), 24);
+    }
+
+    #[test]
+    fn parses_all_missing_dsm_summary() {
+        let text = "KHKS DS 26/11 M/M//M/M//M/M/00/00/00/00/00/05/02/06/T/T/12/00/03/17/T/T/T/00/00/00/00/T/00/00/M/M/M/13/NN/N/N/NN/ET EP EW=";
+        let (bulletin, issues) = parse_dsm_bulletin(text, Utc::now()).expect("dsm bulletin");
+        assert!(issues.is_empty());
+        assert_eq!(bulletin.summaries.len(), 1);
+        assert_eq!(bulletin.summaries[0].station, "KHKS");
+        assert_eq!(bulletin.summaries[0].hourly_precip_inches.len(), 24);
+    }
+
+    #[test]
+    fn preserves_partial_success_with_invalid_summary_issue() {
+        let text = "KXXX DS 26/11 M/M//M/M//M/M/00/00/00=BAD TOKEN=KGUP DS 1700 09/03 671441/160639//67/16//9861654/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/00/-/-/-/-/-/-/-/-/23211342/23291333=";
+        let (bulletin, issues) = parse_dsm_bulletin(text, Utc::now()).expect("dsm bulletin");
+        assert_eq!(bulletin.summaries.len(), 1);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "invalid_dsm_summary")
+        );
     }
 }

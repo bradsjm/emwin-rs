@@ -17,8 +17,9 @@ use crate::specialized::sigmet::parse_sigmet_bulletin;
 use crate::specialized::taf::parse_taf_bulletin;
 
 use super::common::{
-    filename_stem, first_nonempty_line, malformed_supported_family, starts_with_icao_sigmet_line,
-    unsupported_wmo_candidate, unsupported_wmo_family_candidate,
+    filename_stem, first_nonempty_line, looks_like_multipart_taf_bulletin,
+    malformed_supported_family, starts_with_icao_sigmet_line, unsupported_wmo_candidate,
+    unsupported_wmo_family_candidate,
 };
 use super::context::WmoClassificationContext;
 use super::text::{
@@ -126,6 +127,16 @@ pub(super) fn classify_wmo_metar(
 pub(super) fn classify_wmo_taf(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
+    if looks_like_multipart_taf_bulletin(context.body_text) {
+        return Some(unsupported_wmo_family_candidate(
+            context.header,
+            "multipart_taf_bulletin",
+            Some("Multipart terminal aerodrome forecast"),
+            "unsupported_multipart_taf_bulletin",
+            "recognized multipart TAF bulletin, but multipart TAF assembly is not implemented",
+            context.body_text,
+        ));
+    }
     let Some(bulletin) = parse_taf_bulletin(context.body_text) else {
         return looks_like_taf_wmo_bulletin(context.body_text).then(|| {
             malformed_supported_family(
@@ -166,7 +177,7 @@ pub(super) fn classify_wmo_dsm(
         .header
         .timestamp(Utc::now())
         .unwrap_or_else(Utc::now);
-    let Some(bulletin) = parse_dsm_bulletin(context.body_text, reference_time) else {
+    let Some((bulletin, issues)) = parse_dsm_bulletin(context.body_text, reference_time) else {
         return Some(malformed_supported_family(
             ProductEnrichmentSource::WmoBulletin,
             "dsm_bulletin",
@@ -191,7 +202,7 @@ pub(super) fn classify_wmo_dsm(
         bbb_kind: None,
         body_request: None,
         bulletin,
-        issues: Vec::new(),
+        issues,
     }))
 }
 
@@ -199,8 +210,10 @@ pub(super) fn classify_wmo_pirep(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
     if looks_like_international_pirep_bulletin(context.body_text) {
-        return Some(unsupported_wmo_candidate(
+        return Some(unsupported_wmo_family_candidate(
             context.header,
+            "international_pirep_bulletin",
+            Some("International pilot report bulletin"),
             "unsupported_international_pirep_bulletin",
             "recognized international PIREP bulletin, but this parser only supports domestic slash-tag PIREP structure",
             context.body_text,
@@ -257,8 +270,10 @@ pub(super) fn classify_wmo_sigmet(
     if first_nonempty_line(context.body_text)
         .is_some_and(|line| starts_with_icao_sigmet_line(line) && !line.starts_with("KZAK SIGMET "))
     {
-        return Some(unsupported_wmo_candidate(
+        return Some(unsupported_wmo_family_candidate(
             context.header,
+            "international_sigmet_bulletin",
+            Some("International SIGMET bulletin"),
             "unsupported_international_sigmet_bulletin",
             "recognized international SIGMET bulletin, but this parser only supports domestic SIGMET structure",
             context.body_text,
@@ -354,8 +369,10 @@ pub(super) fn classify_wmo_airmet_unsupported(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
     looks_like_airmet_wmo_bulletin(context.body_text).then(|| {
-        unsupported_wmo_candidate(
+        unsupported_wmo_family_candidate(
             context.header,
+            "airmet_bulletin",
+            Some("AIRMET bulletin"),
             "unsupported_airmet_bulletin",
             "recognized valid WMO AIRMET bulletin, but textual AIRMET parsing is not implemented",
             context.body_text,
@@ -367,8 +384,10 @@ pub(super) fn classify_wmo_surface_observation_unsupported(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
     looks_like_surface_observation_bulletin(context.body_text).then(|| {
-        unsupported_wmo_candidate(
+        unsupported_wmo_family_candidate(
             context.header,
+            "surface_observation_bulletin",
+            Some("Surface observation bulletin"),
             "unsupported_surface_observation_bulletin",
             "recognized valid WMO surface observation bulletin, but parsing is not implemented",
             context.body_text,
@@ -443,11 +462,12 @@ pub(super) fn classify_wmo_canadian(
             "unsupported_canadian_volcanic_ash_bulletin",
             "recognized valid WMO Canadian volcanic ash bulletin, but parsing is not implemented",
         )),
-        CanadianWmoFamily::Residual => Some(unsupported_wmo_candidate(
-            context.header,
+        CanadianWmoFamily::Residual => Some(canadian_unsupported_candidate(
+            context,
+            "canadian_text_bulletin",
+            Some("Canadian text bulletin"),
             "unsupported_canadian_text_bulletin",
             "recognized valid WMO Canadian text bulletin, but parsing is not implemented",
-            context.body_text,
         )),
     }
 }

@@ -30,7 +30,8 @@ use crate::specialized::taf::parse_taf_bulletin;
 use crate::specialized::wwp::parse_wwp_bulletin;
 
 use super::common::{
-    filename_stem, first_nonempty_line, malformed_supported_family, starts_with_icao_sigmet_line,
+    filename_stem, first_nonempty_line, looks_like_multipart_taf_bulletin,
+    malformed_supported_family, starts_with_icao_sigmet_line,
 };
 use super::context::TextClassificationContext;
 
@@ -135,6 +136,24 @@ pub(super) fn classify_text_metar(
 pub(super) fn classify_text_taf(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
+    if context.header.afos.starts_with("TAF")
+        && looks_like_multipart_taf_bulletin(context.body_text)
+    {
+        return Some(malformed_supported_family(
+            ProductEnrichmentSource::TextHeader,
+            "multipart_taf_bulletin",
+            "Multipart terminal aerodrome forecast",
+            Some(context.header.clone()),
+            None,
+            context.pil.clone(),
+            context.bbb_kind,
+            None,
+            "taf_parse",
+            "unsupported_multipart_taf_bulletin",
+            "recognized multipart TAF bulletin, but multipart TAF assembly is not implemented",
+            first_nonempty_line(context.body_text),
+        ));
+    }
     if !looks_like_taf_text_product(&context.header.afos, context.body_text) {
         return None;
     }
@@ -169,6 +188,24 @@ pub(super) fn classify_text_taf(
 pub(super) fn classify_text_pirep(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
+    if context.header.afos.starts_with("PIR")
+        && looks_like_international_pirep_text_product(&context.header.afos, context.body_text)
+    {
+        return Some(malformed_supported_family(
+            ProductEnrichmentSource::TextHeader,
+            "international_pirep_bulletin",
+            "International pilot report bulletin",
+            Some(context.header.clone()),
+            None,
+            context.pil.clone(),
+            context.bbb_kind,
+            context.body_request(),
+            "pirep_parse",
+            "unsupported_international_pirep_bulletin",
+            "recognized international PIREP bulletin, but this parser only supports domestic slash-tag PIREP structure",
+            first_nonempty_line(context.body_text),
+        ));
+    }
     if !matches_routed_text_family(
         context,
         TextProductRouting::Pirep,
@@ -415,7 +452,7 @@ pub(super) fn classify_text_cf6(
     ) {
         return None;
     }
-    let Some((bulletin, issues)) = parse_cf6_bulletin(context.body_text) else {
+    let Some(bulletin) = parse_cf6_bulletin(context.body_text) else {
         return Some(malformed_supported_family(
             ProductEnrichmentSource::TextHeader,
             "cf6_bulletin",
@@ -437,7 +474,7 @@ pub(super) fn classify_text_cf6(
         bbb_kind: context.bbb_kind,
         body_request: context.body_request(),
         bulletin,
-        issues,
+        issues: Vec::new(),
     }))
 }
 
@@ -497,7 +534,7 @@ pub(super) fn classify_text_dsm(
     ) {
         return None;
     }
-    let Some(bulletin) = parse_dsm_bulletin(
+    let Some((bulletin, issues)) = parse_dsm_bulletin(
         context.body_text,
         context.reference_time.unwrap_or_else(Utc::now),
     ) else {
@@ -524,7 +561,7 @@ pub(super) fn classify_text_dsm(
         bbb_kind: context.bbb_kind,
         body_request: context.body_request(),
         bulletin,
-        issues: Vec::new(),
+        issues,
     }))
 }
 
@@ -899,6 +936,12 @@ pub(super) fn looks_like_metar_text_product(afos: &str, body_text: &str) -> bool
     matches!(afos, "METAR" | "SPECI") || looks_like_metar_wmo_bulletin(body_text)
 }
 
+fn looks_like_international_pirep_text_product(afos: &str, body_text: &str) -> bool {
+    afos == "PIREP"
+        && body_text.to_ascii_uppercase().contains(" OBSD AT ")
+        && !body_text.contains('/')
+}
+
 pub(super) fn looks_like_taf_wmo_bulletin(body_text: &str) -> bool {
     body_text.lines().map(str::trim).any(|line| {
         line == "TAF"
@@ -913,7 +956,9 @@ pub(super) fn looks_like_taf_wmo_bulletin(body_text: &str) -> bool {
 
 pub(super) fn looks_like_taf_text_product(afos: &str, body_text: &str) -> bool {
     afos.starts_with("TAF")
-        && (looks_like_taf_wmo_bulletin(body_text) || looks_like_station_led_taf_body(body_text))
+        && (looks_like_taf_wmo_bulletin(body_text)
+            || looks_like_station_led_taf_body(body_text)
+            || looks_like_multipart_taf_bulletin(body_text))
 }
 
 fn looks_like_station_led_taf_body(body_text: &str) -> bool {

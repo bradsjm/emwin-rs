@@ -360,7 +360,7 @@ mod tests {
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(enrichment.family, Some("international_sigmet_bulletin"));
         assert_eq!(
             enrichment.issues.first().map(|issue| issue.code),
             Some("unsupported_international_sigmet_bulletin")
@@ -377,13 +377,45 @@ mod tests {
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(enrichment.family, Some("international_pirep_bulletin"));
         assert_eq!(
             enrichment.issues.first().map(|issue| issue.code),
             Some("unsupported_international_pirep_bulletin")
         );
         assert!(enrichment.parsed.is_none());
         assert!(enrichment.wmo_header.is_some());
+    }
+
+    #[test]
+    fn afos_international_pirep_bulletins_use_explicit_family() {
+        let enrichment = enrich_product(
+            "PIREP.TXT",
+            b"UAJP71 RJFF 072253\nPIREP\nMOD TURB OBSD AT 2253 20NM N OF LESKA F300 REPORTED BY A320\n",
+        );
+
+        assert_eq!(enrichment.source, ProductEnrichmentSource::TextHeader);
+        assert_eq!(enrichment.family, Some("international_pirep_bulletin"));
+        assert_eq!(
+            enrichment.issues.first().map(|issue| issue.code),
+            Some("unsupported_international_pirep_bulletin")
+        );
+        assert!(enrichment.parsed.is_none());
+        assert!(enrichment.header.is_some());
+    }
+
+    #[test]
+    fn multipart_taf_bulletins_use_explicit_family() {
+        let enrichment = enrich_product(
+            "TAFMD1.TXT",
+            b"FTXX99 KWBC 072303 RRB\nTAF\nPART 1 OF 2 TAF SBBE 072110Z 0800/0824 05005KT 9999 FEW040\n",
+        );
+
+        assert_eq!(enrichment.family, Some("multipart_taf_bulletin"));
+        assert_eq!(
+            enrichment.issues.first().map(|issue| issue.code),
+            Some("unsupported_multipart_taf_bulletin")
+        );
+        assert!(enrichment.parsed.is_none());
     }
 
     #[test]
@@ -501,7 +533,7 @@ mod tests {
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(enrichment.family, Some("airmet_bulletin"));
         assert_eq!(enrichment.issues[0].code, "unsupported_airmet_bulletin");
         assert!(enrichment.wmo_header.is_some());
     }
@@ -514,7 +546,7 @@ mod tests {
         );
 
         assert_eq!(enrichment.source, ProductEnrichmentSource::WmoBulletin);
-        assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+        assert_eq!(enrichment.family, Some("canadian_text_bulletin"));
         assert_eq!(
             enrichment.issues[0].code,
             "unsupported_canadian_text_bulletin"

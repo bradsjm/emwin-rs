@@ -37,6 +37,17 @@ pub(super) fn starts_with_icao_sigmet_line(line: &str) -> bool {
     origin.len() == 4 && origin.chars().all(|ch| ch.is_ascii_uppercase()) && sigmet == "SIGMET"
 }
 
+pub(super) fn looks_like_multipart_taf_bulletin(body_text: &str) -> bool {
+    body_text.lines().map(str::trim).any(|line| {
+        let upper = line.to_ascii_uppercase();
+        upper.contains("PART ")
+            && upper.contains(" OF ")
+            && upper.contains(" TAF ")
+            && upper.split_whitespace().nth(1).is_some_and(is_ascii_digits)
+            && upper.split_whitespace().nth(3).is_some_and(is_ascii_digits)
+    })
+}
+
 /// Builds a generic-body contribution request from catalog policy and conditioned text.
 pub(super) fn build_body_request(
     body_plan: Option<BodyExtractionPlan>,
@@ -127,4 +138,8 @@ fn detect_body_input_format(body_text: &str) -> BodyInputFormat {
     } else {
         BodyInputFormat::PlainText
     }
+}
+
+fn is_ascii_digits(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
 }

@@ -64,3 +64,39 @@ fn afos_strategy_precedence_prefers_pirep_when_catalog_routing_matches() {
         ClassificationCandidate::Pirep(_)
     ));
 }
+
+#[test]
+fn afos_international_pirep_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "PIREP.TXT",
+        b"000 \nUAJP71 RJFF 072253\nPIREP\nMOD TURB OBSD AT 2253 20NM N OF LESKA F300 REPORTED BY A320\n",
+    ));
+
+    let ClassificationCandidate::MalformedFamily(candidate) = classify(&envelope) else {
+        panic!("expected malformed family candidate");
+    };
+
+    assert_eq!(candidate.family, "international_pirep_bulletin");
+    assert_eq!(
+        candidate.issues[0].code,
+        "unsupported_international_pirep_bulletin"
+    );
+}
+
+#[test]
+fn afos_multipart_taf_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "TAFMD1.TXT",
+        b"000 \nFTXX99 KWBC 072303 RRB\nTAFMD1\nPART 1 OF 2 TAF SBBE 072110Z 0800/0824 05005KT 9999 FEW040\n",
+    ));
+
+    let ClassificationCandidate::MalformedFamily(candidate) = classify(&envelope) else {
+        panic!("expected malformed family candidate");
+    };
+
+    assert_eq!(candidate.family, "multipart_taf_bulletin");
+    assert_eq!(
+        candidate.issues[0].code,
+        "unsupported_multipart_taf_bulletin"
+    );
+}

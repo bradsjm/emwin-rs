@@ -11,10 +11,10 @@ use crate::specialized::pirep::parse_pirep_bulletin;
 use crate::specialized::sigmet::parse_sigmet_bulletin;
 use crate::specialized::taf::parse_taf_bulletin;
 use crate::{
-    Cf6Bulletin, Cf6DayRow, CwaBulletin, CwaGeometry, CwaGeometryKind, DsmBulletin, DsmSummary,
-    GeoPoint, HmlBulletin, HmlDatum, HmlDocument, HmlSeries, LsrBulletin, LsrReport, MosBulletin,
-    MosForecastRow, MosSection, ProductArtifact, ProductEnrichmentSource, ProductParseIssue,
-    SawAction, SawBulletin, SelBulletin, SpcWatchType, WwpBulletin,
+    Cf6Amount, Cf6Bulletin, Cf6DayRow, CwaBulletin, CwaGeometry, CwaGeometryKind, DsmBulletin,
+    DsmSummary, GeoPoint, HmlBulletin, HmlDatum, HmlDocument, HmlSeries, LsrBulletin, LsrReport,
+    MosBulletin, MosForecastRow, MosSection, ProductArtifact, ProductEnrichmentSource,
+    ProductParseIssue, SawAction, SawBulletin, SelBulletin, SpcWatchType, WwpBulletin,
 };
 
 use super::assemble_product_enrichment;
@@ -419,12 +419,6 @@ fn assembles_sel_candidate_with_body_shape() {
 
 #[test]
 fn assembles_cf6_candidate_shape() {
-    let issues = vec![ProductParseIssue::new(
-        "cf6_parse",
-        "trace_value_flattened",
-        "trace precipitation or snow value flattened to 0.0",
-        Some("1 70 50 ...".to_string()),
-    )];
     let bulletin = Cf6Bulletin {
         station: "TEST STATION".to_string(),
         month: 3,
@@ -437,9 +431,9 @@ fn assembles_cf6_candidate_shape() {
             departure_f: Some(0),
             heating_degree_days: Some(5),
             cooling_degree_days: Some(0),
-            precip_inches: Some(0.0),
-            snow_inches: Some(0.0),
-            snow_depth_inches: Some(0.0),
+            precip_inches: Some(Cf6Amount::Trace),
+            snow_inches: Some(Cf6Amount::Measured { inches: 0.0 }),
+            snow_depth_inches: Some(Cf6Amount::Measured { inches: 0.0 }),
             avg_wind_mph: Some(8.5),
             max_wind_mph: Some(20),
             avg_wind_dir_degrees: Some(180),
@@ -457,7 +451,7 @@ fn assembles_cf6_candidate_shape() {
         bbb_kind: None,
         body_request: None,
         bulletin,
-        issues,
+        issues: Vec::new(),
     });
 
     let enrichment = assemble_product_enrichment(candidate, "CF6GSN.TXT", b"ignored");
@@ -482,7 +476,7 @@ fn assembles_cf6_candidate_shape() {
             .is_none()
     );
     assert!(enrichment.body.is_none());
-    assert_eq!(enrichment.issues.len(), 1);
+    assert!(enrichment.issues.is_empty());
 }
 
 #[test]
@@ -730,8 +724,8 @@ fn assembles_dcp_candidate_shape() {
 #[test]
 fn assembles_unsupported_wmo_candidate_shape() {
     let candidate = ClassificationCandidate::UnsupportedWmo(UnsupportedWmoCandidate {
-        family: "unsupported_wmo_bulletin",
-        title: None,
+        family: "airmet_bulletin",
+        title: Some("AIRMET bulletin"),
         header: wmo_header("WAAB31", "LATI"),
         code: "unsupported_airmet_bulletin",
         message: "recognized valid WMO AIRMET bulletin, but textual AIRMET parsing is not implemented",
@@ -744,7 +738,8 @@ fn assembles_unsupported_wmo_candidate_shape() {
         enrichment.source,
         crate::ProductEnrichmentSource::WmoBulletin
     );
-    assert_eq!(enrichment.family, Some("unsupported_wmo_bulletin"));
+    assert_eq!(enrichment.family, Some("airmet_bulletin"));
+    assert_eq!(enrichment.title, Some("AIRMET bulletin"));
     assert_eq!(enrichment.issues[0].code, "unsupported_airmet_bulletin");
 }
 

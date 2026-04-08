@@ -27,6 +27,21 @@ fn wmo_taf_strategy_returns_taf_candidate() {
 }
 
 #[test]
+fn wmo_multipart_taf_routes_to_explicit_unsupported_family() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "TAFMD1.TXT",
+        b"FTXX99 KWBC 072303 RRB\nTAF\nPART 1 OF 2 TAF SBBE 072110Z 0800/0824 05005KT 9999 FEW040\n",
+    ));
+
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "multipart_taf_bulletin");
+    assert_eq!(candidate.code, "unsupported_multipart_taf_bulletin");
+}
+
+#[test]
 fn wmo_dcp_strategy_returns_dcp_candidate() {
     let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
         "MISDCPSV.TXT",
@@ -50,6 +65,7 @@ fn wmo_sigmet_strategy_returns_sigmet_candidate() {
         panic!("expected unsupported WMO candidate");
     };
 
+    assert_eq!(candidate.family, "international_sigmet_bulletin");
     assert_eq!(candidate.code, "unsupported_international_sigmet_bulletin");
 }
 
@@ -60,10 +76,12 @@ fn wmo_airmet_returns_unsupported_candidate() {
         b"WAAB31 LATI 090038\nLAAA AIRMET 1 VALID 090100/090500 LATI-\nLAAA TIRANA FIR MOD ICE=\n",
     ));
 
-    assert!(matches!(
-        classify(&envelope),
-        ClassificationCandidate::UnsupportedWmo(_)
-    ));
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "airmet_bulletin");
+    assert_eq!(candidate.code, "unsupported_airmet_bulletin");
 }
 
 #[test]
@@ -73,10 +91,12 @@ fn wmo_canadian_text_returns_unsupported_candidate() {
         b"FPCN11 CWWG 090059 AAD\nUPDATED FORECASTS FOR SOUTHERN MANITOBA ISSUED BY ENVIRONMENT CANADA\n",
     ));
 
-    assert!(matches!(
-        classify(&envelope),
-        ClassificationCandidate::UnsupportedWmo(_)
-    ));
+    let ClassificationCandidate::UnsupportedWmo(candidate) = classify(&envelope) else {
+        panic!("expected unsupported WMO candidate");
+    };
+
+    assert_eq!(candidate.family, "canadian_text_bulletin");
+    assert_eq!(candidate.code, "unsupported_canadian_text_bulletin");
 }
 
 #[test]
@@ -253,6 +273,7 @@ fn wmo_international_pirep_returns_unsupported_candidate() {
         panic!("expected unsupported WMO candidate");
     };
 
+    assert_eq!(candidate.family, "international_pirep_bulletin");
     assert_eq!(candidate.code, "unsupported_international_pirep_bulletin");
 }
 

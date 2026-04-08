@@ -18,7 +18,7 @@ pub mod spc_outlook;
 pub mod taf;
 pub mod wwp;
 
-pub use cf6::{Cf6Bulletin, Cf6DayRow};
+pub use cf6::{Cf6Amount, Cf6Bulletin, Cf6DayRow};
 pub use cli::{CliBulletin, CliReport};
 pub use cwa::{CwaBulletin, CwaGeometry, CwaGeometryKind};
 pub use dcp::DcpBulletin;

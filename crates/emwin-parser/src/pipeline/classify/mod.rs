@@ -129,7 +129,7 @@ fn classify_unknown_text_envelope(envelope: &ParsedEnvelope) -> Option<Classific
         return None;
     }
     let reference_time = filename_reference_time(envelope.filename()).unwrap_or_else(Utc::now);
-    let Some(bulletin) = parse_dsm_bulletin(text, reference_time) else {
+    let Some((bulletin, issues)) = parse_dsm_bulletin(text, reference_time) else {
         return Some(malformed_supported_family(
             ProductEnrichmentSource::Unknown,
             "dsm_bulletin",
@@ -154,7 +154,7 @@ fn classify_unknown_text_envelope(envelope: &ParsedEnvelope) -> Option<Classific
         bbb_kind: None,
         body_request: None,
         bulletin,
-        issues: Vec::new(),
+        issues,
     }))
 }
 

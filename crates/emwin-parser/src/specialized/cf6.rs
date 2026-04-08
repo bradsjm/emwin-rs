@@ -2,8 +2,6 @@
 
 use serde::Serialize;
 
-use crate::ProductParseIssue;
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Cf6Bulletin {
     pub station: String,
@@ -21,9 +19,9 @@ pub struct Cf6DayRow {
     pub departure_f: Option<i16>,
     pub heating_degree_days: Option<i16>,
     pub cooling_degree_days: Option<i16>,
-    pub precip_inches: Option<f32>,
-    pub snow_inches: Option<f32>,
-    pub snow_depth_inches: Option<f32>,
+    pub precip_inches: Option<Cf6Amount>,
+    pub snow_inches: Option<Cf6Amount>,
+    pub snow_depth_inches: Option<Cf6Amount>,
     pub avg_wind_mph: Option<f32>,
     pub max_wind_mph: Option<i16>,
     pub avg_wind_dir_degrees: Option<u16>,
@@ -35,7 +33,14 @@ pub struct Cf6DayRow {
     pub gust_dir_degrees: Option<u16>,
 }
 
-pub(crate) fn parse_cf6_bulletin(text: &str) -> Option<(Cf6Bulletin, Vec<ProductParseIssue>)> {
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Cf6Amount {
+    Measured { inches: f32 },
+    Trace,
+}
+
+pub(crate) fn parse_cf6_bulletin(text: &str) -> Option<Cf6Bulletin> {
     let normalized = text.replace('\r', "");
     let station = normalized
         .lines()
@@ -61,7 +66,6 @@ pub(crate) fn parse_cf6_bulletin(text: &str) -> Option<(Cf6Bulletin, Vec<Product
         .parse::<i32>()
         .ok()?;
     let mut rows = Vec::new();
-    let mut issues = Vec::new();
     let mut in_table = false;
     for line in normalized.lines() {
         if line.trim_start().starts_with("DY MAX") {
@@ -93,15 +97,14 @@ pub(crate) fn parse_cf6_bulletin(text: &str) -> Option<(Cf6Bulletin, Vec<Product
         } else {
             (15, None, 16, 17)
         };
-        let mut trace_hit = false;
-        let mut inches = |value: &str| -> Option<f32> {
+        let inches = |value: &str| -> Option<Cf6Amount> {
             match value {
                 "M" => None,
-                "T" => {
-                    trace_hit = true;
-                    Some(0.0)
-                }
-                _ => value.parse::<f32>().ok(),
+                "T" => Some(Cf6Amount::Trace),
+                _ => value
+                    .parse::<f32>()
+                    .ok()
+                    .map(|inches| Cf6Amount::Measured { inches }),
             }
         };
         rows.push(Cf6DayRow {
@@ -125,24 +128,13 @@ pub(crate) fn parse_cf6_bulletin(text: &str) -> Option<(Cf6Bulletin, Vec<Product
             gust_mph: parse_i16(fields[gust_idx]),
             gust_dir_degrees: parse_u16(fields[gust_dir_idx]),
         });
-        if trace_hit {
-            issues.push(ProductParseIssue::new(
-                "cf6_parse",
-                "trace_value_flattened",
-                "trace precipitation or snow value flattened to 0.0",
-                Some(trimmed.to_string()),
-            ));
-        }
     }
-    (!rows.is_empty()).then_some((
-        Cf6Bulletin {
-            station,
-            month,
-            year,
-            rows,
-        },
-        issues,
-    ))
+    (!rows.is_empty()).then_some(Cf6Bulletin {
+        station,
+        month,
+        year,
+        rows,
+    })
 }
 
 fn parse_month(value: &str) -> Option<u8> {
@@ -185,7 +177,7 @@ fn string_or_none(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_cf6_bulletin;
+    use super::{Cf6Amount, parse_cf6_bulletin};
 
     #[test]
     fn parses_local_cf6_rows() {
@@ -196,9 +188,27 @@ MONTH: MARCH
 YEAR: 2026
 DY MAX MIN AVG DEP HDD CDD PCP SNW SND AWD MWD DIR MIN PSBL SKY WX GST GDR
  1 70 50 60 0 5 0 0.10 0.0 0 8.5 20 180 600 720 CLR RA 30 190";
-        let (bulletin, issues) = parse_cf6_bulletin(text).expect("cf6 bulletin");
+        let bulletin = parse_cf6_bulletin(text).expect("cf6 bulletin");
         assert_eq!(bulletin.station, "TEST STATION");
         assert_eq!(bulletin.rows.len(), 1);
-        assert!(issues.is_empty());
+        assert_eq!(
+            bulletin.rows[0].precip_inches,
+            Some(Cf6Amount::Measured { inches: 0.10 })
+        );
+    }
+
+    #[test]
+    fn preserves_trace_values_without_issue() {
+        let text = "\
+PRELIMINARY LOCAL CLIMATOLOGICAL DATA
+STATION: TEST STATION
+MONTH: MARCH
+YEAR: 2026
+DY MAX MIN AVG DEP HDD CDD PCP SNW SND AWD MWD DIR MIN PSBL SKY WX GST GDR
+ 1 70 50 60 0 5 0 T T T 8.5 20 180 600 720 CLR RA 30 190";
+        let bulletin = parse_cf6_bulletin(text).expect("cf6 bulletin");
+        assert_eq!(bulletin.rows[0].precip_inches, Some(Cf6Amount::Trace));
+        assert_eq!(bulletin.rows[0].snow_inches, Some(Cf6Amount::Trace));
+        assert_eq!(bulletin.rows[0].snow_depth_inches, Some(Cf6Amount::Trace));
     }
 }

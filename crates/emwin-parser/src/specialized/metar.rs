@@ -150,6 +150,18 @@ pub(crate) fn parse_metar_bulletin(text: &str) -> Option<(MetarBulletin, Vec<Pro
                 reports.push(parsed.into_owned(normalized.clone()));
             }
             None => {
+                if collective_kind.is_none() {
+                    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+                    collective_kind = find_metar_start(&tokens).map(|(kind, _, _)| kind);
+                }
+                if is_nil_only_station_segment(&normalized) {
+                    if normalized.starts_with("METAR ") {
+                        collective_kind = Some(MetarReportKind::Metar);
+                    } else if normalized.starts_with("SPECI ") {
+                        collective_kind = Some(MetarReportKind::Speci);
+                    }
+                    continue;
+                }
                 if let Some(parsed) = parse_surface_sa_report_ref(&normalized) {
                     collective_kind = Some(MetarReportKind::Metar);
                     reports.push(parsed.into_owned(normalized.clone()));
@@ -198,6 +210,14 @@ fn normalize_metar_segment(segment: &str) -> String {
     }
 
     normalized
+}
+
+fn is_nil_only_station_segment(segment: &str) -> bool {
+    let tokens = segment.split_whitespace().collect::<Vec<_>>();
+    matches!(
+        tokens.as_slice(),
+        [_, "NIL"] | ["METAR", _, "NIL"] | ["SPECI", _, "NIL"]
+    )
 }
 
 /// Parses a normalized METAR/SPECI segment into owned header fields.
@@ -652,6 +672,17 @@ mod tests {
 
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].code, "invalid_metar_report");
+    }
+
+    #[test]
+    fn skips_nil_only_station_tokens_inside_collective() {
+        let text = "METAR MBJT NIL=MBPV 080000Z 11002KT 9999 FEW012 25/22 Q1012=MBSC NIL=";
+        let (bulletin, issues) =
+            parse_metar_bulletin(text).expect("expected mixed collective bulletin");
+
+        assert!(issues.is_empty());
+        assert_eq!(bulletin.report_count(), 1);
+        assert_eq!(bulletin.reports[0].station, "MBPV");
     }
 
     #[test]

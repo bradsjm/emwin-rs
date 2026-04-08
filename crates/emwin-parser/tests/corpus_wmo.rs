@@ -130,7 +130,7 @@ fn taf_corpus_routes_to_wmo_bulletins() {
 fn sigmet_corpus_routes_to_wmo_bulletins() {
     for case in fixture_cases("wmo", "sigmet_bulletin") {
         let enrichment = enrich(&case);
-        if enrichment.family == Some("unsupported_wmo_bulletin") {
+        if enrichment.family == Some("international_sigmet_bulletin") {
             assert!(
                 issue_codes(&enrichment.issues)
                     .contains("unsupported_international_sigmet_bulletin"),

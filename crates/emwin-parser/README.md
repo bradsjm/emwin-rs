@@ -50,6 +50,9 @@ The crate currently supports:
   - GOES DCP telemetry bulletins
 - Filename-based classification for supported non-text products
 - WMO-only fallback handling for valid bulletins that do not carry AFOS lines, including explicit Canadian family routing for unsupported bulletin families
+- Explicit unsupported-family routing for recognized out-of-scope WMO bulletin types such as international SIGMET/PIREP, Canadian text products, multipart TAFs, AIRMETs, and surface observation bulletins
+
+CF6 trace precipitation and snow values are preserved semantically in the public artifact instead of being flattened to numeric zero.
 
 ## Architecture
 

@@ -73,13 +73,13 @@ pub use projection::{
     detail_product_v2, summarize_product_v2,
 };
 pub use specialized::{
-    Cf6Bulletin, Cf6DayRow, CliBulletin, CliReport, CwaBulletin, CwaGeometry, CwaGeometryKind,
-    DcpBulletin, DsmBulletin, DsmSummary, EroBulletin, EroOutlook, FdBulletin, FdForecast,
-    FdLevelForecast, HmlBulletin, HmlDatum, HmlDocument, HmlSeries, LsrBulletin, LsrReport,
-    McdBulletin, McdCenter, McdMostProbableTags, MetarBulletin, MetarReport, MetarReportKind,
-    MetarSkyCondition, MetarWind, MosBulletin, MosForecastRow, MosSection, PirepBulletin,
-    PirepKind, PirepReport, SawAction, SawBulletin, SelBulletin, SigmetBulletin, SigmetSection,
-    SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookFormat, SpcOutlookKind,
-    SpcWatchType, TafBulletin, TafConditions, TafForecastGroup, TafForecastGroupKind,
-    TafSkyCondition, TafWind, TafWindShear, WwpBulletin,
+    Cf6Amount, Cf6Bulletin, Cf6DayRow, CliBulletin, CliReport, CwaBulletin, CwaGeometry,
+    CwaGeometryKind, DcpBulletin, DsmBulletin, DsmSummary, EroBulletin, EroOutlook, FdBulletin,
+    FdForecast, FdLevelForecast, HmlBulletin, HmlDatum, HmlDocument, HmlSeries, LsrBulletin,
+    LsrReport, McdBulletin, McdCenter, McdMostProbableTags, MetarBulletin, MetarReport,
+    MetarReportKind, MetarSkyCondition, MetarWind, MosBulletin, MosForecastRow, MosSection,
+    PirepBulletin, PirepKind, PirepReport, SawAction, SawBulletin, SelBulletin, SigmetBulletin,
+    SigmetSection, SpcOutlookArea, SpcOutlookBulletin, SpcOutlookDay, SpcOutlookFormat,
+    SpcOutlookKind, SpcWatchType, TafBulletin, TafConditions, TafForecastGroup,
+    TafForecastGroupKind, TafSkyCondition, TafWind, TafWindShear, WwpBulletin,
 };

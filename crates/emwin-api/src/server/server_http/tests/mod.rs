@@ -1,6 +1,6 @@
 use crate::server::types::{
-    AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
-    ApiServices,
+    ApiServices, AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload,
+    IncidentSummaryPayload,
 };
 use emwin_service::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
 use std::sync::Arc;
