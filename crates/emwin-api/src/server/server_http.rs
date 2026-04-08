@@ -28,7 +28,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use emwin_service::{
-    ArchiveQueryService, ServiceError, build_cell_aggregate_query, build_facet_aggregate_query,
+    ServiceError, build_cell_aggregate_query, build_facet_aggregate_query,
     build_feature_list_query, build_timeseries_aggregate_query,
 };
 use futures::Stream;
@@ -145,14 +145,13 @@ fn parse_archive_filters(raw_query: Option<&str>) -> Result<ArchiveFilterParams,
 }
 
 fn archive_status(state: &Arc<AppState>) -> ArchiveStatus {
-    let configured = state.live.archive_configured();
-    let last_error = state.live.archive_last_error();
+    let snapshot = state.services.archive_status_snapshot();
     ArchiveStatus {
-        configured,
-        healthy: !configured || last_error.is_none(),
-        errors_total: state.live.archive_errors_total(),
-        pool_timeouts_total: state.live.archive_pool_timeouts_total(),
-        last_error,
+        configured: snapshot.configured,
+        healthy: snapshot.healthy,
+        errors_total: snapshot.errors_total,
+        pool_timeouts_total: snapshot.pool_timeouts_total,
+        last_error: snapshot.last_error,
     }
 }
 
@@ -812,7 +811,7 @@ pub(super) async fn incident_events_handler(
     headers: HeaderMap,
     Query(query): Query<IncidentEventsQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
-    if state.live.subscribe_incident_changes().is_none() {
+    if state.services.subscribe_incident_changes().is_none() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "archive database is not configured".to_string(),
@@ -901,7 +900,7 @@ pub(super) async fn incident_events_handler(
 )]
 pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<FilesResponse> {
     let files = state
-        .live
+        .services
         .list_retained_files()
         .into_iter()
         .map(super::types::CompletedFilePayload::from_metadata)
@@ -929,7 +928,7 @@ pub(super) async fn file_download_handler(
     let normalized = filename_request_or_400(&filename)?;
 
     let file = state
-        .live
+        .services
         .get_retained_file(&normalized)
         .ok_or(StatusCode::NOT_FOUND)?;
 
@@ -948,7 +947,7 @@ pub(super) async fn file_download_handler(
 )]
 pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let connected_clients = state.connected_clients.load(Ordering::Relaxed);
-    let snapshot = state.live.stats_snapshot();
+    let snapshot = state.services.stats_snapshot();
     let archive = archive_status(&state);
 
     Json(HealthResponse {
@@ -974,8 +973,8 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
 pub(super) async fn metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<super::types::MetricsPayload> {
-    let telemetry = state.live.telemetry_snapshot();
-    let persistence = state.live.stats_snapshot().persistence;
+    let telemetry = state.services.telemetry_snapshot();
+    let persistence = state.services.stats_snapshot().persistence;
     Json(MetricsPayload {
         telemetry,
         persistence,
@@ -1045,8 +1044,8 @@ fn acquire_client_guard(
 
 fn archive_service(
     state: &Arc<AppState>,
-) -> Result<&emwin_live::LiveRuntime, (StatusCode, String)> {
-    Ok(&state.live)
+) -> Result<&dyn emwin_service::ArchiveQueryService, (StatusCode, String)> {
+    Ok(state.services.archive.as_ref())
 }
 
 fn normalize_incident_key(

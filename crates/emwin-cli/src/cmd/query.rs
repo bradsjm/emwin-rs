@@ -722,7 +722,7 @@ mod tests {
         IncidentLocatorArgs, incident_key, normalize_lower, normalize_upper, parse_rfc3339_utc,
     };
     use chrono::{TimeZone, Utc};
-    use emwin_db::parse_archive_bool;
+    use emwin_service::parse_archive_bool;
 
     #[test]
     fn parse_rfc3339_normalizes_to_utc() {

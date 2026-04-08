@@ -1,5 +1,6 @@
 use crate::server::types::{
     AppState, ArchiveIssuePayload, EventsQuery, IncidentEventPayload, IncidentSummaryPayload,
+    ApiServices,
 };
 use emwin_service::{ArchivedIssue, IncidentChangeAction, IncidentChangeTrigger, IncidentSummary};
 use std::sync::Arc;
@@ -19,7 +20,7 @@ fn build_state(
 ) -> Arc<AppState> {
     let (_, shutdown_rx) = watch::channel(false);
     Arc::new(AppState {
-        live,
+        services: ApiServices::from_live_runtime(live),
         event_tx: broadcast::channel(32).0,
         incident_event_tx: broadcast::channel(32).0,
         shutdown_rx,

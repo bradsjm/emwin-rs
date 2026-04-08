@@ -14,7 +14,7 @@ mod server_http;
 pub(crate) mod types;
 
 pub use runtime::serve;
-pub use types::HttpServerOptions;
+pub use types::{ApiArchiveStatus, ApiServices, HttpServerOptions};
 
 pub(crate) use cors::build_cors_layer;
 pub(crate) use events::{publish, publish_incident_change};

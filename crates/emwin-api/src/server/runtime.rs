@@ -1,6 +1,7 @@
 use super::server_http;
-use super::types::{AppState, EventKind, HttpServerOptions, IncidentEventPayload};
+use super::types::{ApiServices, AppState, EventKind, HttpServerOptions, IncidentEventPayload};
 use crate::error::{ApiError, ApiResult};
+use emwin_service::{IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use tokio::sync::{broadcast, watch};
 
 const EVENT_CHANNEL_CAPACITY: usize = 4096;
 
-pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) -> ApiResult<()> {
+pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResult<()> {
     let HttpServerOptions {
         bind,
         cors_origin,
@@ -34,7 +35,7 @@ pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) ->
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = Arc::new(AppState {
-        live: live.clone(),
+        services: services.clone(),
         event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         incident_event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         shutdown_rx: shutdown_rx.clone(),
@@ -52,11 +53,11 @@ pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) ->
     super::log_info(quiet, &format!("server listening addr={bind_addr}"));
 
     let event_relay_task = tokio::spawn(run_event_relay_loop(
-        live.subscribe_events(),
+        services.subscribe_events(),
         Arc::clone(&state),
         shutdown_rx.clone(),
     ));
-    let incident_relay_task = live.subscribe_incident_changes().map(|rx| {
+    let incident_relay_task = services.subscribe_incident_changes().map(|rx| {
         tokio::spawn(run_incident_relay_loop(
             rx,
             Arc::clone(&state),
@@ -64,7 +65,7 @@ pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) ->
         ))
     });
     let stats_task = tokio::spawn(run_stats_loop(
-        live.clone(),
+        services.clone(),
         Arc::clone(&state),
         stats_interval_secs,
         shutdown_rx.clone(),
@@ -104,7 +105,7 @@ pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) ->
         await_task(task, "incident relay").await?;
     }
     await_task(stats_task, "stats").await?;
-    live.shutdown().await?;
+    services.shutdown().await?;
 
     if let Err(err) = serve_result {
         return Err(ApiError::runtime(format!("http server failed: {err}")));
@@ -115,7 +116,7 @@ pub async fn serve(options: HttpServerOptions, live: emwin_live::LiveRuntime) ->
 }
 
 async fn run_event_relay_loop(
-    mut rx: broadcast::Receiver<emwin_live::LiveBroadcastEvent>,
+    mut rx: broadcast::Receiver<LiveBroadcastEvent>,
     state: Arc<AppState>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> ApiResult<()> {
@@ -135,7 +136,7 @@ async fn run_event_relay_loop(
 }
 
 async fn run_incident_relay_loop(
-    mut rx: broadcast::Receiver<emwin_live::IncidentBroadcastEvent>,
+    mut rx: broadcast::Receiver<IncidentBroadcastEvent>,
     state: Arc<AppState>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> ApiResult<()> {
@@ -158,7 +159,7 @@ async fn run_incident_relay_loop(
 }
 
 async fn run_stats_loop(
-    live: emwin_live::LiveRuntime,
+    services: ApiServices,
     state: Arc<AppState>,
     stats_interval_secs: u64,
     mut shutdown_rx: watch::Receiver<bool>,
@@ -180,7 +181,7 @@ async fn run_stats_loop(
                     continue;
                 }
 
-                let snapshot = live.stats_snapshot();
+                let snapshot = services.stats_snapshot();
                 let connected_clients = state.connected_clients.load(Ordering::Relaxed);
                 if let Some(persistence) = snapshot.persistence {
                     tracing::info!(
@@ -218,16 +219,16 @@ async fn run_stats_loop(
     Ok(())
 }
 
-fn map_live_event(kind: emwin_live::LiveEventKind) -> EventKind {
+fn map_live_event(kind: LiveEventKind) -> EventKind {
     match kind {
-        emwin_live::LiveEventKind::Connected { endpoint } => EventKind::Connected { endpoint },
-        emwin_live::LiveEventKind::Disconnected => EventKind::Disconnected,
-        emwin_live::LiveEventKind::ReceiverFrame(frame) => EventKind::ReceiverFrame(frame),
-        emwin_live::LiveEventKind::ProductAvailable(metadata) => EventKind::FileComplete(Box::new(
+        LiveEventKind::Connected { endpoint } => EventKind::Connected { endpoint },
+        LiveEventKind::Disconnected => EventKind::Disconnected,
+        LiveEventKind::ReceiverFrame(frame) => EventKind::ReceiverFrame(frame),
+        LiveEventKind::ProductAvailable(metadata) => EventKind::FileComplete(Box::new(
             super::types::CompletedFileEventPayload::from_metadata(*metadata),
         )),
-        emwin_live::LiveEventKind::Telemetry(value) => EventKind::Telemetry(value),
-        emwin_live::LiveEventKind::Error { message } => EventKind::Error { message },
+        LiveEventKind::Telemetry(value) => EventKind::Telemetry(value),
+        LiveEventKind::Error { message } => EventKind::Error { message },
     }
 }
 

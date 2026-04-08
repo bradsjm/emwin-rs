@@ -7,4 +7,4 @@ mod server;
 mod server_support;
 
 pub use error::{ApiError, ApiResult};
-pub use server::{HttpServerOptions, serve};
+pub use server::{ApiArchiveStatus, ApiServices, HttpServerOptions, serve};

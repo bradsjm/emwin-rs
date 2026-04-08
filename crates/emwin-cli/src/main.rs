@@ -185,7 +185,8 @@ async fn main() -> crate::error::CliResult<()> {
                 quiet,
                 openapi_auth_token,
             };
-            emwin_api::serve(options, live).await.map_err(Into::into)
+            let services = emwin_api::ApiServices::from_live_runtime(live);
+            emwin_api::serve(options, services).await.map_err(Into::into)
         }
         Commands::Relay { options } => relay::runtime::run(options).await,
     }

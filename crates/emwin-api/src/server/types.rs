@@ -4,14 +4,16 @@
 //! on stable payload shapes without circular dependencies.
 
 use crate::server_support::file_download_url;
-use emwin_live::{FileEventFilter, FileFilterInput, LiveRuntime, LiveTelemetry};
 use emwin_service::{
     AggregateCompleteness, ArchiveFilterInput, ArchivedFeature, ArchivedIssue,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata,
-    FacetAggregateBucket, IncidentChange, IncidentChangeAction, IncidentChangeTrigger,
-    IncidentDetail, IncidentSummary, PaginatedResponse, PersistenceStats, ReceiverFrame,
-    TimeseriesAggregateBucket,
+    FacetAggregateBucket, IncidentBroadcastEvent as ServiceIncidentBroadcastEvent, IncidentChange,
+    IncidentChangeAction, IncidentChangeTrigger, IncidentChangeStream, IncidentDetail,
+    IncidentSummary, LiveBroadcastEvent, LiveEventService, LiveStatsSnapshot,
+    LiveTelemetry, PaginatedResponse, PersistenceStats, ReceiverFrame, RetainedFile,
+    RetainedFileService, TimeseriesAggregateBucket,
 };
+use emwin_live::{FileEventFilter, FileFilterInput};
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeSet;
@@ -88,6 +90,100 @@ impl Serialize for CompletedFileEventPayload {
 }
 
 pub(crate) type TelemetryPayload = LiveTelemetry;
+
+pub(crate) type SharedLiveService = Arc<dyn LiveEventService>;
+pub(crate) type SharedRetainedFileService = Arc<dyn RetainedFileService>;
+pub(crate) type SharedArchiveQueryService = Arc<dyn emwin_service::ArchiveQueryService>;
+pub(crate) type SharedIncidentChangeStream = Arc<dyn IncidentChangeStream>;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiArchiveStatus {
+    pub(crate) configured: bool,
+    pub(crate) healthy: bool,
+    pub(crate) errors_total: u64,
+    pub(crate) pool_timeouts_total: u64,
+    pub(crate) last_error: Option<String>,
+}
+
+pub(crate) trait ArchiveStatusService: Send + Sync {
+    fn archive_status_snapshot(&self) -> ApiArchiveStatus;
+}
+
+pub(crate) type SharedArchiveStatusService = Arc<dyn ArchiveStatusService>;
+
+#[derive(Clone)]
+pub struct ApiServices {
+    pub(crate) live: SharedLiveService,
+    pub(crate) retained_files: SharedRetainedFileService,
+    pub(crate) archive: SharedArchiveQueryService,
+    pub(crate) incident_stream: SharedIncidentChangeStream,
+    pub(crate) archive_status: SharedArchiveStatusService,
+}
+
+struct LiveRuntimeArchiveStatusService {
+    runtime: Arc<emwin_live::LiveRuntime>,
+}
+
+impl ArchiveStatusService for LiveRuntimeArchiveStatusService {
+    fn archive_status_snapshot(&self) -> ApiArchiveStatus {
+        let configured = self.runtime.archive_configured();
+        let last_error = self.runtime.archive_last_error();
+        ApiArchiveStatus {
+            configured,
+            healthy: !configured || last_error.is_none(),
+            errors_total: self.runtime.archive_errors_total(),
+            pool_timeouts_total: self.runtime.archive_pool_timeouts_total(),
+            last_error,
+        }
+    }
+}
+
+impl ApiServices {
+    pub fn from_live_runtime(runtime: emwin_live::LiveRuntime) -> Self {
+        let shared = Arc::new(runtime);
+        Self {
+            live: shared.clone(),
+            retained_files: shared.clone(),
+            archive: shared.clone(),
+            incident_stream: shared.clone(),
+            archive_status: Arc::new(LiveRuntimeArchiveStatusService { runtime: shared }),
+        }
+    }
+
+    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<LiveBroadcastEvent> {
+        self.live.subscribe_events()
+    }
+
+    pub(crate) fn telemetry_snapshot(&self) -> LiveTelemetry {
+        self.live.telemetry_snapshot()
+    }
+
+    pub(crate) fn stats_snapshot(&self) -> LiveStatsSnapshot {
+        self.live.stats_snapshot()
+    }
+
+    pub(crate) async fn shutdown(&self) -> emwin_service::ServiceResult<()> {
+        self.live.shutdown().await
+    }
+
+    pub(crate) fn list_retained_files(&self) -> Vec<CompletedFileMetadata> {
+        self.retained_files.list_retained_files()
+    }
+
+    pub(crate) fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
+        self.retained_files.get_retained_file(filename)
+    }
+
+    pub(crate) fn subscribe_incident_changes(
+        &self,
+    ) -> Option<broadcast::Receiver<ServiceIncidentBroadcastEvent>> {
+        self.incident_stream.subscribe_incident_changes()
+    }
+
+    pub(crate) fn archive_status_snapshot(&self) -> ApiArchiveStatus {
+        self.archive_status.archive_status_snapshot()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct MetricsPayload {
@@ -348,7 +444,7 @@ fn csv_i64_values(raw: Option<&str>) -> Option<BTreeSet<i64>> {
 }
 
 pub(crate) struct AppState {
-    pub(crate) live: LiveRuntime,
+    pub(crate) services: ApiServices,
     pub(crate) event_tx: broadcast::Sender<BroadcastEvent>,
     pub(crate) incident_event_tx: broadcast::Sender<IncidentBroadcastEvent>,
     pub(crate) shutdown_rx: watch::Receiver<bool>,

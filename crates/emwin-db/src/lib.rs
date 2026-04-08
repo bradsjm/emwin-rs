@@ -52,17 +52,12 @@
 //! }
 //! ```
 
-mod archive_filter;
 mod error;
 mod metadata;
 mod postgres;
 mod runtime;
 mod writer;
 
-pub use archive_filter::{
-    ArchiveFilterInput, build_cell_aggregate_query, build_facet_aggregate_query,
-    build_feature_list_query, build_timeseries_aggregate_query, parse_archive_bool,
-};
 pub use error::{PersistError, PersistResult};
 pub use metadata::CompletedFileMetadata;
 pub use postgres::{DEFAULT_MAX_DB_CONNECTIONS, PostgresConfig, PostgresMetadataSink};

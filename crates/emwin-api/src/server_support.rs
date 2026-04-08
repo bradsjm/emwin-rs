@@ -43,7 +43,7 @@ fn percent_encode(input: &str) -> String {
     out
 }
 
-pub(crate) fn build_file_download_response(file: emwin_live::RetainedFile) -> Response {
+pub(crate) fn build_file_download_response(file: emwin_service::RetainedFile) -> Response {
     let content_type = content_type_for_filename(&file.metadata.filename);
     let disposition = format!("attachment; filename=\"{}\"", file.metadata.filename);
 
