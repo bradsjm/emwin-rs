@@ -54,6 +54,7 @@ impl LiveRuntime {
             quiet,
             persistence_queue_capacity,
             postgres_database_url,
+            max_db_connections,
             file_retention_secs,
             max_retained_files,
         } = options;
@@ -71,6 +72,7 @@ impl LiveRuntime {
                     path,
                     persistence_queue_capacity,
                     postgres_database_url.as_deref(),
+                    max_db_connections,
                     "emwin-live",
                 )
                 .await?,
@@ -111,6 +113,13 @@ impl LiveRuntime {
                 }
                 Ok(_) => {}
                 Err(err) => {
+                    {
+                        let mut guard = state
+                            .archive_last_error
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        *guard = Some(err.to_string());
+                    }
                     tracing::warn!(
                         backend = "database",
                         target = %postgres_sink.describe_target(),
@@ -253,6 +262,33 @@ impl LiveRuntime {
         }
     }
 
+    pub fn archive_last_error(&self) -> Option<String> {
+        self.inner
+            .state
+            .archive_last_error
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn archive_configured(&self) -> bool {
+        self.inner.state.archive.is_some()
+    }
+
+    pub fn archive_errors_total(&self) -> u64 {
+        self.inner
+            .state
+            .archive_errors_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn archive_pool_timeouts_total(&self) -> u64 {
+        self.inner
+            .state
+            .archive_pool_timeouts_total
+            .load(Ordering::Relaxed)
+    }
+
     pub fn list_retained_files(&self) -> Vec<emwin_service::CompletedFileMetadata> {
         self.inner
             .state
@@ -300,6 +336,24 @@ impl LiveRuntime {
         persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
         upstream_endpoint: Option<String>,
     ) -> Self {
+        Self::new_for_tests_with_archive_status(
+            retained_files,
+            telemetry,
+            archive,
+            persistence,
+            upstream_endpoint,
+            None,
+        )
+    }
+
+    pub fn new_for_tests_with_archive_status(
+        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
+        telemetry: crate::types::LiveTelemetry,
+        archive: Option<emwin_db::PostgresMetadataSink>,
+        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
+        upstream_endpoint: Option<String>,
+        archive_status: Option<(String, u64, u64)>,
+    ) -> Self {
         let (shutdown_tx, _shutdown_rx) = watch::channel(false);
         let state = AppState::new(persistence, archive, true, 32, 60);
         {
@@ -346,6 +400,26 @@ impl LiveRuntime {
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             *guard = upstream_endpoint;
         }
+        let (archive_last_error, archive_errors_total, archive_pool_timeouts_total) =
+            match archive_status {
+                Some((last_error, errors_total, pool_timeouts_total)) => {
+                    (Some(last_error), errors_total, pool_timeouts_total)
+                }
+                None => (None, 0, 0),
+            };
+        {
+            let mut guard = state
+                .archive_last_error
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = archive_last_error;
+        }
+        state
+            .archive_errors_total
+            .store(archive_errors_total, Ordering::Relaxed);
+        state
+            .archive_pool_timeouts_total
+            .store(archive_pool_timeouts_total, Ordering::Relaxed);
 
         Self {
             inner: Arc::new(LiveRuntimeInner {
@@ -363,6 +437,37 @@ fn map_service_error(err: emwin_db::PersistError) -> ServiceError {
         emwin_db::PersistError::InvalidConfig(message) => ServiceError::InvalidConfig(message),
         emwin_db::PersistError::Io(io) => ServiceError::Io(io),
         other => ServiceError::Runtime(other.to_string()),
+    }
+}
+
+fn record_archive_result<T>(
+    state: &Arc<AppState>,
+    result: Result<T, emwin_db::PersistError>,
+) -> ServiceResult<T> {
+    match result {
+        Ok(value) => {
+            let mut guard = state
+                .archive_last_error
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = None;
+            Ok(value)
+        }
+        Err(err) => {
+            let message = err.to_string();
+            state.archive_errors_total.fetch_add(1, Ordering::Relaxed);
+            if message.contains("pool timed out while waiting for an open connection") {
+                state
+                    .archive_pool_timeouts_total
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            let mut guard = state
+                .archive_last_error
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = Some(message);
+            Err(map_service_error(err))
+        }
     }
 }
 
@@ -413,13 +518,11 @@ impl ArchiveQueryService for LiveRuntime {
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<IncidentSummary>>>
     {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_incidents(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_incidents(query).await)
         })
     }
 
@@ -428,10 +531,11 @@ impl ArchiveQueryService for LiveRuntime {
         key: &'a IncidentKey,
     ) -> emwin_service::archive::BoxFuture<'a, ServiceResult<Option<IncidentDetail>>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive.get_incident(key).await.map_err(map_service_error)
+            record_archive_result(&state, archive.get_incident(key).await)
         })
     }
 
@@ -444,13 +548,11 @@ impl ArchiveQueryService for LiveRuntime {
         ServiceResult<PaginatedResponse<ArchivedProductSummary>>,
     > {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_incident_products(key, query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_incident_products(key, query).await)
         })
     }
 
@@ -462,13 +564,11 @@ impl ArchiveQueryService for LiveRuntime {
         ServiceResult<PaginatedResponse<ArchivedProductSummary>>,
     > {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_archived_products(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_archived_products(query).await)
         })
     }
 
@@ -477,13 +577,11 @@ impl ArchiveQueryService for LiveRuntime {
         product_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedProductDetail>>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .get_archived_product(product_id)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.get_archived_product(product_id).await)
         })
     }
 
@@ -493,13 +591,11 @@ impl ArchiveQueryService for LiveRuntime {
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<ArchivedIssue>>>
     {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_archived_issues(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_archived_issues(query).await)
         })
     }
 
@@ -508,13 +604,11 @@ impl ArchiveQueryService for LiveRuntime {
         issue_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedIssue>>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .get_archived_issue(issue_id)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.get_archived_issue(issue_id).await)
         })
     }
 
@@ -523,13 +617,11 @@ impl ArchiveQueryService for LiveRuntime {
         product_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedPayload>>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .read_archived_payload(product_id)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.read_archived_payload(product_id).await)
         })
     }
 
@@ -539,13 +631,11 @@ impl ArchiveQueryService for LiveRuntime {
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<ArchivedFeature>>>
     {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_archived_features(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_archived_features(query).await)
         })
     }
 
@@ -554,13 +644,11 @@ impl ArchiveQueryService for LiveRuntime {
         query: FacetAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<FacetAggregateResult>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_facet_aggregate(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_facet_aggregate(query).await)
         })
     }
 
@@ -569,13 +657,11 @@ impl ArchiveQueryService for LiveRuntime {
         query: TimeseriesAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<TimeseriesAggregateResult>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_timeseries_aggregate(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_timeseries_aggregate(query).await)
         })
     }
 
@@ -584,13 +670,11 @@ impl ArchiveQueryService for LiveRuntime {
         query: CellAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<CellAggregateResult>> {
         Box::pin(async move {
-            let archive = self.inner.state.archive.as_ref().ok_or_else(|| {
+            let state = Arc::clone(&self.inner.state);
+            let archive = state.archive.as_ref().ok_or_else(|| {
                 ServiceError::NotConfigured("archive database is not configured".to_string())
             })?;
-            archive
-                .list_cell_aggregate(query)
-                .await
-                .map_err(map_service_error)
+            record_archive_result(&state, archive.list_cell_aggregate(query).await)
         })
     }
 }

@@ -10,8 +10,7 @@ use emwin_service::{
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata,
     FacetAggregateBucket, IncidentChange, IncidentChangeAction, IncidentChangeTrigger,
     IncidentDetail, IncidentSummary, PaginatedResponse, PersistenceStats, ReceiverFrame,
-    TimeseriesAggregateBucket, build_cell_aggregate_query, build_facet_aggregate_query,
-    build_feature_list_query, build_timeseries_aggregate_query,
+    TimeseriesAggregateBucket,
 };
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
@@ -94,6 +93,7 @@ pub(crate) type TelemetryPayload = LiveTelemetry;
 pub(crate) struct MetricsPayload {
     pub(crate) telemetry: TelemetryPayload,
     pub(crate) persistence: Option<PersistenceStats>,
+    pub(crate) archive: ArchiveStatus,
 }
 
 impl Serialize for MetricsPayload {
@@ -109,8 +109,10 @@ impl Serialize for MetricsPayload {
         };
 
         let persistence_field_count = usize::from(self.persistence.is_some()) * 6;
-        let mut map =
-            serializer.serialize_map(Some(telemetry_fields.len() + persistence_field_count))?;
+        let archive_field_count = 4 + usize::from(self.archive.last_error.is_some());
+        let mut map = serializer.serialize_map(Some(
+            telemetry_fields.len() + persistence_field_count + archive_field_count,
+        ))?;
         for (key, value) in telemetry_fields {
             map.serialize_entry(key, value)?;
         }
@@ -122,8 +124,27 @@ impl Serialize for MetricsPayload {
             map.serialize_entry("persistence_persisted_total", &persistence.persisted_total)?;
             map.serialize_entry("persistence_failed_total", &persistence.failed_total)?;
         }
+        map.serialize_entry("archive_configured", &self.archive.configured)?;
+        map.serialize_entry("archive_healthy", &self.archive.healthy)?;
+        map.serialize_entry("archive_errors_total", &self.archive.errors_total)?;
+        map.serialize_entry(
+            "archive_pool_timeouts_total",
+            &self.archive.pool_timeouts_total,
+        )?;
+        if let Some(last_error) = &self.archive.last_error {
+            map.serialize_entry("archive_last_error", last_error)?;
+        }
         map.end()
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ArchiveStatus {
+    pub(crate) configured: bool,
+    pub(crate) healthy: bool,
+    pub(crate) errors_total: u64,
+    pub(crate) pool_timeouts_total: u64,
+    pub(crate) last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -395,213 +416,155 @@ pub(crate) struct ArchiveFilterParams {
     pub(crate) hvtec_cause: Option<String>,
     pub(crate) hvtec_record: Option<String>,
     pub(crate) wind_hail_kind: Option<String>,
-    pub(crate) lat: Option<f64>,
-    pub(crate) lon: Option<f64>,
-    pub(crate) distance_miles: Option<f64>,
-    pub(crate) min_lat: Option<f64>,
-    pub(crate) max_lat: Option<f64>,
-    pub(crate) min_lon: Option<f64>,
-    pub(crate) max_lon: Option<f64>,
-    pub(crate) min_wind_mph: Option<f64>,
-    pub(crate) min_hail_inches: Option<f64>,
-    pub(crate) min_size: Option<usize>,
-    pub(crate) max_size: Option<usize>,
-    pub(crate) source_timestamp_after: Option<i64>,
-    pub(crate) source_timestamp_before: Option<i64>,
-    pub(crate) ingested_after: Option<chrono::DateTime<chrono::Utc>>,
-    pub(crate) ingested_before: Option<chrono::DateTime<chrono::Utc>>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) distance_miles: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) max_lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) max_lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_wind_mph: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_hail_inches: Option<String>,
+    #[schema(value_type = Option<usize>)]
+    pub(crate) min_size: Option<String>,
+    #[schema(value_type = Option<usize>)]
+    pub(crate) max_size: Option<String>,
+    #[schema(value_type = Option<i64>)]
+    pub(crate) source_timestamp_after: Option<String>,
+    #[schema(value_type = Option<i64>)]
+    pub(crate) source_timestamp_before: Option<String>,
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub(crate) ingested_after: Option<String>,
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub(crate) ingested_before: Option<String>,
 }
 
 impl ArchiveFilterParams {
+    pub(crate) fn into_archive_filter_input(self) -> Result<ArchiveFilterInput, String> {
+        Ok(ArchiveFilterInput {
+            filename: self.filename,
+            source_receiver: self.source_receiver,
+            source: self.source,
+            pil: self.pil,
+            family: self.family,
+            artifact_kind: self.artifact_kind,
+            container: self.container,
+            wmo_prefix: self.wmo_prefix,
+            office: self.office,
+            office_city: self.office_city,
+            office_state: self.office_state,
+            bbb_kind: self.bbb_kind,
+            cccc: self.cccc,
+            ttaaii: self.ttaaii,
+            afos: self.afos,
+            bbb: self.bbb,
+            has_issues: self.has_issues,
+            issue_kind: self.issue_kind,
+            issue_code: self.issue_code,
+            has_vtec: self.has_vtec,
+            has_ugc: self.has_ugc,
+            has_hvtec: self.has_hvtec,
+            has_latlon: self.has_latlon,
+            has_time_mot_loc: self.has_time_mot_loc,
+            has_wind_hail: self.has_wind_hail,
+            state: self.state,
+            county: self.county,
+            zone: self.zone,
+            fire_zone: self.fire_zone,
+            marine_zone: self.marine_zone,
+            vtec_phenomena: self.vtec_phenomena,
+            vtec_significance: self.vtec_significance,
+            vtec_action: self.vtec_action,
+            vtec_office: self.vtec_office,
+            etn: self.etn,
+            hvtec_nwslid: self.hvtec_nwslid,
+            hvtec_severity: self.hvtec_severity,
+            hvtec_cause: self.hvtec_cause,
+            hvtec_record: self.hvtec_record,
+            wind_hail_kind: self.wind_hail_kind,
+            lat: parse_query_value("lat", self.lat)?,
+            lon: parse_query_value("lon", self.lon)?,
+            distance_miles: parse_query_value("distance_miles", self.distance_miles)?,
+            min_lat: parse_query_value("min_lat", self.min_lat)?,
+            max_lat: parse_query_value("max_lat", self.max_lat)?,
+            min_lon: parse_query_value("min_lon", self.min_lon)?,
+            max_lon: parse_query_value("max_lon", self.max_lon)?,
+            min_wind_mph: parse_query_value("min_wind_mph", self.min_wind_mph)?,
+            min_hail_inches: parse_query_value("min_hail_inches", self.min_hail_inches)?,
+            min_size: parse_query_value("min_size", self.min_size)?,
+            max_size: parse_query_value("max_size", self.max_size)?,
+            source_timestamp_after: parse_query_value(
+                "source_timestamp_after",
+                self.source_timestamp_after,
+            )?,
+            source_timestamp_before: parse_query_value(
+                "source_timestamp_before",
+                self.source_timestamp_before,
+            )?,
+            ingested_after: parse_datetime_value("ingested_after", self.ingested_after)?,
+            ingested_before: parse_datetime_value("ingested_before", self.ingested_before)?,
+        })
+    }
+
     pub(crate) fn into_product_list_query(
         self,
         default_limit: usize,
         limit: Option<usize>,
         cursor: Option<String>,
     ) -> Result<emwin_service::ProductListQuery, String> {
-        ArchiveFilterInput::from(self)
+        self.into_archive_filter_input()?
             .into_product_list_query(default_limit, limit, cursor)
             .map_err(|err| err.to_string())
     }
 }
 
-impl From<ArchiveFilterParams> for ArchiveFilterInput {
-    fn from(value: ArchiveFilterParams) -> Self {
-        Self {
-            filename: value.filename,
-            source_receiver: value.source_receiver,
-            source: value.source,
-            pil: value.pil,
-            family: value.family,
-            artifact_kind: value.artifact_kind,
-            container: value.container,
-            wmo_prefix: value.wmo_prefix,
-            office: value.office,
-            office_city: value.office_city,
-            office_state: value.office_state,
-            bbb_kind: value.bbb_kind,
-            cccc: value.cccc,
-            ttaaii: value.ttaaii,
-            afos: value.afos,
-            bbb: value.bbb,
-            has_issues: value.has_issues,
-            issue_kind: value.issue_kind,
-            issue_code: value.issue_code,
-            has_vtec: value.has_vtec,
-            has_ugc: value.has_ugc,
-            has_hvtec: value.has_hvtec,
-            has_latlon: value.has_latlon,
-            has_time_mot_loc: value.has_time_mot_loc,
-            has_wind_hail: value.has_wind_hail,
-            state: value.state,
-            county: value.county,
-            zone: value.zone,
-            fire_zone: value.fire_zone,
-            marine_zone: value.marine_zone,
-            vtec_phenomena: value.vtec_phenomena,
-            vtec_significance: value.vtec_significance,
-            vtec_action: value.vtec_action,
-            vtec_office: value.vtec_office,
-            etn: value.etn,
-            hvtec_nwslid: value.hvtec_nwslid,
-            hvtec_severity: value.hvtec_severity,
-            hvtec_cause: value.hvtec_cause,
-            hvtec_record: value.hvtec_record,
-            wind_hail_kind: value.wind_hail_kind,
-            lat: value.lat,
-            lon: value.lon,
-            distance_miles: value.distance_miles,
-            min_lat: value.min_lat,
-            max_lat: value.max_lat,
-            min_lon: value.min_lon,
-            max_lon: value.max_lon,
-            min_wind_mph: value.min_wind_mph,
-            min_hail_inches: value.min_hail_inches,
-            min_size: value.min_size,
-            max_size: value.max_size,
-            source_timestamp_after: value.source_timestamp_after,
-            source_timestamp_before: value.source_timestamp_before,
-            ingested_after: value.ingested_after,
-            ingested_before: value.ingested_before,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct ProductsQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
-}
-
-impl ProductsQuery {
-    pub(crate) fn into_product_list_query(self) -> Result<emwin_service::ProductListQuery, String> {
-        self.filters
-            .into_product_list_query(100, self.limit, self.cursor)
-    }
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeaturesQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) kind: Option<String>,
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
 }
 
-impl FeaturesQuery {
-    pub(crate) fn into_feature_list_query(self) -> Result<emwin_service::FeatureListQuery, String> {
-        build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, self.cursor)
-            .map_err(|err| err.to_string())
-    }
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeaturesGeoJsonQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) kind: Option<String>,
     pub(crate) limit: Option<usize>,
 }
 
-impl FeaturesGeoJsonQuery {
-    pub(crate) fn into_feature_list_query(self) -> Result<emwin_service::FeatureListQuery, String> {
-        build_feature_list_query(self.filters.into(), self.kind, 100, self.limit, None)
-            .map_err(|err| err.to_string())
-    }
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FacetAggregateHttpQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) dimension: String,
     pub(crate) limit: Option<usize>,
 }
 
-impl FacetAggregateHttpQuery {
-    pub(crate) fn into_facet_aggregate_query(
-        self,
-    ) -> Result<emwin_service::FacetAggregateQuery, String> {
-        build_facet_aggregate_query(self.filters.into(), &self.dimension, self.limit)
-            .map_err(|err| err.to_string())
-    }
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct TimeseriesAggregateHttpQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) measure: String,
     pub(crate) start: chrono::DateTime<chrono::Utc>,
     pub(crate) end: chrono::DateTime<chrono::Utc>,
     pub(crate) bucket: String,
 }
 
-impl TimeseriesAggregateHttpQuery {
-    pub(crate) fn into_timeseries_aggregate_query(
-        self,
-    ) -> Result<emwin_service::TimeseriesAggregateQuery, String> {
-        build_timeseries_aggregate_query(
-            self.filters.into(),
-            &self.measure,
-            self.start,
-            self.end,
-            &self.bucket,
-        )
-        .map_err(|err| err.to_string())
-    }
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct CellAggregateHttpQuery {
-    #[serde(flatten)]
-    #[param(inline)]
-    pub(crate) filters: ArchiveFilterParams,
     pub(crate) measure: String,
     pub(crate) precision: u8,
     pub(crate) limit: Option<usize>,
-}
-
-impl CellAggregateHttpQuery {
-    pub(crate) fn into_cell_aggregate_query(
-        self,
-    ) -> Result<emwin_service::CellAggregateQuery, String> {
-        build_cell_aggregate_query(
-            self.filters.into(),
-            &self.measure,
-            self.precision,
-            self.limit,
-        )
-        .map_err(|err| err.to_string())
-    }
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -995,10 +958,45 @@ pub(crate) struct ArchiveIssueResponse {
 #[derive(Debug, Serialize)]
 pub(crate) struct HealthResponse {
     pub(crate) status: &'static str,
+    pub(crate) archive: ArchiveStatus,
     pub(crate) connected_clients: usize,
     pub(crate) retained_files: usize,
     pub(crate) uptime_secs: u64,
     pub(crate) upstream_endpoint: Option<String>,
+}
+
+fn parse_query_value<T>(name: &'static str, raw: Option<String>) -> Result<Option<T>, String>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    match raw
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => value
+            .parse::<T>()
+            .map(Some)
+            .map_err(|err| format!("invalid `{name}` query parameter `{value}`: {err}")),
+        None => Ok(None),
+    }
+}
+
+fn parse_datetime_value(
+    name: &'static str,
+    raw: Option<String>,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, String> {
+    match raw
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => chrono::DateTime::parse_from_rfc3339(value)
+            .map(|timestamp| Some(timestamp.with_timezone(&chrono::Utc)))
+            .map_err(|err| format!("invalid `{name}` query parameter `{value}`: {err}")),
+        None => Ok(None),
+    }
 }
 
 pub(crate) fn incident_detail_url(incident: &IncidentSummary) -> String {

@@ -4,21 +4,21 @@
 //! filtering, and ingest coordination live in neighboring modules.
 
 use super::types::{
-    API_PREFIX, AppState, ArchiveIssuePayload, ArchiveIssueResponse, ArchiveIssuesQuery,
-    ArchiveIssuesResponse, ArchiveProductDetailPayload, ArchiveProductResponse,
-    ArchiveProductSummaryPayload, ArchivedFeaturePayload, BroadcastEvent, CellAggregateHttpQuery,
-    CellAggregateResponse, ClientGuard, EventFilter, EventKind, EventsQuery,
-    FacetAggregateHttpQuery, FacetAggregateResponse, FeatureCollectionResponse,
+    API_PREFIX, AppState, ArchiveFilterParams, ArchiveIssuePayload, ArchiveIssueResponse,
+    ArchiveIssuesQuery, ArchiveIssuesResponse, ArchiveProductDetailPayload, ArchiveProductResponse,
+    ArchiveProductSummaryPayload, ArchiveStatus, ArchivedFeaturePayload, BroadcastEvent,
+    CellAggregateHttpQuery, CellAggregateResponse, ClientGuard, EventFilter, EventKind,
+    EventsQuery, FacetAggregateHttpQuery, FacetAggregateResponse, FeatureCollectionResponse,
     FeaturesGeoJsonQuery, FeaturesQuery, FeaturesResponse, FilesResponse, HealthResponse,
     IncidentBroadcastEvent, IncidentDetailPayload, IncidentEventFilter, IncidentEventPayload,
     IncidentEventsQuery, IncidentProductsQuery, IncidentProductsResponse, IncidentResponse,
-    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, ProductsQuery, ProductsResponse,
-    TimeseriesAggregateHttpQuery, TimeseriesAggregateResponse,
+    IncidentSummaryPayload, IncidentsQuery, IncidentsResponse, MetricsPayload, ProductsQuery,
+    ProductsResponse, TimeseriesAggregateHttpQuery, TimeseriesAggregateResponse,
 };
 use crate::server_support::{
     build_bytes_download_response, build_file_download_response, filename_request_or_400,
 };
-use axum::extract::{ConnectInfo, Path, Query, Request, State};
+use axum::extract::{ConnectInfo, Path, Query, RawQuery, Request, State};
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::http::header::AUTHORIZATION;
@@ -27,7 +27,10 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use emwin_service::{ArchiveQueryService, ServiceError};
+use emwin_service::{
+    ArchiveQueryService, ServiceError, build_cell_aggregate_query, build_facet_aggregate_query,
+    build_feature_list_query, build_timeseries_aggregate_query,
+};
 use futures::Stream;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -124,11 +127,40 @@ fn parse_bearer_token(header_value: &str) -> Option<&str> {
     Some(token)
 }
 
+fn parse_archive_filters(raw_query: Option<&str>) -> Result<ArchiveFilterParams, String> {
+    if let Some(raw_query) = raw_query {
+        for (key, _) in url::form_urlencoded::parse(raw_query.as_bytes()) {
+            let key = key.as_ref();
+            if key == "filters" || key.starts_with("filters.") || key.starts_with("filters[") {
+                return Err(format!(
+                    "unsupported nested archive filter parameter `{key}`"
+                ));
+            }
+        }
+        serde_urlencoded::from_str(raw_query)
+            .map_err(|err| format!("Failed to deserialize query string: {err}"))
+    } else {
+        Ok(ArchiveFilterParams::default())
+    }
+}
+
+fn archive_status(state: &Arc<AppState>) -> ArchiveStatus {
+    let configured = state.live.archive_configured();
+    let last_error = state.live.archive_last_error();
+    ArchiveStatus {
+        configured,
+        healthy: !configured || last_error.is_none(),
+        errors_total: state.live.archive_errors_total(),
+        pool_timeouts_total: state.live.archive_pool_timeouts_total(),
+        last_error,
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/v1/products",
     tag = "products",
-    params(ProductsQuery),
+    params(ArchiveFilterParams, ProductsQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -139,11 +171,14 @@ fn parse_bearer_token(header_value: &str) -> Option<&str> {
 )]
 pub(super) async fn products_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<ProductsQuery>,
 ) -> Result<Json<ProductsResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let product_query = query
-        .into_product_list_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let product_query = filters
+        .into_product_list_query(100, query.limit, query.cursor)
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
     let page = archive
         .list_archived_products(product_query)
@@ -166,7 +201,7 @@ pub(super) async fn products_handler(
     get,
     path = "/v1/features",
     tag = "features",
-    params(FeaturesQuery),
+    params(ArchiveFilterParams, FeaturesQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -177,12 +212,22 @@ pub(super) async fn products_handler(
 )]
 pub(super) async fn features_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<FeaturesQuery>,
 ) -> Result<Json<FeaturesResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let feature_query = query
-        .into_feature_list_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let feature_query = build_feature_list_query(
+        filters
+            .into_archive_filter_input()
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?,
+        query.kind,
+        100,
+        query.limit,
+        query.cursor,
+    )
+    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     let page = archive
         .list_archived_features(feature_query)
         .await
@@ -204,7 +249,7 @@ pub(super) async fn features_handler(
     get,
     path = "/v1/features/geojson",
     tag = "features",
-    params(FeaturesGeoJsonQuery),
+    params(ArchiveFilterParams, FeaturesGeoJsonQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -215,12 +260,22 @@ pub(super) async fn features_handler(
 )]
 pub(super) async fn features_geojson_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<FeaturesGeoJsonQuery>,
 ) -> Result<Json<FeatureCollectionResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let feature_query = query
-        .into_feature_list_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let feature_query = build_feature_list_query(
+        filters
+            .into_archive_filter_input()
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?,
+        query.kind,
+        100,
+        query.limit,
+        None,
+    )
+    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     let page = archive
         .list_archived_features(feature_query)
         .await
@@ -241,7 +296,7 @@ pub(super) async fn features_geojson_handler(
     get,
     path = "/v1/aggregates/facets",
     tag = "aggregates",
-    params(FacetAggregateHttpQuery),
+    params(ArchiveFilterParams, FacetAggregateHttpQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -252,12 +307,20 @@ pub(super) async fn features_geojson_handler(
 )]
 pub(super) async fn facet_aggregate_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<FacetAggregateHttpQuery>,
 ) -> Result<Json<FacetAggregateResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let aggregate_query = query
-        .into_facet_aggregate_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let aggregate_query = build_facet_aggregate_query(
+        filters
+            .into_archive_filter_input()
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?,
+        &query.dimension,
+        query.limit,
+    )
+    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     let items = archive
         .list_facet_aggregate(aggregate_query.clone())
         .await
@@ -274,7 +337,7 @@ pub(super) async fn facet_aggregate_handler(
     get,
     path = "/v1/aggregates/timeseries",
     tag = "aggregates",
-    params(TimeseriesAggregateHttpQuery),
+    params(ArchiveFilterParams, TimeseriesAggregateHttpQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -285,12 +348,22 @@ pub(super) async fn facet_aggregate_handler(
 )]
 pub(super) async fn timeseries_aggregate_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<TimeseriesAggregateHttpQuery>,
 ) -> Result<Json<TimeseriesAggregateResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let aggregate_query = query
-        .into_timeseries_aggregate_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let aggregate_query = build_timeseries_aggregate_query(
+        filters
+            .into_archive_filter_input()
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?,
+        &query.measure,
+        query.start,
+        query.end,
+        &query.bucket,
+    )
+    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     let items = archive
         .list_timeseries_aggregate(aggregate_query.clone())
         .await
@@ -311,7 +384,7 @@ pub(super) async fn timeseries_aggregate_handler(
     path = "/v1/aggregates/cells",
     tag = "aggregates",
     description = "Returns uncursored geohash cell buckets for `product_count`. Each bucket counts distinct products per intersected geohash cell across persisted polygons, paths, and representative points after applying the requested spatial filters.",
-    params(CellAggregateHttpQuery),
+    params(ArchiveFilterParams, CellAggregateHttpQuery),
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
@@ -322,12 +395,21 @@ pub(super) async fn timeseries_aggregate_handler(
 )]
 pub(super) async fn cell_aggregate_handler(
     State(state): State<Arc<AppState>>,
+    RawQuery(raw_query): RawQuery,
     Query(query): Query<CellAggregateHttpQuery>,
 ) -> Result<Json<CellAggregateResponse>, (StatusCode, String)> {
     let archive = archive_service(&state)?;
-    let aggregate_query = query
-        .into_cell_aggregate_query()
+    let filters = parse_archive_filters(raw_query.as_deref())
         .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let aggregate_query = build_cell_aggregate_query(
+        filters
+            .into_archive_filter_input()
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?,
+        &query.measure,
+        query.precision,
+        query.limit,
+    )
+    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     let items = archive
         .list_cell_aggregate(aggregate_query.clone())
         .await
@@ -867,9 +949,11 @@ pub(super) async fn file_download_handler(
 pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let connected_clients = state.connected_clients.load(Ordering::Relaxed);
     let snapshot = state.live.stats_snapshot();
+    let archive = archive_status(&state);
 
     Json(HealthResponse {
-        status: "ok",
+        status: if archive.healthy { "ok" } else { "degraded" },
+        archive,
         connected_clients,
         retained_files: snapshot.retained_files,
         uptime_secs: snapshot.uptime_secs,
@@ -892,9 +976,10 @@ pub(super) async fn metrics_handler(
 ) -> Json<super::types::MetricsPayload> {
     let telemetry = state.live.telemetry_snapshot();
     let persistence = state.live.stats_snapshot().persistence;
-    Json(super::types::MetricsPayload {
+    Json(MetricsPayload {
         telemetry,
         persistence,
+        archive: archive_status(&state),
     })
 }
 

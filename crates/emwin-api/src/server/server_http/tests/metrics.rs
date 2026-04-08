@@ -95,6 +95,67 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
         value.get("persistence_failed_total"),
         Some(&serde_json::json!(0))
     );
+    assert_eq!(
+        value.get("archive_configured"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(value.get("archive_healthy"), Some(&serde_json::json!(true)));
+    assert_eq!(
+        value.get("archive_errors_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("archive_pool_timeouts_total"),
+        Some(&serde_json::json!(0))
+    );
 
     runtime.shutdown().await.expect("shutdown should succeed");
+}
+
+#[tokio::test]
+async fn health_endpoint_reports_archive_degraded_when_archive_error_present() {
+    let state = build_state(
+        10,
+        emwin_live::LiveRuntime::new_for_tests_with_archive_status(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Unavailable,
+            Some(emwin_db::PostgresMetadataSink::new(
+                emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
+            )),
+            None,
+            None,
+            Some((
+                "pool timed out while waiting for an open connection".to_string(),
+                1,
+                1,
+            )),
+        ),
+        None,
+    );
+
+    let app = build_router(state, None).expect("router should build");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/health")
+                .method("GET")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body should read");
+    let value: serde_json::Value =
+        serde_json::from_slice(&body).expect("body should be json object");
+    assert_eq!(value["status"], "degraded");
+    assert_eq!(value["archive"]["configured"], true);
+    assert_eq!(value["archive"]["healthy"], false);
+    assert_eq!(
+        value["archive"]["last_error"],
+        "pool timed out while waiting for an open connection"
+    );
 }

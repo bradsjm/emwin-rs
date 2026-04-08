@@ -80,6 +80,18 @@ async fn openapi_json_lists_versioned_routes() {
     assert!(body_text.contains("\"min_lon\""));
     assert!(body_text.contains("\"max_lon\""));
     assert!(!body_text.contains("\"/events\""));
+
+    let body_json: serde_json::Value =
+        serde_json::from_str(&body_text).expect("body should parse as json");
+    let product_params = body_json["paths"]["/v1/products"]["get"]["parameters"]
+        .as_array()
+        .expect("products parameters should be an array");
+    assert!(
+        product_params
+            .iter()
+            .all(|param| param["name"] != "filters")
+    );
+    assert!(!body_text.contains("\"name\":\"filters\""));
 }
 
 #[tokio::test]

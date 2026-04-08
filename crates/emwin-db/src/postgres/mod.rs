@@ -35,6 +35,7 @@ mod write;
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 const INCIDENT_CHANGE_CHANNEL_CAPACITY: usize = 1024;
+pub const DEFAULT_MAX_DB_CONNECTIONS: u32 = 10;
 
 /// Connection settings for the Postgres/PostGIS metadata sink.
 #[derive(Debug, Clone)]
@@ -43,19 +44,19 @@ pub struct PostgresConfig {
     pub database_url: String,
     /// Application name reported to Postgres for observability.
     pub application_name: String,
-    /// Maximum pool size. Default remains `1` to preserve queue ordering.
+    /// Maximum pool size.
     pub max_connections: u32,
     /// Maximum time spent trying to establish the pool before failing.
     pub connect_timeout: Duration,
 }
 
 impl PostgresConfig {
-    /// Creates a config with conservative defaults for the single-worker runtime.
+    /// Creates a config with shared live/archive-safe defaults.
     pub fn new(database_url: impl Into<String>) -> Self {
         Self {
             database_url: database_url.into(),
             application_name: "emwin-db".to_string(),
-            max_connections: 1,
+            max_connections: DEFAULT_MAX_DB_CONNECTIONS,
             connect_timeout: Duration::from_secs(5),
         }
     }

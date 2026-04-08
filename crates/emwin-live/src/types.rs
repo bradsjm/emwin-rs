@@ -28,6 +28,7 @@ pub struct LiveOptions {
     pub quiet: bool,
     pub persistence_queue_capacity: usize,
     pub postgres_database_url: Option<String>,
+    pub max_db_connections: u32,
     pub file_retention_secs: u64,
     pub max_retained_files: usize,
 }
@@ -43,10 +44,13 @@ pub(crate) struct AppState {
     pub(crate) next_event_id: AtomicU64,
     pub(crate) next_incident_event_id: AtomicU64,
     pub(crate) data_blocks_total: AtomicU64,
+    pub(crate) archive_errors_total: AtomicU64,
+    pub(crate) archive_pool_timeouts_total: AtomicU64,
     pub(crate) received_servers: AtomicUsize,
     pub(crate) received_sat_servers: AtomicUsize,
     pub(crate) started_at: Instant,
     pub(crate) upstream_endpoint: Mutex<Option<String>>,
+    pub(crate) archive_last_error: Mutex<Option<String>>,
     pub(crate) quiet: bool,
 }
 
@@ -71,10 +75,13 @@ impl AppState {
             next_event_id: AtomicU64::new(1),
             next_incident_event_id: AtomicU64::new(1),
             data_blocks_total: AtomicU64::new(0),
+            archive_errors_total: AtomicU64::new(0),
+            archive_pool_timeouts_total: AtomicU64::new(0),
             received_servers: AtomicUsize::new(0),
             received_sat_servers: AtomicUsize::new(0),
             started_at: Instant::now(),
             upstream_endpoint: Mutex::new(None),
+            archive_last_error: Mutex::new(None),
             quiet,
         })
     }

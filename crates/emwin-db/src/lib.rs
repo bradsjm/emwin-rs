@@ -65,7 +65,7 @@ pub use archive_filter::{
 };
 pub use error::{PersistError, PersistResult};
 pub use metadata::CompletedFileMetadata;
-pub use postgres::{PostgresConfig, PostgresMetadataSink};
+pub use postgres::{DEFAULT_MAX_DB_CONNECTIONS, PostgresConfig, PostgresMetadataSink};
 pub use runtime::{
     EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest, PersistedRequest,
     PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,

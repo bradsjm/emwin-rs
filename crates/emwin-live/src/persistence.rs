@@ -39,12 +39,14 @@ pub(crate) async fn start_runtime_with_postgres(
     output_dir: String,
     queue_capacity: usize,
     postgres_database_url: Option<&str>,
+    max_db_connections: u32,
     application_name: &str,
 ) -> LiveResult<StartedPersistenceRuntime> {
     let writer = build_blob_writer(parse_storage_target(&output_dir)?)?;
     let (runtime, postgres_sink) = if let Some(database_url) = postgres_database_url {
         let mut config = PostgresConfig::new(database_url);
         config.application_name = application_name.to_string();
+        config.max_connections = max_db_connections.max(1);
         let sink = PostgresMetadataSink::new(config);
         (
             PersistenceRuntime::spawn(PersistenceConfig::new(queue_capacity), writer, sink.clone()),

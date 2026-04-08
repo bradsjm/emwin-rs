@@ -246,6 +246,39 @@ async fn feature_and_aggregate_endpoints_reject_invalid_bbox_queries() {
 }
 
 #[tokio::test]
+async fn archive_routes_parse_flat_numeric_filters_before_validation() {
+    let state = test_state_with_archive(10);
+    let app = build_router(state, None).expect("router should build");
+
+    for path in [
+        "/v1/products?lat=41.42",
+        "/v1/features?min_lat=41.0&max_lat=42.0&min_lon=-97.0",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .method("GET")
+                    .body(axum::body::Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let text = String::from_utf8(body.to_vec()).expect("body should be utf8");
+        assert!(
+            !text.contains("Failed to deserialize query string"),
+            "path={path} body={text}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn archive_routes_reject_invalid_boolean_filters() {
     let state = test_state_with_archive(10);
     let app = build_router(state, None).expect("router should build");
@@ -289,6 +322,48 @@ async fn archive_product_route_rejects_invalid_size_range() {
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body should read");
+    let text = String::from_utf8(body.to_vec()).expect("body should be utf8");
+    assert!(
+        text.contains("min_size must be less than or equal to max_size"),
+        "body={text}"
+    );
+}
+
+#[tokio::test]
+async fn archive_routes_reject_nested_filter_forms() {
+    let state = test_state_with_archive(10);
+    let app = build_router(state, None).expect("router should build");
+
+    for path in [
+        "/v1/products?filters.lat=41.42",
+        "/v1/features?filters[lat]=41.42",
+        "/v1/aggregates/facets?dimension=office&filters.office=KOAX",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .method("GET")
+                    .body(axum::body::Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let text = String::from_utf8(body.to_vec()).expect("body should be utf8");
+        assert!(
+            text.contains("unsupported nested archive filter parameter"),
+            "path={path} body={text}"
+        );
+    }
 }
 
 #[tokio::test]

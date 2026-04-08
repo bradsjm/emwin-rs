@@ -117,6 +117,7 @@ cargo run -p emwin-cli -- server --username you@example.com --bind 127.0.0.1:808
 cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out
 cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --post-process-archives false
 cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin
+cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin --max-db-connections 16
 cargo run -p emwin-cli -- server --username you@example.com --output-dir s3://my-bucket/emwin --persist-database-url postgres://localhost/emwin
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password 'secret'
 ```
@@ -156,6 +157,7 @@ Useful server flags:
 - `--max-clients 100` (cap concurrent SSE clients)
 - `--file-retention-secs 300` (in-memory completed-file TTL)
 - `--max-retained-files 1000` (in-memory completed-file capacity)
+- `--max-db-connections 10` (Postgres pool size for archive reads and persistence writes)
 - `--openapi-auth-token "secret-token"` (require `Authorization: Bearer <token>` on `/v1/*`)
 - `--cors-origin "*"` or `--cors-origin "https://your-ui.example"` (cross-origin browser clients can send `Authorization` when bearer auth is enabled)
 
@@ -194,10 +196,12 @@ Archive/incident notes:
 - `/v1/incidents`, `/v1/products/*`, and `/v1/issues/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
 - `/v1/incidents` exposes the mutable incident projection from the `incidents` table; `/v1/products/*` exposes persisted product records and raw payload retrieval.
 - `/v1/products`, `/v1/features`, and `/v1/aggregates/*` share the archive filter grammar, including `artifact_kind`.
+- Archive resource endpoints accept flat query parameters such as `office=MKX`, `lat=41.42`, and `source_timestamp_after=1775586000`; nested forms such as `filters.office=...` and `filters[office]=...` are rejected with `400`.
 - `/v1/streams/incidents` also requires `--persist-database-url`; it emits `incident_change` SSE frames only after incident projection writes or cleanup updates succeed in Postgres.
 - `/v1/streams/products` and `/v1/streams/incidents` are incremental streams, not durable replay logs.
 - Clients should fetch an initial snapshot from the corresponding resource endpoints, then attach the SSE stream.
 - `Last-Event-ID` is best-effort for short reconnect gaps only; if the server emits a lag warning or the client detects a gap, the client must resync from the resource endpoints.
+- `/v1/health` returns `status: "degraded"` and includes an `archive` status object when archive persistence is configured but archive access is failing.
 
 `/v1/streams/incidents` filter parameters:
 
@@ -251,6 +255,7 @@ Environment and `.env` support:
 - `.env` from the current working directory is loaded before CLI parsing.
 - CLI args override process env; process env overrides `.env`.
 - Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_OPENAPI_AUTH_TOKEN`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
+- `EMWIN_MAX_DB_CONNECTIONS` overrides the default Postgres pool size used by `server` when archive persistence is enabled.
 - `query` uses `EMWIN_DATABASE_URL` for direct archive reads from Postgres-backed metadata.
 - When `EMWIN_OUTPUT_DIR` uses `s3://bucket[/prefix]`, `emwin-db` resolves object-store settings from AWS-compatible environment variables: `AWS_ENDPOINT_URL` switches to a custom endpoint with path-style access, `AWS_REGION` or `AWS_DEFAULT_REGION` selects the region, and credentials come from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` plus the compatible metadata providers exposed by `rust-s3`.
 - Filters are CLI-only and are not loaded from environment variables.

@@ -37,6 +37,7 @@ Common live ingest options:
 - `--post-process-archives <true|false>` (default `true`; extracts the first entry from completed `.ZIP` and `.ZIS` products before parsing and delivery)
 - `--persist-queue-capacity <N>` (default `1024`; bounded async persistence queue, evicts oldest queued item when full)
 - `--persist-database-url <URL>` (optional; writes normalized metadata into Postgres/PostGIS while still storing payload blobs under `--output-dir`)
+- `--max-db-connections <N>` (default `10`; Postgres pool size used for archive reads and persistence writes)
 
 Live command: `server`
 
@@ -105,6 +106,7 @@ Supported environment variables include:
 - `EMWIN_OUTPUT_DIR`
 - `EMWIN_PERSIST_QUEUE_CAPACITY`
 - `EMWIN_PERSIST_DATABASE_URL`
+- `EMWIN_MAX_DB_CONNECTIONS`
 - `EMWIN_OPENAPI_AUTH_TOKEN`
 
 Filters are intentionally not configurable through environment variables.
@@ -137,6 +139,7 @@ Live mode:
 cargo run -p emwin-cli -- server --username you@example.com --bind 127.0.0.1:8080
 cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out
 cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin
+cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin --max-db-connections 16
 cargo run -p emwin-cli -- server --username you@example.com --output-dir s3://my-bucket/emwin --persist-database-url postgres://localhost/emwin
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password your-pass
 ```
@@ -158,6 +161,8 @@ Archive boolean filters accept only `true`, `false`, `1`, or `0`; any other non-
 request validation instead of being ignored.
 Archive size ranges also validate at request-build time; `min_size` must be less than or equal to
 `max_size`.
+Archive HTTP resource endpoints use the same flat query grammar as the README examples. Nested
+forms such as `filters.office=...` and `filters[office]=...` are rejected with `400`.
 `/v1/features`, `/v1/features/geojson`, and `/v1/aggregates/cells` apply spatial filters to each
 returned geometry or counted point, not just to product admission.
 
@@ -167,6 +172,7 @@ returned geometry or counted point, not just to product admission.
 - when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set, all `/v1/*` requests require `Authorization: Bearer <token>`
 - `/openapi.json` advertises bearer auth only when `--openapi-auth-token` or `EMWIN_OPENAPI_AUTH_TOKEN` is set
 - `GET /`, `GET /openapi.json`, and Swagger UI asset routes remain public when auth is enabled
+- `/v1/health` returns `status: "degraded"` and includes archive health details when archive persistence is configured but archive access is failing
 - `/v1/streams/incidents` streams `incident_change` SSE payloads for persisted incident projection changes; supported filters are `action`, `office`, `phenomena`, `significance`, `status`, and `etn`
 - `/v1/streams/products` streams `product_available` SSE payloads for completed products; supported filters match the parsed product metadata and spatial filter set documented below
 - Both SSE endpoints are incremental streams, not durable replay logs. Clients should fetch an initial snapshot from the resource endpoints, then attach the stream.

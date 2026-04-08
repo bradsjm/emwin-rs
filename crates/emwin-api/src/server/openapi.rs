@@ -4,14 +4,48 @@
 //! types presented to OpenAPI consumers.
 #![allow(dead_code)]
 
-use super::types::{OPENAPI_AUTH_SCHEME_NAME, OPENAPI_JSON_PATH};
+use super::types::{ArchiveFilterParams, OPENAPI_AUTH_SCHEME_NAME, OPENAPI_JSON_PATH};
 use utoipa::ToSchema;
+use utoipa::openapi::path::ParameterIn;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
-use utoipa::{Modify, OpenApi};
+use utoipa::{IntoParams, Modify, OpenApi};
+
+struct ArchiveFilterParamsFixup;
+
+impl Modify for ArchiveFilterParamsFixup {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let archive_filter_params = ArchiveFilterParams::into_params(|| Some(ParameterIn::Query));
+        for path in [
+            "/v1/products",
+            "/v1/features",
+            "/v1/features/geojson",
+            "/v1/aggregates/facets",
+            "/v1/aggregates/timeseries",
+            "/v1/aggregates/cells",
+        ] {
+            let Some(path_item) = openapi.paths.paths.get_mut(path) else {
+                continue;
+            };
+            let Some(operation) = path_item.get.as_mut() else {
+                continue;
+            };
+            let params = operation.parameters.get_or_insert_with(Vec::new);
+            params.retain(|param| param.name != "filters");
+            for archive_param in &archive_filter_params {
+                if params
+                    .iter()
+                    .all(|existing| existing.name != archive_param.name)
+                {
+                    params.push(archive_param.clone());
+                }
+            }
+        }
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
-    modifiers(&SecurityAddon),
+    modifiers(&SecurityAddon, &ArchiveFilterParamsFixup),
     paths(
         super::server_http::products_handler,
         super::server_http::features_handler,
@@ -59,6 +93,7 @@ use utoipa::{Modify, OpenApi};
             ArchiveIssuesResponseSchema,
             ArchiveIssueResponseSchema,
             ArchiveIssueSchema,
+            ArchiveStatusSchema,
             HealthResponseSchema,
             SseEventEnvelope,
         )
@@ -82,7 +117,7 @@ pub(crate) struct SecureApiDoc;
 
 #[derive(OpenApi)]
 #[openapi(
-    modifiers(&PublicSecurityRemover),
+    modifiers(&PublicSecurityRemover, &ArchiveFilterParamsFixup),
     paths(
         super::server_http::products_handler,
         super::server_http::features_handler,
@@ -130,6 +165,7 @@ pub(crate) struct SecureApiDoc;
             ArchiveIssuesResponseSchema,
             ArchiveIssueResponseSchema,
             ArchiveIssueSchema,
+            ArchiveStatusSchema,
             HealthResponseSchema,
             SseEventEnvelope,
         )
@@ -622,6 +658,7 @@ pub(crate) struct ArchiveProductDetailSchema {
 pub(crate) struct HealthResponseSchema {
     #[schema(example = "ok")]
     pub(crate) status: String,
+    pub(crate) archive: ArchiveStatusSchema,
     #[schema(example = 2)]
     pub(crate) connected_clients: usize,
     #[schema(example = 17)]
@@ -630,6 +667,20 @@ pub(crate) struct HealthResponseSchema {
     pub(crate) uptime_secs: u64,
     #[schema(example = "wxmesg.upstateweather.com:2211")]
     pub(crate) upstream_endpoint: Option<String>,
+}
+
+#[derive(Debug, ToSchema)]
+pub(crate) struct ArchiveStatusSchema {
+    #[schema(example = true)]
+    pub(crate) configured: bool,
+    #[schema(example = true)]
+    pub(crate) healthy: bool,
+    #[schema(example = 3)]
+    pub(crate) errors_total: u64,
+    #[schema(example = 1)]
+    pub(crate) pool_timeouts_total: u64,
+    #[schema(example = "pool timed out while waiting for an open connection")]
+    pub(crate) last_error: Option<String>,
 }
 
 pub(crate) fn openapi_json(auth_enabled: bool) -> utoipa::openapi::OpenApi {

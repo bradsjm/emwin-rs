@@ -84,6 +84,14 @@ enum Commands {
         /// Optional Postgres metadata sink URL used alongside --output-dir blob storage.
         #[arg(long, env = "EMWIN_PERSIST_DATABASE_URL")]
         persist_database_url: Option<String>,
+        /// Maximum Postgres connections used for archive metadata access and persistence.
+        #[arg(
+            long,
+            env = "EMWIN_MAX_DB_CONNECTIONS",
+            default_value_t = emwin_db::DEFAULT_MAX_DB_CONNECTIONS,
+            value_parser = clap::value_parser!(u32).range(1..)
+        )]
+        max_db_connections: u32,
         /// Optional Bearer token required for versioned HTTP and SSE API routes.
         #[arg(long, env = "EMWIN_OPENAPI_AUTH_TOKEN")]
         openapi_auth_token: Option<String>,
@@ -150,6 +158,7 @@ async fn main() -> crate::error::CliResult<()> {
             quiet,
             persist_queue_capacity,
             persist_database_url,
+            max_db_connections,
             openapi_auth_token,
         } => {
             let live = emwin_live::LiveRuntime::start(emwin_live::LiveOptions {
@@ -163,6 +172,7 @@ async fn main() -> crate::error::CliResult<()> {
                 quiet,
                 persistence_queue_capacity: persist_queue_capacity,
                 postgres_database_url: persist_database_url,
+                max_db_connections,
                 file_retention_secs,
                 max_retained_files,
             })
@@ -395,6 +405,8 @@ mod tests {
                     "55",
                     "--persist-database-url",
                     "postgres://localhost/emwin",
+                    "--max-db-connections",
+                    "16",
                     "--openapi-auth-token",
                     "secret-token",
                 ]
@@ -402,6 +414,7 @@ mod tests {
                 Some("./out"),
                 Some(55usize),
                 Some("postgres://localhost/emwin"),
+                Some(16u32),
                 Some("secret-token"),
             ),
             (
@@ -418,17 +431,25 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ),
         ];
 
-        for (args, expected_output_dir, expected_capacity, expected_database_url, expected_token) in
-            server_cases
+        for (
+            args,
+            expected_output_dir,
+            expected_capacity,
+            expected_database_url,
+            expected_max_db_connections,
+            expected_token,
+        ) in server_cases
         {
             let cli = Cli::try_parse_from(args).expect("server args should parse");
             let Commands::Server {
                 output_dir,
                 persist_queue_capacity,
                 persist_database_url,
+                max_db_connections,
                 openapi_auth_token,
                 ..
             } = cli.command
@@ -441,6 +462,9 @@ mod tests {
                 assert_eq!(persist_queue_capacity, capacity);
             }
             assert_eq!(persist_database_url.as_deref(), expected_database_url);
+            if let Some(expected_max_db_connections) = expected_max_db_connections {
+                assert_eq!(max_db_connections, expected_max_db_connections);
+            }
             assert_eq!(openapi_auth_token.as_deref(), expected_token);
         }
 
@@ -495,6 +519,31 @@ mod tests {
                 "incidents",
                 "--updated-after",
                 "not-a-timestamp",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn server_defaults_and_validates_max_db_connections() {
+        let cli = Cli::try_parse_from(["emwin", "server", "--username", "test@example.com"])
+            .expect("server args should parse");
+        let Commands::Server {
+            max_db_connections, ..
+        } = cli.command
+        else {
+            panic!("expected server command");
+        };
+        assert_eq!(max_db_connections, emwin_db::DEFAULT_MAX_DB_CONNECTIONS);
+
+        assert!(
+            Cli::try_parse_from([
+                "emwin",
+                "server",
+                "--username",
+                "test@example.com",
+                "--max-db-connections",
+                "0",
             ])
             .is_err()
         );
