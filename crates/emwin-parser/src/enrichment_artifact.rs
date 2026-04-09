@@ -6,6 +6,7 @@ use crate::{
     SelBulletin, SigmetBulletin, SpcOutlookBulletin, TafBulletin, WwpBulletin,
 };
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,6 +33,55 @@ pub enum ProductArtifact {
 }
 
 impl ProductArtifact {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Metar(_) => "metar",
+            Self::Taf(_) => "taf",
+            Self::Dcp(_) => "dcp",
+            Self::Fd(_) => "fd",
+            Self::Pirep(_) => "pirep",
+            Self::Sigmet(_) => "sigmet",
+            Self::Lsr(_) => "lsr",
+            Self::Cli(_) => "cli",
+            Self::Cwa(_) => "cwa",
+            Self::Wwp(_) => "wwp",
+            Self::Saw(_) => "saw",
+            Self::Sel(_) => "sel",
+            Self::Cf6(_) => "cf6",
+            Self::Dsm(_) => "dsm",
+            Self::Hml(_) => "hml",
+            Self::Mos(_) => "mos",
+            Self::Mcd(_) => "mcd",
+            Self::Ero(_) => "ero",
+            Self::SpcOutlook(_) => "spc_outlook",
+        }
+    }
+
+    pub fn detail_json(&self) -> Value {
+        match self {
+            Self::Metar(value) => serde_json::to_value(value),
+            Self::Taf(value) => serde_json::to_value(value),
+            Self::Dcp(value) => serde_json::to_value(value),
+            Self::Fd(value) => serde_json::to_value(value),
+            Self::Pirep(value) => serde_json::to_value(value),
+            Self::Sigmet(value) => serde_json::to_value(value),
+            Self::Lsr(value) => serde_json::to_value(value),
+            Self::Cli(value) => serde_json::to_value(value),
+            Self::Cwa(value) => serde_json::to_value(value),
+            Self::Wwp(value) => serde_json::to_value(value),
+            Self::Saw(value) => serde_json::to_value(value),
+            Self::Sel(value) => serde_json::to_value(value),
+            Self::Cf6(value) => serde_json::to_value(value),
+            Self::Dsm(value) => serde_json::to_value(value),
+            Self::Hml(value) => serde_json::to_value(value),
+            Self::Mos(value) => serde_json::to_value(value),
+            Self::Mcd(value) => serde_json::to_value(value),
+            Self::Ero(value) => serde_json::to_value(value),
+            Self::SpcOutlook(value) => serde_json::to_value(value),
+        }
+        .unwrap_or(Value::Null)
+    }
+
     pub fn as_metar(&self) -> Option<&MetarBulletin> {
         match self {
             Self::Metar(value) => Some(value),

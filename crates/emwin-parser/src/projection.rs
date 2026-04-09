@@ -154,7 +154,7 @@ pub fn summarize_product_v2(product: &ProductEnrichment) -> ProductSummaryV2 {
         schema_version: SCHEMA_VERSION_V2,
         source: product.source,
         family: product.family,
-        artifact_kind: product.parsed.as_ref().map(product_artifact_kind),
+        artifact_kind: product.parsed.as_ref().map(ProductArtifact::kind),
         title: product.title,
         container: product.container,
         pil: product.pil.clone(),
@@ -177,7 +177,7 @@ pub fn detail_product_v2(product: &ProductEnrichment) -> ProductDetailV2 {
         schema_version: SCHEMA_VERSION_V2,
         source: product.source,
         family: product.family,
-        artifact_kind: product.parsed.as_ref().map(product_artifact_kind),
+        artifact_kind: product.parsed.as_ref().map(ProductArtifact::kind),
         title: product.title,
         container: product.container,
         pil: product.pil.clone(),
@@ -221,54 +221,9 @@ fn project_header(product: &ProductEnrichment) -> Option<ProductHeaderV2> {
         })
 }
 
-fn product_artifact_kind(artifact: &ProductArtifact) -> &'static str {
-    match artifact {
-        ProductArtifact::Metar(_) => "metar",
-        ProductArtifact::Taf(_) => "taf",
-        ProductArtifact::Dcp(_) => "dcp",
-        ProductArtifact::Fd(_) => "fd",
-        ProductArtifact::Pirep(_) => "pirep",
-        ProductArtifact::Sigmet(_) => "sigmet",
-        ProductArtifact::Lsr(_) => "lsr",
-        ProductArtifact::Cli(_) => "cli",
-        ProductArtifact::Cwa(_) => "cwa",
-        ProductArtifact::Wwp(_) => "wwp",
-        ProductArtifact::Saw(_) => "saw",
-        ProductArtifact::Sel(_) => "sel",
-        ProductArtifact::Cf6(_) => "cf6",
-        ProductArtifact::Dsm(_) => "dsm",
-        ProductArtifact::Hml(_) => "hml",
-        ProductArtifact::Mos(_) => "mos",
-        ProductArtifact::Mcd(_) => "mcd",
-        ProductArtifact::Ero(_) => "ero",
-        ProductArtifact::SpcOutlook(_) => "spc_outlook",
-    }
-}
-
 fn project_artifact_detail(artifact: &ProductArtifact) -> ProductArtifactDetailV2 {
-    let kind = product_artifact_kind(artifact);
-    let mut data = match artifact {
-        ProductArtifact::Metar(value) => serde_json::to_value(value),
-        ProductArtifact::Taf(value) => serde_json::to_value(value),
-        ProductArtifact::Dcp(value) => serde_json::to_value(value),
-        ProductArtifact::Fd(value) => serde_json::to_value(value),
-        ProductArtifact::Pirep(value) => serde_json::to_value(value),
-        ProductArtifact::Sigmet(value) => serde_json::to_value(value),
-        ProductArtifact::Lsr(value) => serde_json::to_value(value),
-        ProductArtifact::Cli(value) => serde_json::to_value(value),
-        ProductArtifact::Cwa(value) => serde_json::to_value(value),
-        ProductArtifact::Wwp(value) => serde_json::to_value(value),
-        ProductArtifact::Saw(value) => serde_json::to_value(value),
-        ProductArtifact::Sel(value) => serde_json::to_value(value),
-        ProductArtifact::Cf6(value) => serde_json::to_value(value),
-        ProductArtifact::Dsm(value) => serde_json::to_value(value),
-        ProductArtifact::Hml(value) => serde_json::to_value(value),
-        ProductArtifact::Mos(value) => serde_json::to_value(value),
-        ProductArtifact::Mcd(value) => serde_json::to_value(value),
-        ProductArtifact::Ero(value) => serde_json::to_value(value),
-        ProductArtifact::SpcOutlook(value) => serde_json::to_value(value),
-    }
-    .unwrap_or(Value::Null);
+    let kind = artifact.kind();
+    let mut data = artifact.detail_json();
     strip_raw_fields(&mut data);
 
     ProductArtifactDetailV2 { kind, data }

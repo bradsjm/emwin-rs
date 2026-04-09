@@ -10,12 +10,28 @@ use crate::{
     WindHailEntry, WindHailKind, parse_vtec_codes_with_issues,
 };
 use chrono::{DateTime, Utc};
-use quick_xml::Reader;
-use quick_xml::events::Event;
+use quick_xml::de::from_str;
+use serde::Deserialize;
 
 #[derive(Debug, Default)]
 struct CapAlert {
     infos: Vec<CapInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CapAlertXml {
+    #[serde(rename = "info", default)]
+    infos: Vec<CapInfoXml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CapInfoXml {
+    #[serde(default)]
+    expires: Option<String>,
+    #[serde(rename = "parameter", default)]
+    parameters: Vec<CapValuePairXml>,
+    #[serde(rename = "area", default)]
+    areas: Vec<CapAreaXml>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -31,8 +47,23 @@ struct CapArea {
     geocodes: Vec<CapValuePair>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CapAreaXml {
+    #[serde(default)]
+    polygon: Option<String>,
+    #[serde(rename = "geocode", default)]
+    geocodes: Vec<CapValuePairXml>,
+}
+
 #[derive(Debug, Default, Clone)]
 struct CapValuePair {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CapValuePairXml {
+    #[serde(rename = "valueName")]
     name: String,
     value: String,
 }
@@ -75,103 +106,50 @@ fn extract_cap_xml(text: &str) -> Option<String> {
 }
 
 fn parse_cap_alert(xml: &str) -> Result<CapAlert, ProductParseIssue> {
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    let alert_xml: CapAlertXml = from_str(xml).map_err(|error| {
+        ProductParseIssue::new(
+            "cap_parse",
+            "invalid_cap_xml",
+            format!("could not parse CAP XML payload: {error}"),
+            None,
+        )
+    })?;
 
-    let mut buf = Vec::new();
-    let mut alert = CapAlert::default();
-    let mut current_info: Option<CapInfo> = None;
-    let mut current_area: Option<CapArea> = None;
-    let mut current_value_name: Option<String> = None;
-    let mut current_pair_value: Option<String> = None;
-    let mut current_tag: Option<String> = None;
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(event)) => {
-                let name = String::from_utf8_lossy(event.local_name().as_ref()).to_string();
-                match name.as_str() {
-                    "info" => current_info = Some(CapInfo::default()),
-                    "area" => current_area = Some(CapArea::default()),
-                    "parameter" | "geocode" => {
-                        current_value_name = None;
-                        current_pair_value = None;
-                    }
-                    "expires" | "polygon" | "valueName" | "value" => {
-                        current_tag = Some(name);
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::Text(text)) => {
-                let value = String::from_utf8_lossy(text.as_ref()).trim().to_string();
-                match current_tag.as_deref() {
-                    Some("expires") => {
-                        if let Some(info) = current_info.as_mut() {
-                            info.expires = parse_cap_time(&value);
-                        }
-                    }
-                    Some("polygon") => {
-                        if let Some(area) = current_area.as_mut() {
-                            area.polygon = (!value.is_empty()).then_some(value);
-                        }
-                    }
-                    Some("valueName") => current_value_name = Some(value),
-                    Some("value") => current_pair_value = Some(value),
-                    _ => {}
-                }
-            }
-            Ok(Event::End(event)) => {
-                let name = String::from_utf8_lossy(event.local_name().as_ref()).to_string();
-                match name.as_str() {
-                    "valueName" | "value" | "expires" | "polygon" => current_tag = None,
-                    "parameter" => {
-                        if let (Some(info), Some(name), Some(value)) = (
-                            current_info.as_mut(),
-                            current_value_name.take(),
-                            current_pair_value.take(),
-                        ) {
-                            info.parameters.push(CapValuePair { name, value });
-                        }
-                    }
-                    "geocode" => {
-                        if let (Some(area), Some(name), Some(value)) = (
-                            current_area.as_mut(),
-                            current_value_name.take(),
-                            current_pair_value.take(),
-                        ) {
-                            area.geocodes.push(CapValuePair { name, value });
-                        }
-                    }
-                    "area" => {
-                        if let (Some(info), Some(area)) =
-                            (current_info.as_mut(), current_area.take())
-                        {
-                            info.areas.push(area);
-                        }
-                    }
-                    "info" => {
-                        if let Some(info) = current_info.take() {
-                            alert.infos.push(info);
-                        }
-                    }
-                    "alert" => break,
-                    _ => {}
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(error) => {
-                return Err(ProductParseIssue::new(
-                    "cap_parse",
-                    "invalid_cap_xml",
-                    format!("could not parse CAP XML payload: {error}"),
-                    None,
-                ));
-            }
-            _ => {}
-        }
-        buf.clear();
-    }
+    let alert = CapAlert {
+        infos: alert_xml
+            .infos
+            .into_iter()
+            .map(|info| CapInfo {
+                expires: info.expires.as_deref().and_then(parse_cap_time),
+                parameters: info
+                    .parameters
+                    .into_iter()
+                    .map(|pair| CapValuePair {
+                        name: pair.name,
+                        value: pair.value,
+                    })
+                    .collect(),
+                areas: info
+                    .areas
+                    .into_iter()
+                    .map(|area| CapArea {
+                        polygon: area.polygon.and_then(|polygon| {
+                            let trimmed = polygon.trim().to_string();
+                            (!trimmed.is_empty()).then_some(trimmed)
+                        }),
+                        geocodes: area
+                            .geocodes
+                            .into_iter()
+                            .map(|pair| CapValuePair {
+                                name: pair.name,
+                                value: pair.value,
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    };
 
     if alert.infos.is_empty() {
         return Err(ProductParseIssue::new(

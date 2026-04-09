@@ -27,11 +27,8 @@ use crate::qbt_receiver::error::{QbtReceiverError, QbtReceiverResult};
 use crate::qbt_receiver::protocol::model::QbtServerList;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::collections::hash_map::RandomState;
 use std::fs;
-use std::hash::{BuildHasher, Hasher};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
 pub struct ServerListManager {
@@ -39,7 +36,6 @@ pub struct ServerListManager {
     current: QbtServerList,
     primary_available: VecDeque<(String, u16)>,
     satellite_available: VecDeque<(String, u16)>,
-    shuffle_nonce: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +55,6 @@ impl ServerListManager {
             },
             primary_available: VecDeque::new(),
             satellite_available: VecDeque::new(),
-            shuffle_nonce: entropy_seed(),
         };
         manager.rebuild_available();
         manager
@@ -134,46 +129,14 @@ impl ServerListManager {
         sort_dedup_endpoints(&mut primary);
         sort_dedup_endpoints(&mut satellite);
 
-        self.shuffle_nonce ^= entropy_seed();
-        self.shuffle_endpoints(&mut primary);
-        self.shuffle_endpoints(&mut satellite);
-
         self.primary_available = VecDeque::from(primary);
         self.satellite_available = VecDeque::from(satellite);
-    }
-
-    fn shuffle_endpoints(&mut self, endpoints: &mut [(String, u16)]) {
-        if endpoints.len() < 2 {
-            return;
-        }
-
-        self.shuffle_nonce = self.shuffle_nonce.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut state = self.shuffle_nonce ^ endpoints.len() as u64;
-
-        for idx in (1..endpoints.len()).rev() {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            let swap_idx = (state as usize) % (idx + 1);
-            endpoints.swap(idx, swap_idx);
-        }
     }
 }
 
 fn sort_dedup_endpoints(endpoints: &mut Vec<(String, u16)>) {
     endpoints.sort_unstable();
     endpoints.dedup();
-}
-
-fn entropy_seed() -> u64 {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos() as u64)
-        .unwrap_or(0);
-    let mut hasher = RandomState::new().build_hasher();
-    hasher.write_u64(nanos);
-    hasher.write_u64(std::process::id() as u64);
-    hasher.finish()
 }
 
 fn save_atomic(path: &Path, server_list: &QbtServerList) -> QbtReceiverResult<()> {

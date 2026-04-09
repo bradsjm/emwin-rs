@@ -13,8 +13,6 @@ use crate::qbt_receiver::protocol::model::{
 };
 use crate::qbt_receiver::protocol::server_list::parse_server_list_frame;
 use bytes::{Bytes, BytesMut};
-use regex::Regex;
-use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::PrimitiveDateTime;
 use time::macros::format_description;
@@ -386,21 +384,12 @@ impl QbtFrameDecoder for QbtProtocolDecoder {
 fn parse_header(input: &[u8], max_v2_body_size: usize) -> Result<PendingSegment, QbtProtocolError> {
     let header =
         std::str::from_utf8(input).map_err(|e| QbtProtocolError::InvalidUtf8(e.to_string()))?;
-    let captures = header_regex()
-        .captures(header)
-        .ok_or(QbtProtocolError::InvalidHeader)?;
-
-    let filename = captures
-        .name("pf")
-        .map(|m| m.as_str().to_string())
-        .ok_or(QbtProtocolError::MissingField("/PF"))?;
-    let block_number = capture_u32(&captures, "pn", "/PN")?;
-    let total_blocks = capture_u32(&captures, "pt", "/PT")?;
-    let checksum = capture_u32(&captures, "cs", "/CS")?;
-    let fd = captures
-        .name("fd")
-        .map(|m| m.as_str())
-        .ok_or(QbtProtocolError::MissingField("/FD"))?;
+    let header = header.trim_end_matches([' ', '\r', '\n']);
+    let (filename, rest) = parse_tag_value(header, "/PF")?;
+    let (block_number, rest) = parse_numeric_tag(rest, "/PN")?;
+    let (total_blocks, rest) = parse_numeric_tag(rest, "/PT")?;
+    let (checksum, rest) = parse_numeric_tag(rest, "/CS")?;
+    let (fd, rest) = parse_tag_value(rest, "/FD")?;
 
     let (timestamp_utc, warnings) = match parse_fd_timestamp(fd) {
         Some(ts) => (ts, Vec::new()),
@@ -412,7 +401,16 @@ fn parse_header(input: &[u8], max_v2_body_size: usize) -> Result<PendingSegment,
         ),
     };
 
-    let dl = capture_optional_u32(&captures, "dl")?;
+    let rest = rest.trim();
+    let dl = if rest.is_empty() {
+        None
+    } else {
+        let (dl, trailing): (u32, &str) = parse_numeric_tag(rest, "/DL")?;
+        if !trailing.trim().is_empty() {
+            return Err(QbtProtocolError::InvalidHeader);
+        }
+        Some(dl)
+    };
     let (version, length) = if let Some(dl) = dl {
         let len =
             usize::try_from(dl).map_err(|_| QbtProtocolError::InvalidBodyLength(dl as usize))?;
@@ -425,7 +423,7 @@ fn parse_header(input: &[u8], max_v2_body_size: usize) -> Result<PendingSegment,
     };
 
     Ok(PendingSegment {
-        filename,
+        filename: filename.to_string(),
         block_number,
         total_blocks,
         checksum,
@@ -436,6 +434,34 @@ fn parse_header(input: &[u8], max_v2_body_size: usize) -> Result<PendingSegment,
         warnings,
         decompression_failed: false,
     })
+}
+
+fn parse_tag_value<'a>(
+    input: &'a str,
+    tag: &'static str,
+) -> Result<(&'a str, &'a str), QbtProtocolError> {
+    let rest = input
+        .strip_prefix(tag)
+        .ok_or(QbtProtocolError::MissingField(tag))?;
+    let rest = rest.trim_start();
+    let next_tag = rest.find(" /").map(|idx| idx + 1).unwrap_or(rest.len());
+    let (value, remainder) = rest.split_at(next_tag);
+    let value = value.trim_end();
+    if value.is_empty() {
+        return Err(QbtProtocolError::InvalidHeader);
+    }
+    Ok((value, remainder))
+}
+
+fn parse_numeric_tag<'a>(
+    input: &'a str,
+    tag: &'static str,
+) -> Result<(u32, &'a str), QbtProtocolError> {
+    let (value, rest) = parse_tag_value(input, tag)?;
+    let parsed = value
+        .parse::<u32>()
+        .map_err(|_| QbtProtocolError::InvalidHeader)?;
+    Ok((parsed, rest))
 }
 
 fn parse_fd_timestamp(fd: &str) -> Option<SystemTime> {
@@ -452,40 +478,6 @@ fn parse_fd_timestamp(fd: &str) -> Option<SystemTime> {
     } else {
         Some(UNIX_EPOCH - Duration::new(seconds.unsigned_abs(), nanos))
     }
-}
-
-fn header_regex() -> &'static Regex {
-    static HEADER_RE: OnceLock<Regex> = OnceLock::new();
-    HEADER_RE.get_or_init(|| {
-        Regex::new(r"^/PF(?P<pf>[A-Za-z0-9._-]+)\s*/PN\s*(?P<pn>[0-9]+)\s*/PT\s*(?P<pt>[0-9]+)\s*/CS\s*(?P<cs>[0-9]+)\s*/FD(?P<fd>[0-9/: ]+[AP]M)\s*(?:/DL(?P<dl>[0-9]+)\s*)?\r\n\s*$")
-            .expect("header regex must compile")
-    })
-}
-
-fn capture_u32(
-    caps: &regex::Captures<'_>,
-    group: &str,
-    field_tag: &'static str,
-) -> Result<u32, QbtProtocolError> {
-    caps.name(group)
-        .ok_or(QbtProtocolError::MissingField(field_tag))?
-        .as_str()
-        .parse::<u32>()
-        .map_err(|_| QbtProtocolError::InvalidHeader)
-}
-
-fn capture_optional_u32(
-    caps: &regex::Captures<'_>,
-    group: &str,
-) -> Result<Option<u32>, QbtProtocolError> {
-    let Some(value) = caps.name(group) else {
-        return Ok(None);
-    };
-    value
-        .as_str()
-        .parse::<u32>()
-        .map(Some)
-        .map_err(|_| QbtProtocolError::InvalidHeader)
 }
 
 fn is_text_or_wmo(filename: &str) -> bool {

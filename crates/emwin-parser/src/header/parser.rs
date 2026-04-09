@@ -7,9 +7,7 @@ use crate::time::resolve_day_time_nearest;
 use bstr::ByteSlice;
 use chrono::{DateTime, Utc};
 use memchr::memchr_iter;
-use regex::Regex;
 use serde::Serialize;
-use std::sync::OnceLock;
 use thiserror::Error;
 
 /// Parsed WMO header for products that do not expose an AFOS PIL.
@@ -247,46 +245,18 @@ fn offset_after_n_lines(text: &str, lines_to_skip: usize) -> Option<usize> {
 
 /// Parses the WMO line from the conditioned bulletin text.
 fn parse_wmo(text: &str) -> Result<WmoHeaderRef<'_>, ParserError> {
-    let search_window = text.get(..100).unwrap_or(text);
-    let captures =
-        wmo_re()
-            .captures(search_window)
-            .ok_or_else(|| ParserError::InvalidWmoHeader {
-                line: nth_line(text, 1).unwrap_or_default().to_string(),
-            })?;
-
-    Ok(WmoHeaderRef {
-        ttaaii: captures
-            .name("ttaaii")
-            .map(|m| m.as_str())
-            .unwrap_or_default(),
-        cccc: captures
-            .name("cccc")
-            .map(|m| m.as_str())
-            .unwrap_or_default(),
-        ddhhmm: captures
-            .name("ddhhmm")
-            .map(|m| m.as_str())
-            .unwrap_or_default(),
-        bbb: captures.name("bbb").map(|m| m.as_str()),
+    let line = nth_line(text, 1).ok_or(ParserError::MissingWmoLine)?;
+    parse_wmo_line(line).ok_or_else(|| ParserError::InvalidWmoHeader {
+        line: line.to_string(),
     })
 }
 
 /// Parses the AFOS PIL from the third logical line of the conditioned text.
 fn parse_afos(text: &str) -> Result<&str, ParserError> {
     let line3 = nth_line(text, 2).ok_or(ParserError::MissingAfosLine)?;
-    let captures = afos_re()
-        .captures(line3)
-        .ok_or_else(|| ParserError::MissingAfos {
-            line: line3.to_string(),
-        })?;
-    let afos =
-        captures
-            .get(1)
-            .map(|m| m.as_str().trim())
-            .ok_or_else(|| ParserError::MissingAfos {
-                line: line3.to_string(),
-            })?;
+    let afos = parse_afos_line(line3).ok_or_else(|| ParserError::MissingAfos {
+        line: line3.to_string(),
+    })?;
     Ok(afos)
 }
 
@@ -318,7 +288,7 @@ fn condition_text(input: &str) -> Result<String, ParserError> {
         text = &text[..text.len() - '\u{3}'.len_utf8()];
     }
 
-    let needs_ldm = !ldm_sequence_re().is_match(text);
+    let needs_ldm = !has_ldm_sequence(text);
     let mut conditioned = String::with_capacity(text.len() + usize::from(needs_ldm) * 5 + 1);
     if needs_ldm {
         conditioned.push_str("000 \n");
@@ -326,7 +296,7 @@ fn condition_text(input: &str) -> Result<String, ParserError> {
     conditioned.push_str(text);
 
     let line2 = nth_line(&conditioned, 1).ok_or(ParserError::MissingWmoLine)?;
-    if !wmo_re().is_match(line2) {
+    if parse_wmo_line(line2).is_none() {
         return Err(ParserError::InvalidWmoHeader {
             line: line2.to_string(),
         });
@@ -370,27 +340,78 @@ fn nth_line(text: &str, index: usize) -> Option<&str> {
     text.lines().nth(index)
 }
 
-/// Detects the optional LDM sequence line that precedes the WMO header.
-fn ldm_sequence_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^\d\d\d\s?").expect("ldm sequence regex compiles"))
-}
+fn parse_wmo_line(line: &str) -> Option<WmoHeaderRef<'_>> {
+    let trimmed = line.trim();
+    let mut parts = trimmed.split_whitespace();
+    let ttaaii = parts.next()?;
+    let cccc = parts.next()?;
+    let ddhhmm = parts.next()?;
+    let bbb = parts.next();
 
-/// Parses the WMO header line after conditioning.
-fn wmo_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r"(?m)^(?P<ttaaii>[A-Z0-9]{4,6}) (?P<cccc>[A-Z]{4}) (?P<ddhhmm>[0-3][0-9][0-2][0-9][0-5][0-9])\s*(?P<bbb>[ACR][ACMORT][A-Z])?\s*$",
-        )
-        .expect("wmo regex compiles")
+    if parts.next().is_some()
+        || !(4..=6).contains(&ttaaii.len())
+        || !ttaaii
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
+        || cccc.len() != 4
+        || !cccc.chars().all(|ch| ch.is_ascii_uppercase())
+        || !is_valid_ddhhmm(ddhhmm)
+        || bbb.is_some_and(|value| !is_valid_bbb(value))
+    {
+        return None;
+    }
+
+    Some(WmoHeaderRef {
+        ttaaii,
+        cccc,
+        ddhhmm,
+        bbb,
     })
 }
 
-/// Parses the AFOS PIL line after conditioning.
-fn afos_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^([A-Z0-9]{4,6})\s*\t*$").expect("afos regex compiles"))
+fn parse_afos_line(line: &str) -> Option<&str> {
+    let trimmed = line.trim_end_matches([' ', '\t']);
+    if !(4..=6).contains(&trimmed.len()) {
+        return None;
+    }
+    trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
+        .then_some(trimmed)
+}
+
+/// Detects the optional LDM sequence line that precedes the WMO header.
+fn has_ldm_sequence(text: &str) -> bool {
+    text.as_bytes()
+        .get(0..3)
+        .is_some_and(|prefix| prefix.iter().all(u8::is_ascii_digit))
+        && text
+            .as_bytes()
+            .get(3)
+            .is_some_and(|byte| matches!(byte, b' ' | b'\n'))
+}
+
+fn is_valid_ddhhmm(value: &str) -> bool {
+    if value.len() != 6 || !value.chars().all(|ch| ch.is_ascii_digit()) {
+        return false;
+    }
+
+    let day = value[0..2].parse::<u32>().ok();
+    let hour = value[2..4].parse::<u32>().ok();
+    let minute = value[4..6].parse::<u32>().ok();
+
+    matches!(
+        (day, hour, minute),
+        (Some(1..=31), Some(0..=23), Some(0..=59))
+    )
+}
+
+fn is_valid_bbb(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 3
+        && matches!(bytes[0], b'A' | b'C' | b'R')
+        && matches!(bytes[1], b'A' | b'C' | b'M' | b'O' | b'R' | b'T')
+        && bytes[2].is_ascii_uppercase()
 }
 
 #[cfg(test)]

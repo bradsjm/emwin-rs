@@ -8,6 +8,7 @@ use sqlx::FromRow;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
+use strum::{Display, IntoStaticStr};
 use tokio::sync::broadcast;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -182,8 +183,21 @@ pub struct ProductCursor {
     pub product_id: i64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Display,
+    IntoStaticStr,
+)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum FeatureKind {
     Polygon,
     TimeMotLocPath,
@@ -194,13 +208,7 @@ pub enum FeatureKind {
 
 impl FeatureKind {
     pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Polygon => "polygon",
-            Self::TimeMotLocPath => "time_mot_loc_path",
-            Self::UgcPoint => "ugc_point",
-            Self::HvtecPoint => "hvtec_point",
-            Self::SearchPoint => "search_point",
-        }
+        self.into()
     }
 
     pub fn ordinal(self) -> i16 {
@@ -218,7 +226,7 @@ impl FromStr for FeatureKind {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        match value.trim() {
             "polygon" => Ok(Self::Polygon),
             "time_mot_loc_path" => Ok(Self::TimeMotLocPath),
             "ugc_point" => Ok(Self::UgcPoint),
@@ -421,8 +429,9 @@ pub struct FeatureListQuery {
     pub kind: Option<FeatureKind>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, IntoStaticStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum FacetDimension {
     Office,
     Family,
@@ -453,7 +462,7 @@ impl FromStr for FacetDimension {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        match value.trim() {
             "office" => Ok(Self::Office),
             "family" => Ok(Self::Family),
             "artifact_kind" => Ok(Self::ArtifactKind),
@@ -474,8 +483,9 @@ pub struct FacetAggregateQuery {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, IntoStaticStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum TimeseriesMeasure {
     ProductCount,
     IssueCount,
@@ -496,7 +506,7 @@ impl FromStr for TimeseriesMeasure {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        match value.trim() {
             "product_count" => Ok(Self::ProductCount),
             "issue_count" => Ok(Self::IssueCount),
             "incident_count" => Ok(Self::IncidentCount),
@@ -505,8 +515,9 @@ impl FromStr for TimeseriesMeasure {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, IntoStaticStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum TimeseriesBucket {
     Hour,
     Day,
@@ -543,7 +554,7 @@ impl FromStr for TimeseriesBucket {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        match value.trim() {
             "hour" => Ok(Self::Hour),
             "day" => Ok(Self::Day),
             "week" => Ok(Self::Week),
@@ -561,8 +572,9 @@ pub struct TimeseriesAggregateQuery {
     pub bucket: TimeseriesBucket,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, IntoStaticStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum CellMeasure {
     ProductCount,
 }
@@ -579,7 +591,7 @@ impl FromStr for CellMeasure {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        match value.trim() {
             "product_count" => Ok(Self::ProductCount),
             _ => Err(format!("invalid cell measure `{value}`")),
         }
