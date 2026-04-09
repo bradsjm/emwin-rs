@@ -138,7 +138,7 @@ Offset (decoded stream)
  sync6     header (80 bytes)         body (V1=1024, V2=/DL)   optional suffix6
 
 sync6            : 00 00 00 00 00 00
-header           : ASCII, must parse via header regex
+header           : ASCII, must satisfy the fixed-width decoder grammar
 body             : raw payload bytes (may be zlib-compressed for V2)
 optional suffix6 : often 00x6 on wire; not required for acceptance
 ```
@@ -256,11 +256,11 @@ Operational behavior:
 
 - Server list frames are transmitted regularly by upstream and treated as live endpoint state.
 - Each received server list update replaces the runtime candidate list (after validation/filtering).
-- The replacement list is shuffled and used for endpoint hopping instead of fixed sequential order.
+- The replacement list is sorted, deduplicated, and used for deterministic rotation instead of shuffling.
 - On connection loss/failure, the failed endpoint is removed from the local available list and the
   client immediately hops to the next available endpoint.
 - Failed endpoints remain excluded until a fresh upstream server list arrives (which replaces and
-  reshuffles the active set).
+  rebuilds the active set).
 - Connection attempts are short-lived and clamped to a maximum of 5 seconds before hopping to
   the next candidate endpoint.
 
@@ -485,7 +485,7 @@ Interpretation:
 |---|---|---|---|---|---|
 | P-001 | Inbound transport bytes are XOR-decoded with key `0xFF` before parsing | `protocol::codec::tests::find_sync_recovers_after_garbage` | `crates/emwin-protocol/tests/protocol_parity.rs::sync_recovery` | Yes | Required |
 | P-002 | Sync detection uses 6 decoded `0x00` bytes | `protocol::codec::tests::find_sync_recovers_after_garbage` | `crates/emwin-protocol/tests/protocol_parity.rs::sync_recovery` | Yes | Implemented |
-| P-003 | V1 header is exactly 80 bytes and regex-valid | `protocol::codec::tests::parse_header_valid`, `protocol::codec::tests::parse_header_invalid_missing_fields` | `crates/emwin-protocol/tests/protocol_parity.rs::inspect_valid_v1_fixture` | Yes | Implemented |
+| P-003 | V1 header is exactly 80 bytes and satisfies the fixed-width decoder grammar | `protocol::codec::tests::parse_header_valid`, `protocol::codec::tests::parse_header_invalid_missing_fields` | `crates/emwin-protocol/tests/protocol_parity.rs::inspect_valid_v1_fixture` | Yes | Implemented |
 | P-004 | V2 `/DL` length is required and bounded `1..=1024` | `protocol::codec::tests::v2_dl_bounds` | `crates/emwin-protocol/tests/protocol_parity.rs::v2_fixture_bounds` | Yes | Implemented |
 | P-005 | V2 decompression is header-gated under `RequireZlibHeader` | `protocol::codec::tests::v2_header_gate` | `N/A (unit + property coverage)` | Yes | Implemented |
 | P-006 | Decompression failure never aborts runtime; bad segment is dropped | `protocol::codec::tests::v2_decompress_failure_drops_segment_and_emits_warning` | `crates/emwin-protocol/tests/protocol_parity.rs::v2_corrupt_payload_policy` | Yes | Required |

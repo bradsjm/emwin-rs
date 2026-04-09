@@ -128,13 +128,13 @@ crates/emwin-parser/src
 |   +-- normalize.rs # single-buffer input normalization
 |   +-- envelope.rs  # parseable envelope construction
 |   +-- classify/
-|   |   +-- mod.rs     # ordered strategy registry and entrypoints
+|   |   +-- mod.rs     # ordered family specs and classifier entrypoints
 |   |   +-- context.rs # shared AFOS/WMO classifier inputs
-|   |   +-- common.rs  # shared malformed/body-request helpers
+|   |   +-- common.rs  # shared family specs, malformed fallbacks, and body-request helpers
 |   |   +-- text.rs    # AFOS specialized strategies and guards
 |   |   +-- wmo.rs     # WMO-only strategies and unsupported routing
 |   +-- candidate.rs # parsed intermediate candidates
-|   +-- assemble.rs  # ProductEnrichment conversion
+|   +-- assemble/    # ProductEnrichment conversion and fallback assembly
 |
 +-- specialized/
 |   +-- fd.rs

@@ -5,7 +5,7 @@
 //! - Saving server lists atomically to disk
 //! - Applying server list updates from the feed
 //! - Providing rotated access to primary and satellite endpoints
-//! - Managing endpoint availability with shuffling for load distribution
+//! - Managing endpoint availability with deterministic sorted rotation
 //!
 //! # Endpoint Rotation
 //!
