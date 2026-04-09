@@ -2,6 +2,8 @@
 //!
 //! This crate owns the HTTP/OpenAPI boundary used by `emwin-cli server`.
 
+#![recursion_limit = "4096"]
+
 pub mod error;
 mod server;
 mod server_support;

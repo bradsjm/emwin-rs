@@ -29,7 +29,7 @@ use super::candidate::{
     BodyContributionRequest, Cf6Candidate, CliCandidate, CwaCandidate, DcpCandidate, DsmCandidate,
     EroCandidate, FdCandidate, HmlCandidate, LsrCandidate, MalformedFamilyCandidate, McdCandidate,
     MetarCandidate, MosCandidate, PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate,
-    SpcOutlookCandidate, TafCandidate, TextGenericCandidate, UnsupportedWmoCandidate, WwpCandidate,
+    SpcOutlookCandidate, TafCandidate, UnsupportedWmoCandidate, WwpCandidate,
 };
 use super::normalize::detected_container;
 
@@ -162,7 +162,7 @@ fn office_for_headers(
         .or_else(|| wmo_header.and_then(|header| wmo_office_entry(&header.cccc).copied()))
 }
 
-struct SpecializedAssemblyInput {
+pub(super) struct SpecializedAssemblyInput {
     source: ProductEnrichmentSource,
     family: &'static str,
     title: &'static str,
@@ -176,7 +176,9 @@ struct SpecializedAssemblyInput {
     parsed: ProductArtifact,
 }
 
-fn assemble_specialized_enrichment(input: SpecializedAssemblyInput) -> ProductEnrichment {
+pub(super) fn assemble_specialized_enrichment(
+    input: SpecializedAssemblyInput,
+) -> ProductEnrichment {
     let (body, mut body_issues) = assemble_optional_body(input.body_request);
     body_issues.extend(input.issues);
 
@@ -194,38 +196,6 @@ fn assemble_specialized_enrichment(input: SpecializedAssemblyInput) -> ProductEn
         body,
         parsed: Some(input.parsed),
         issues: body_issues,
-    })
-}
-
-/// Assembles a generic AFOS text product and runs body enrichment.
-fn assemble_from_text_generic(
-    candidate: TextGenericCandidate,
-    filename: &str,
-) -> ProductEnrichment {
-    let TextGenericCandidate {
-        header,
-        pil,
-        title,
-        body_request,
-        bbb_kind,
-        reference_time: _reference_time,
-    } = candidate;
-    let (body, issues) = assemble_optional_body(body_request);
-
-    build_enrichment(EnrichmentBase {
-        source: ProductEnrichmentSource::TextHeader,
-        family: Some("nws_text_product"),
-        title,
-        container: container_from_filename(filename),
-        pil,
-        wmo_prefix: None,
-        office: wmo_office_entry(&header.cccc).copied(),
-        header: Some(header),
-        wmo_header: None,
-        bbb_kind,
-        body,
-        parsed: None,
-        issues,
     })
 }
 

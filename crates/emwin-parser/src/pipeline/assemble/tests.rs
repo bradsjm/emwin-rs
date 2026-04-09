@@ -20,9 +20,9 @@ use crate::{
 use super::assemble_product_enrichment;
 use crate::pipeline::candidate::{
     BodyContributionRequest, Cf6Candidate, ClassificationCandidate, CwaCandidate, DcpCandidate,
-    DsmCandidate, FdCandidate, HmlCandidate, LsrCandidate, MetarCandidate, MosCandidate,
-    PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, TafCandidate,
-    TextGenericCandidate, UnsupportedWmoCandidate, WwpCandidate,
+    DsmCandidate, FdCandidate, HmlCandidate, LsrCandidate, MalformedFamilyCandidate,
+    MetarCandidate, MosCandidate, PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate,
+    TafCandidate, TextGenericCandidate, UnsupportedWmoCandidate, WwpCandidate,
 };
 
 fn text_header(afos: &str) -> crate::TextProductHeader {
@@ -276,6 +276,37 @@ fn assembles_cwa_candidate_shape() {
             .is_none()
     );
     assert!(enrichment.body.is_none());
+}
+
+#[test]
+fn assembles_malformed_wmo_cwa_with_synthetic_pil_and_prefix() {
+    let candidate = ClassificationCandidate::MalformedFamily(MalformedFamilyCandidate {
+        source: crate::ProductEnrichmentSource::WmoBulletin,
+        family: "cwa_bulletin",
+        title: "Center Weather Advisory",
+        header: None,
+        wmo_header: Some(wmo_header("FAUS22", "KZLC")),
+        pil: Some("CWA".to_string()),
+        bbb_kind: None,
+        body_request: None,
+        issues: vec![ProductParseIssue::new(
+            "cwa_parse",
+            "invalid_cwa_bulletin",
+            "recognized CWA bulletin, but structured parsing failed",
+            Some("INVALID CWA BODY".to_string()),
+        )],
+    });
+
+    let enrichment = assemble_product_enrichment(candidate, "CWAZLC.TXT", b"ignored");
+
+    assert_eq!(
+        enrichment.source,
+        crate::ProductEnrichmentSource::WmoBulletin
+    );
+    assert_eq!(enrichment.family, Some("cwa_bulletin"));
+    assert_eq!(enrichment.pil.as_deref(), Some("CWA"));
+    assert_eq!(enrichment.wmo_prefix, Some("WL"));
+    assert!(enrichment.parsed.is_none());
 }
 
 #[test]

@@ -17,8 +17,9 @@ use crate::specialized::sigmet::parse_sigmet_bulletin;
 use crate::specialized::taf::parse_taf_bulletin;
 
 use super::common::{
-    filename_stem, first_nonempty_line, looks_like_multipart_taf_bulletin,
-    malformed_supported_family, starts_with_icao_sigmet_line, unsupported_wmo_candidate,
+    SupportedFamilySpec, classify_supported_wmo, filename_stem, first_nonempty_line,
+    looks_like_multipart_taf_bulletin, malformed_supported_family, parsed, parsed_with_issues,
+    require_reference_time, starts_with_icao_sigmet_line, unsupported_wmo_candidate,
     unsupported_wmo_family_candidate,
 };
 use super::context::WmoClassificationContext;
@@ -29,60 +30,126 @@ use super::text::{
     looks_like_surface_observation_bulletin, looks_like_taf_wmo_bulletin,
 };
 
+const FD_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "fd_bulletin",
+    title: "Winds and temperatures aloft",
+    issue_kind: "fd_parse",
+    invalid_code: "invalid_fd_bulletin",
+    invalid_message: "recognized FD bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized FD bulletin, but WMO timestamp could not be resolved",
+    ),
+    malformed_pil: None,
+};
+
+const METAR_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "metar_collective",
+    title: "METAR bulletin",
+    issue_kind: "metar_parse",
+    invalid_code: "invalid_metar_bulletin",
+    invalid_message: "recognized METAR bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const TAF_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "taf_bulletin",
+    title: "Terminal Aerodrome Forecast",
+    issue_kind: "taf_parse",
+    invalid_code: "invalid_taf_bulletin",
+    invalid_message: "recognized TAF bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const DSM_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "dsm_bulletin",
+    title: "Daily summary message",
+    issue_kind: "dsm_parse",
+    invalid_code: "invalid_dsm_bulletin",
+    invalid_message: "recognized DSM bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const PIREP_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "pirep_bulletin",
+    title: "Pilot report bulletin",
+    issue_kind: "pirep_parse",
+    invalid_code: "invalid_pirep_bulletin",
+    invalid_message: "recognized PIREP bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const SIGMET_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "sigmet_bulletin",
+    title: "SIGMET bulletin",
+    issue_kind: "sigmet_parse",
+    invalid_code: "invalid_sigmet_bulletin",
+    invalid_message: "recognized SIGMET bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const CWA_WMO_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::WmoBulletin,
+    family: "cwa_bulletin",
+    title: "Center Weather Advisory",
+    issue_kind: "cwa_parse",
+    invalid_code: "invalid_cwa_bulletin",
+    invalid_message: "recognized CWA bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized CWA bulletin, but WMO timestamp could not be resolved",
+    ),
+    malformed_pil: Some("CWA"),
+};
+
 pub(super) fn classify_wmo_fd(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !looks_like_fd_wmo_bulletin(context.filename, context.body_text) {
-        return None;
-    }
-    let Some(reference_time) = context.header.timestamp(Utc::now()) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "fd_bulletin",
-            "Winds and temperatures aloft",
-            None,
-            Some(context.header.clone()),
-            None,
-            None,
-            None,
-            "fd_parse",
-            "missing_reference_time",
-            "recognized FD bulletin, but WMO timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some(bulletin) = parse_fd_bulletin(
-        context.body_text,
-        Some(filename_stem(context.filename)),
-        reference_time,
-    ) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "fd_bulletin",
-            "Winds and temperatures aloft",
-            None,
-            Some(context.header.clone()),
-            None,
-            None,
-            None,
-            "fd_parse",
-            "invalid_fd_bulletin",
-            "recognized FD bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Fd(FdCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        family: "fd_bulletin",
-        title: "Winds and temperatures aloft",
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-    }))
+    classify_supported_wmo(
+        context,
+        |context| looks_like_fd_wmo_bulletin(context.filename, context.body_text),
+        &FD_WMO_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.header.timestamp(Utc::now()))?;
+            parsed(
+                parse_fd_bulletin(
+                    context.body_text,
+                    Some(filename_stem(context.filename)),
+                    reference_time,
+                )
+                .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Fd(FdCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                family: FD_WMO_SPEC.family,
+                title: FD_WMO_SPEC.title,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_metar(
@@ -93,35 +160,29 @@ pub(super) fn classify_wmo_metar(
     {
         return None;
     }
-    let Some((bulletin, issues)) = parse_metar_bulletin(context.body_text) else {
-        return looks_like_metar_wmo_bulletin(context.body_text).then(|| {
-            malformed_supported_family(
-                ProductEnrichmentSource::WmoBulletin,
-                "metar_collective",
-                "METAR bulletin",
-                None,
-                Some(context.header.clone()),
-                None,
-                None,
-                None,
-                "metar_parse",
-                "invalid_metar_bulletin",
-                "recognized METAR bulletin, but structured parsing failed",
-                first_nonempty_line(context.body_text),
+    classify_supported_wmo(
+        context,
+        |context| looks_like_metar_wmo_bulletin(context.body_text),
+        &METAR_WMO_SPEC,
+        |context| {
+            parsed_with_issues(
+                parse_metar_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
             )
-        });
-    };
-
-    Some(ClassificationCandidate::Metar(MetarCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-        issues,
-    }))
+        },
+        |parts, bulletin, issues| {
+            ClassificationCandidate::Metar(MetarCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+                issues,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_taf(
@@ -137,73 +198,62 @@ pub(super) fn classify_wmo_taf(
             context.body_text,
         ));
     }
-    let Some(bulletin) = parse_taf_bulletin(context.body_text) else {
-        return looks_like_taf_wmo_bulletin(context.body_text).then(|| {
-            malformed_supported_family(
-                ProductEnrichmentSource::WmoBulletin,
-                "taf_bulletin",
-                "Terminal Aerodrome Forecast",
-                None,
-                Some(context.header.clone()),
-                None,
-                None,
-                None,
-                "taf_parse",
-                "invalid_taf_bulletin",
-                "recognized TAF bulletin, but structured parsing failed",
-                first_nonempty_line(context.body_text),
+    classify_supported_wmo(
+        context,
+        |context| looks_like_taf_wmo_bulletin(context.body_text),
+        &TAF_WMO_SPEC,
+        |context| {
+            parsed(
+                parse_taf_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
             )
-        });
-    };
-
-    Some(ClassificationCandidate::Taf(TafCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-    }))
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Taf(TafCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_dsm(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !looks_like_dsm_text_product("", context.body_text) {
-        return None;
-    }
-    let reference_time = context
-        .header
-        .timestamp(Utc::now())
-        .unwrap_or_else(Utc::now);
-    let Some((bulletin, issues)) = parse_dsm_bulletin(context.body_text, reference_time) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "dsm_bulletin",
-            "Daily summary message",
-            None,
-            Some(context.header.clone()),
-            None,
-            None,
-            None,
-            "dsm_parse",
-            "invalid_dsm_bulletin",
-            "recognized DSM bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Dsm(DsmCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-        issues,
-    }))
+    classify_supported_wmo(
+        context,
+        |context| looks_like_dsm_text_product("", context.body_text),
+        &DSM_WMO_SPEC,
+        |context| {
+            parsed_with_issues(
+                parse_dsm_bulletin(
+                    context.body_text,
+                    context
+                        .header
+                        .timestamp(Utc::now())
+                        .unwrap_or_else(Utc::now),
+                )
+                .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, issues| {
+            ClassificationCandidate::Dsm(DsmCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+                issues,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_pirep(
@@ -219,35 +269,28 @@ pub(super) fn classify_wmo_pirep(
             context.body_text,
         ));
     }
-    if !looks_like_pirep_text_product("", context.body_text) {
-        return None;
-    }
-    let Some(bulletin) = parse_pirep_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "pirep_bulletin",
-            "Pilot report bulletin",
-            None,
-            Some(context.header.clone()),
-            None,
-            None,
-            None,
-            "pirep_parse",
-            "invalid_pirep_bulletin",
-            "recognized PIREP bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Pirep(PirepCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-    }))
+    classify_supported_wmo(
+        context,
+        |context| looks_like_pirep_text_product("", context.body_text),
+        &PIREP_WMO_SPEC,
+        |context| {
+            parsed(
+                parse_pirep_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Pirep(PirepCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_dcp(
@@ -279,33 +322,29 @@ pub(super) fn classify_wmo_sigmet(
             context.body_text,
         ));
     }
-    let Some(bulletin) = parse_sigmet_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "sigmet_bulletin",
-            "SIGMET bulletin",
-            None,
-            Some(context.header.clone()),
-            None,
-            None,
-            None,
-            "sigmet_parse",
-            "invalid_sigmet_bulletin",
-            "recognized SIGMET bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Sigmet(SigmetCandidate {
-        source: ProductEnrichmentSource::WmoBulletin,
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: None,
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-        issues: Vec::new(),
-    }))
+    classify_supported_wmo(
+        context,
+        |context| looks_like_sigmet_wmo_bulletin(context.body_text),
+        &SIGMET_WMO_SPEC,
+        |context| {
+            parsed(
+                parse_sigmet_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Sigmet(SigmetCandidate {
+                source: ProductEnrichmentSource::WmoBulletin,
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: None,
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 fn looks_like_international_pirep_bulletin(body_text: &str) -> bool {
@@ -318,51 +357,29 @@ fn looks_like_international_pirep_bulletin(body_text: &str) -> bool {
 pub(super) fn classify_wmo_cwa(
     context: &WmoClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !looks_like_cwa_text_product("", context.body_text) {
-        return None;
-    }
-    let Some(reference_time) = context.header.timestamp(Utc::now()) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "cwa_bulletin",
-            "Center Weather Advisory",
-            None,
-            Some(context.header.clone()),
-            Some("CWA".to_string()),
-            None,
-            None,
-            "cwa_parse",
-            "missing_reference_time",
-            "recognized CWA bulletin, but WMO timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some(bulletin) = parse_cwa_bulletin(context.body_text, reference_time) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::WmoBulletin,
-            "cwa_bulletin",
-            "Center Weather Advisory",
-            None,
-            Some(context.header.clone()),
-            Some("CWA".to_string()),
-            None,
-            None,
-            "cwa_parse",
-            "invalid_cwa_bulletin",
-            "recognized CWA bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Cwa(CwaCandidate {
-        header: None,
-        wmo_header: Some(context.header.clone()),
-        pil: Some("CWA".to_string()),
-        bbb_kind: None,
-        body_request: None,
-        bulletin,
-        issues: Vec::new(),
-    }))
+    classify_supported_wmo(
+        context,
+        |context| looks_like_cwa_text_product("", context.body_text),
+        &CWA_WMO_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.header.timestamp(Utc::now()))?;
+            parsed(
+                parse_cwa_bulletin(context.body_text, reference_time)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Cwa(CwaCandidate {
+                header: None,
+                wmo_header: Some(parts.header),
+                pil: Some("CWA".to_string()),
+                bbb_kind: None,
+                body_request: None,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_wmo_airmet_unsupported(

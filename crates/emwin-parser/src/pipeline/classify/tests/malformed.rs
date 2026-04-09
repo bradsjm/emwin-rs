@@ -97,3 +97,32 @@ fn failed_fd_parse_stays_with_fd_family() {
     assert_eq!(candidate.family, "fd_bulletin");
     assert_eq!(candidate.issues[0].code, "invalid_fd_bulletin");
 }
+
+#[test]
+fn malformed_wmo_metar_stays_in_family_with_issue() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "SAGL31.TXT",
+        b"000 \nSAGL31 BGGH 070200\nMETAR INVALID\n",
+    ));
+
+    let ClassificationCandidate::MalformedFamily(candidate) = classify(&envelope) else {
+        panic!("expected malformed-family candidate");
+    };
+    assert_eq!(candidate.family, "metar_collective");
+    assert_eq!(candidate.issues[0].code, "invalid_metar_bulletin");
+}
+
+#[test]
+fn malformed_wmo_cwa_stays_in_family_with_issue() {
+    let envelope = ParsedEnvelope::build(NormalizedInput::from_input(
+        "CWAZLC.TXT",
+        b"FAUS22 KZLC 100229\nZLC2 CWA 100230\nINVALID CWA BODY\n",
+    ));
+
+    let ClassificationCandidate::MalformedFamily(candidate) = classify(&envelope) else {
+        panic!("expected malformed-family candidate");
+    };
+    assert_eq!(candidate.family, "cwa_bulletin");
+    assert_eq!(candidate.pil.as_deref(), Some("CWA"));
+    assert_eq!(candidate.issues[0].code, "invalid_cwa_bulletin");
+}

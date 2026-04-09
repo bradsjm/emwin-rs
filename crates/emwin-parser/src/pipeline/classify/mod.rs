@@ -25,40 +25,172 @@ use self::context::{TextClassificationContext, WmoClassificationContext};
 type TextStrategy = for<'a> fn(&TextClassificationContext<'a>) -> Option<ClassificationCandidate>;
 type WmoStrategy = for<'a> fn(&WmoClassificationContext<'a>) -> Option<ClassificationCandidate>;
 
-const TEXT_STRATEGIES: &[TextStrategy] = &[
-    text::classify_text_fd,
-    text::classify_text_metar,
-    text::classify_text_taf,
-    text::classify_text_pirep,
-    text::classify_text_sigmet,
-    text::classify_text_lsr,
-    text::classify_text_cli,
-    text::classify_text_cwa,
-    text::classify_text_wwp,
-    text::classify_text_saw,
-    text::classify_text_sel,
-    text::classify_text_cf6,
-    text::classify_text_dsm,
-    text::classify_text_hml,
-    text::classify_text_mos,
-    text::classify_text_mcd,
-    text::classify_text_ero,
-    text::classify_text_spc_outlook,
+struct TextFamilySpec {
+    family: &'static str,
+    title: &'static str,
+    classify: TextStrategy,
+}
+
+struct WmoFamilySpec {
+    family: &'static str,
+    title: &'static str,
+    classify: WmoStrategy,
+}
+
+const TEXT_SPECS: &[TextFamilySpec] = &[
+    TextFamilySpec {
+        family: "fd_bulletin",
+        title: "Winds and temperatures aloft",
+        classify: text::classify_text_fd,
+    },
+    TextFamilySpec {
+        family: "metar_collective",
+        title: "METAR bulletin",
+        classify: text::classify_text_metar,
+    },
+    TextFamilySpec {
+        family: "taf_bulletin",
+        title: "Terminal Aerodrome Forecast",
+        classify: text::classify_text_taf,
+    },
+    TextFamilySpec {
+        family: "pirep_bulletin",
+        title: "Pilot report bulletin",
+        classify: text::classify_text_pirep,
+    },
+    TextFamilySpec {
+        family: "sigmet_bulletin",
+        title: "SIGMET bulletin",
+        classify: text::classify_text_sigmet,
+    },
+    TextFamilySpec {
+        family: "lsr_bulletin",
+        title: "Local storm report bulletin",
+        classify: text::classify_text_lsr,
+    },
+    TextFamilySpec {
+        family: "cli_bulletin",
+        title: "Daily climate report",
+        classify: text::classify_text_cli,
+    },
+    TextFamilySpec {
+        family: "cwa_bulletin",
+        title: "Center Weather Advisory",
+        classify: text::classify_text_cwa,
+    },
+    TextFamilySpec {
+        family: "wwp_bulletin",
+        title: "Watch probability table",
+        classify: text::classify_text_wwp,
+    },
+    TextFamilySpec {
+        family: "saw_bulletin",
+        title: "SPC preliminary notice of watch",
+        classify: text::classify_text_saw,
+    },
+    TextFamilySpec {
+        family: "sel_bulletin",
+        title: "SPC watch bulletin",
+        classify: text::classify_text_sel,
+    },
+    TextFamilySpec {
+        family: "cf6_bulletin",
+        title: "Climate summary bulletin",
+        classify: text::classify_text_cf6,
+    },
+    TextFamilySpec {
+        family: "dsm_bulletin",
+        title: "Daily summary message",
+        classify: text::classify_text_dsm,
+    },
+    TextFamilySpec {
+        family: "hml_bulletin",
+        title: "Hydrological Markup Language bulletin",
+        classify: text::classify_text_hml,
+    },
+    TextFamilySpec {
+        family: "mos_bulletin",
+        title: "Model output statistics guidance",
+        classify: text::classify_text_mos,
+    },
+    TextFamilySpec {
+        family: "mcd_bulletin",
+        title: "Mesoscale discussion bulletin",
+        classify: text::classify_text_mcd,
+    },
+    TextFamilySpec {
+        family: "ero_bulletin",
+        title: "Excessive rainfall outlook",
+        classify: text::classify_text_ero,
+    },
+    TextFamilySpec {
+        family: "spc_outlook_bulletin",
+        title: "SPC outlook bulletin",
+        classify: text::classify_text_spc_outlook,
+    },
 ];
 
-const WMO_STRATEGIES: &[WmoStrategy] = &[
-    wmo::classify_wmo_fd,
-    wmo::classify_wmo_pirep,
-    wmo::classify_wmo_dsm,
-    wmo::classify_wmo_metar,
-    wmo::classify_wmo_taf,
-    wmo::classify_wmo_dcp,
-    wmo::classify_wmo_sigmet,
-    wmo::classify_wmo_cwa,
-    wmo::classify_wmo_airmet_unsupported,
-    wmo::classify_wmo_canadian,
-    wmo::classify_wmo_surface_observation_unsupported,
-    wmo::classify_wmo_unknown_valid,
+const WMO_SPECS: &[WmoFamilySpec] = &[
+    WmoFamilySpec {
+        family: "fd_bulletin",
+        title: "Winds and temperatures aloft",
+        classify: wmo::classify_wmo_fd,
+    },
+    WmoFamilySpec {
+        family: "pirep_bulletin",
+        title: "Pilot report bulletin",
+        classify: wmo::classify_wmo_pirep,
+    },
+    WmoFamilySpec {
+        family: "dsm_bulletin",
+        title: "Daily summary message",
+        classify: wmo::classify_wmo_dsm,
+    },
+    WmoFamilySpec {
+        family: "metar_collective",
+        title: "METAR bulletin",
+        classify: wmo::classify_wmo_metar,
+    },
+    WmoFamilySpec {
+        family: "taf_bulletin",
+        title: "Terminal Aerodrome Forecast",
+        classify: wmo::classify_wmo_taf,
+    },
+    WmoFamilySpec {
+        family: "dcp_telemetry_bulletin",
+        title: "GOES DCP telemetry bulletin",
+        classify: wmo::classify_wmo_dcp,
+    },
+    WmoFamilySpec {
+        family: "sigmet_bulletin",
+        title: "SIGMET bulletin",
+        classify: wmo::classify_wmo_sigmet,
+    },
+    WmoFamilySpec {
+        family: "cwa_bulletin",
+        title: "Center Weather Advisory",
+        classify: wmo::classify_wmo_cwa,
+    },
+    WmoFamilySpec {
+        family: "airmet_bulletin",
+        title: "AIRMET bulletin",
+        classify: wmo::classify_wmo_airmet_unsupported,
+    },
+    WmoFamilySpec {
+        family: "canadian_text_bulletin",
+        title: "Canadian text bulletin",
+        classify: wmo::classify_wmo_canadian,
+    },
+    WmoFamilySpec {
+        family: "surface_observation_bulletin",
+        title: "Surface observation bulletin",
+        classify: wmo::classify_wmo_surface_observation_unsupported,
+    },
+    WmoFamilySpec {
+        family: "unsupported_wmo_bulletin",
+        title: "Unsupported WMO bulletin",
+        classify: wmo::classify_wmo_unknown_valid,
+    },
 ];
 
 /// Classifies an envelope into a fully parsed internal candidate.
@@ -91,8 +223,9 @@ fn classify_text_envelope(envelope: &ParsedEnvelope) -> ClassificationCandidate 
         return ClassificationCandidate::Unknown;
     };
 
-    for strategy in TEXT_STRATEGIES {
-        if let Some(candidate) = strategy(&context) {
+    for spec in TEXT_SPECS {
+        debug_assert!(!spec.family.is_empty() && !spec.title.is_empty());
+        if let Some(candidate) = (spec.classify)(&context) {
             return candidate;
         }
     }
@@ -114,8 +247,9 @@ fn classify_wmo_envelope(envelope: &ParsedEnvelope) -> ClassificationCandidate {
         return ClassificationCandidate::Unknown;
     };
 
-    for strategy in WMO_STRATEGIES {
-        if let Some(candidate) = strategy(&context) {
+    for spec in WMO_SPECS {
+        debug_assert!(!spec.family.is_empty() && !spec.title.is_empty());
+        if let Some(candidate) = (spec.classify)(&context) {
             return candidate;
         }
     }

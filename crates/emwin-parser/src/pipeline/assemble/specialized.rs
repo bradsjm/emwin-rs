@@ -1,52 +1,15 @@
 use super::super::candidate::{
-    BodyContributionRequest, Cf6Candidate, CliCandidate, CwaCandidate, DcpCandidate, DsmCandidate,
-    EroCandidate, FdCandidate, HmlCandidate, LsrCandidate, McdCandidate, MetarCandidate,
-    MosCandidate, PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, SpcOutlookCandidate,
-    TafCandidate, TextGenericCandidate, WwpCandidate,
+    Cf6Candidate, CliCandidate, CwaCandidate, DcpCandidate, DsmCandidate, EroCandidate,
+    FdCandidate, HmlCandidate, LsrCandidate, McdCandidate, MetarCandidate, MosCandidate,
+    PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, SpcOutlookCandidate, TafCandidate,
+    TextGenericCandidate, WwpCandidate,
 };
 use super::{
-    EnrichmentBase, assemble_optional_body, build_enrichment, container_from_filename,
-    office_for_headers, wmo_office_entry,
+    EnrichmentBase, SpecializedAssemblyInput, assemble_optional_body,
+    assemble_specialized_enrichment, build_enrichment, container_from_filename, office_for_headers,
+    wmo_office_entry,
 };
-use crate::{
-    ProductArtifact, ProductEnrichment, ProductEnrichmentSource, ProductParseIssue,
-    TextProductHeader, WmoHeader,
-};
-
-struct SpecializedAssemblyInput {
-    source: ProductEnrichmentSource,
-    family: &'static str,
-    title: &'static str,
-    filename: String,
-    pil: Option<String>,
-    header: Option<TextProductHeader>,
-    wmo_header: Option<WmoHeader>,
-    bbb_kind: Option<crate::BbbKind>,
-    body_request: Option<BodyContributionRequest>,
-    issues: Vec<ProductParseIssue>,
-    parsed: ProductArtifact,
-}
-
-fn assemble_specialized_enrichment(input: SpecializedAssemblyInput) -> ProductEnrichment {
-    let (body, mut body_issues) = assemble_optional_body(input.body_request);
-    body_issues.extend(input.issues);
-
-    build_enrichment(EnrichmentBase {
-        source: input.source,
-        family: Some(input.family),
-        title: Some(input.title),
-        container: container_from_filename(&input.filename),
-        pil: input.pil,
-        wmo_prefix: None,
-        office: office_for_headers(input.header.as_ref(), input.wmo_header.as_ref()),
-        header: input.header,
-        wmo_header: input.wmo_header,
-        bbb_kind: input.bbb_kind,
-        body,
-        parsed: Some(input.parsed),
-        issues: body_issues,
-    })
-}
+use crate::{ProductArtifact, ProductEnrichment, ProductEnrichmentSource};
 
 /// Assembles a generic AFOS text product and runs body enrichment.
 pub(super) fn assemble_from_text_generic(

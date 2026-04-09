@@ -3,6 +3,8 @@
 //! This application provides commands for:
 //! - Running the live HTTP server with SSE and file endpoints
 
+#![recursion_limit = "4096"]
+
 mod cmd;
 mod error;
 mod relay;

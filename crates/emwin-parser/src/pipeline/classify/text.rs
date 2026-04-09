@@ -30,107 +30,256 @@ use crate::specialized::taf::parse_taf_bulletin;
 use crate::specialized::wwp::parse_wwp_bulletin;
 
 use super::common::{
-    filename_stem, first_nonempty_line, looks_like_multipart_taf_bulletin,
-    malformed_supported_family, starts_with_icao_sigmet_line,
+    SupportedFamilySpec, classify_supported_text, classify_supported_text_guarded, filename_stem,
+    first_nonempty_line, looks_like_multipart_taf_bulletin, malformed_supported_family, parsed,
+    parsed_with_issues, require_reference_time, starts_with_icao_sigmet_line,
 };
 use super::context::TextClassificationContext;
+
+const FD_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "fd_bulletin",
+    title: "Winds and temperatures aloft",
+    issue_kind: "fd_parse",
+    invalid_code: "invalid_fd_bulletin",
+    invalid_message: "recognized FD bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized FD bulletin, but header timestamp could not be resolved",
+    ),
+    malformed_pil: None,
+};
+
+const METAR_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "metar_collective",
+    title: "METAR bulletin",
+    issue_kind: "metar_parse",
+    invalid_code: "invalid_metar_bulletin",
+    invalid_message: "recognized METAR bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const TAF_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "taf_bulletin",
+    title: "Terminal Aerodrome Forecast",
+    issue_kind: "taf_parse",
+    invalid_code: "invalid_taf_bulletin",
+    invalid_message: "recognized TAF bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const PIREP_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "pirep_bulletin",
+    title: "Pilot report bulletin",
+    issue_kind: "pirep_parse",
+    invalid_code: "invalid_pirep_bulletin",
+    invalid_message: "recognized PIREP bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const SIGMET_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "sigmet_bulletin",
+    title: "SIGMET bulletin",
+    issue_kind: "sigmet_parse",
+    invalid_code: "invalid_sigmet_bulletin",
+    invalid_message: "recognized SIGMET bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const LSR_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "lsr_bulletin",
+    title: "Local storm report bulletin",
+    issue_kind: "lsr_parse",
+    invalid_code: "invalid_lsr_bulletin",
+    invalid_message: "recognized LSR bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized LSR bulletin, but header timestamp could not be resolved",
+    ),
+    malformed_pil: None,
+};
+
+const CWA_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "cwa_bulletin",
+    title: "Center Weather Advisory",
+    issue_kind: "cwa_parse",
+    invalid_code: "invalid_cwa_bulletin",
+    invalid_message: "recognized CWA bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized CWA bulletin, but header timestamp could not be resolved",
+    ),
+    malformed_pil: None,
+};
+
+const WWP_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "wwp_bulletin",
+    title: "Watch probability table",
+    issue_kind: "wwp_parse",
+    invalid_code: "invalid_wwp_bulletin",
+    invalid_message: "recognized WWP bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const CF6_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "cf6_bulletin",
+    title: "Climate summary bulletin",
+    issue_kind: "cf6_parse",
+    invalid_code: "invalid_cf6_bulletin",
+    invalid_message: "recognized CF6 bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const DSM_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "dsm_bulletin",
+    title: "Daily summary message",
+    issue_kind: "dsm_parse",
+    invalid_code: "invalid_dsm_bulletin",
+    invalid_message: "recognized DSM bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const HML_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "hml_bulletin",
+    title: "Hydrological Markup Language bulletin",
+    issue_kind: "hml_parse",
+    invalid_code: "invalid_hml_bulletin",
+    invalid_message: "recognized HML bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const MOS_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "mos_bulletin",
+    title: "Model output statistics guidance",
+    issue_kind: "mos_parse",
+    invalid_code: "invalid_mos_bulletin",
+    invalid_message: "recognized MOS bulletin, but structured parsing failed",
+    missing_reference_code: Some("missing_reference_time"),
+    missing_reference_message: Some(
+        "recognized MOS bulletin, but header timestamp could not be resolved",
+    ),
+    malformed_pil: None,
+};
+
+const ERO_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "ero_bulletin",
+    title: "Excessive rainfall outlook",
+    issue_kind: "ero_parse",
+    invalid_code: "invalid_ero_bulletin",
+    invalid_message: "recognized ERO bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
+
+const SPC_OUTLOOK_TEXT_SPEC: SupportedFamilySpec = SupportedFamilySpec {
+    source: ProductEnrichmentSource::TextHeader,
+    family: "spc_outlook_bulletin",
+    title: "SPC outlook bulletin",
+    issue_kind: "spc_outlook_parse",
+    invalid_code: "invalid_spc_outlook_bulletin",
+    invalid_message: "recognized SPC outlook bulletin, but structured parsing failed",
+    missing_reference_code: None,
+    missing_reference_message: None,
+    malformed_pil: None,
+};
 
 pub(super) fn classify_text_fd(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(context, TextProductRouting::Fd, looks_like_fd_text_product) {
-        return None;
-    }
-    let Some(reference_time) = context.reference_time else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "fd_bulletin",
-            "Winds and temperatures aloft",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "fd_parse",
-            "missing_reference_time",
-            "recognized FD bulletin, but header timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some(bulletin) = parse_fd_bulletin(
-        context.body_text,
-        Some(context.header.afos.as_str()),
-        reference_time,
-    ) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "fd_bulletin",
-            "Winds and temperatures aloft",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "fd_parse",
-            "invalid_fd_bulletin",
-            "recognized FD bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Fd(FdCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        family: "fd_bulletin",
-        title: "Winds and temperatures aloft",
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-    }))
+    classify_supported_text(
+        context,
+        TextProductRouting::Fd,
+        looks_like_fd_text_product,
+        &FD_TEXT_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.reference_time)?;
+            parsed(
+                parse_fd_bulletin(
+                    context.body_text,
+                    Some(context.header.afos.as_str()),
+                    reference_time,
+                )
+                .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Fd(FdCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                family: FD_TEXT_SPEC.family,
+                title: FD_TEXT_SPEC.title,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_metar(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !looks_like_metar_text_product(&context.header.afos, context.body_text) {
-        return None;
-    }
-    let bulletin_text = if matches!(context.header.afos.as_str(), "METAR" | "SPECI")
-        && !looks_like_metar_wmo_bulletin(context.body_text)
-    {
-        format!("{} {}", context.header.afos, context.body_text.trim_start())
-    } else {
-        context.body_text.to_string()
-    };
-    let Some((bulletin, issues)) = parse_metar_bulletin(&bulletin_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "metar_collective",
-            "METAR bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            None,
-            "metar_parse",
-            "invalid_metar_bulletin",
-            "recognized METAR bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Metar(MetarCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: None,
-        bulletin,
-        issues,
-    }))
+    classify_supported_text_guarded(
+        context,
+        looks_like_metar_text_product,
+        &METAR_TEXT_SPEC,
+        |context| {
+            let bulletin_text = if matches!(context.header.afos.as_str(), "METAR" | "SPECI")
+                && !looks_like_metar_wmo_bulletin(context.body_text)
+            {
+                format!("{} {}", context.header.afos, context.body_text.trim_start())
+            } else {
+                context.body_text.to_string()
+            };
+            parsed_with_issues(
+                parse_metar_bulletin(&bulletin_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, issues| {
+            ClassificationCandidate::Metar(MetarCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: None,
+                bulletin,
+                issues,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_taf(
@@ -154,35 +303,28 @@ pub(super) fn classify_text_taf(
             first_nonempty_line(context.body_text),
         ));
     }
-    if !looks_like_taf_text_product(&context.header.afos, context.body_text) {
-        return None;
-    }
-    let Some(bulletin) = parse_taf_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "taf_bulletin",
-            "Terminal Aerodrome Forecast",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            None,
-            "taf_parse",
-            "invalid_taf_bulletin",
-            "recognized TAF bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Taf(TafCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: None,
-        bulletin,
-    }))
+    classify_supported_text_guarded(
+        context,
+        looks_like_taf_text_product,
+        &TAF_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_taf_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Taf(TafCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: None,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_pirep(
@@ -206,130 +348,86 @@ pub(super) fn classify_text_pirep(
             first_nonempty_line(context.body_text),
         ));
     }
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Pirep,
         looks_like_pirep_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_pirep_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "pirep_bulletin",
-            "Pilot report bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "pirep_parse",
-            "invalid_pirep_bulletin",
-            "recognized PIREP bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Pirep(PirepCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-    }))
+        &PIREP_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_pirep_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Pirep(PirepCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_sigmet(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Sigmet,
         looks_like_sigmet_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_sigmet_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "sigmet_bulletin",
-            "SIGMET bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "sigmet_parse",
-            "invalid_sigmet_bulletin",
-            "recognized SIGMET bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-
-    Some(ClassificationCandidate::Sigmet(SigmetCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &SIGMET_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_sigmet_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Sigmet(SigmetCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_lsr(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Lsr,
         looks_like_lsr_text_product,
-    ) {
-        return None;
-    }
-    let Some(reference_time) = context.reference_time else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "lsr_bulletin",
-            "Local storm report bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "lsr_parse",
-            "missing_reference_time",
-            "recognized LSR bulletin, but header timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some((bulletin, issues)) = parse_lsr_bulletin(context.body_text, reference_time) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "lsr_bulletin",
-            "Local storm report bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "lsr_parse",
-            "invalid_lsr_bulletin",
-            "recognized LSR bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Lsr(LsrCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues,
-    }))
+        &LSR_TEXT_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.reference_time)?;
+            parsed_with_issues(
+                parse_lsr_bulletin(context.body_text, reference_time)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, issues| {
+            ClassificationCandidate::Lsr(LsrCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_cli(
@@ -356,126 +454,84 @@ pub(super) fn classify_text_cli(
 pub(super) fn classify_text_cwa(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Cwa,
         looks_like_cwa_text_product,
-    ) {
-        return None;
-    }
-    let Some(reference_time) = context.reference_time else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "cwa_bulletin",
-            "Center Weather Advisory",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "cwa_parse",
-            "missing_reference_time",
-            "recognized CWA bulletin, but header timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some(bulletin) = parse_cwa_bulletin(context.body_text, reference_time) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "cwa_bulletin",
-            "Center Weather Advisory",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "cwa_parse",
-            "invalid_cwa_bulletin",
-            "recognized CWA bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Cwa(CwaCandidate {
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &CWA_TEXT_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.reference_time)?;
+            parsed(
+                parse_cwa_bulletin(context.body_text, reference_time)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Cwa(CwaCandidate {
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_wwp(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Wwp,
         looks_like_wwp_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_wwp_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "wwp_bulletin",
-            "Watch probability table",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "wwp_parse",
-            "invalid_wwp_bulletin",
-            "recognized WWP bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Wwp(WwpCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &WWP_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_wwp_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Wwp(WwpCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_cf6(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Cf6,
         looks_like_cf6_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_cf6_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "cf6_bulletin",
-            "Climate summary bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "cf6_parse",
-            "invalid_cf6_bulletin",
-            "recognized CF6 bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Cf6(Cf6Candidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &CF6_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_cf6_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Cf6(Cf6Candidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_saw(
@@ -527,130 +583,88 @@ pub(super) fn classify_text_sel(
 pub(super) fn classify_text_dsm(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Dsm,
         looks_like_dsm_text_product,
-    ) {
-        return None;
-    }
-    let Some((bulletin, issues)) = parse_dsm_bulletin(
-        context.body_text,
-        context.reference_time.unwrap_or_else(Utc::now),
-    ) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "dsm_bulletin",
-            "Daily summary message",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "dsm_parse",
-            "invalid_dsm_bulletin",
-            "recognized DSM bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Dsm(DsmCandidate {
-        source: ProductEnrichmentSource::TextHeader,
-        header: Some(context.header.clone()),
-        wmo_header: None,
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues,
-    }))
+        &DSM_TEXT_SPEC,
+        |context| {
+            parsed_with_issues(
+                parse_dsm_bulletin(
+                    context.body_text,
+                    context.reference_time.unwrap_or_else(Utc::now),
+                )
+                .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, issues| {
+            ClassificationCandidate::Dsm(DsmCandidate {
+                source: ProductEnrichmentSource::TextHeader,
+                header: Some(parts.header),
+                wmo_header: None,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues,
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_hml(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Hml,
         looks_like_hml_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_hml_bulletin(context.body_text) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "hml_bulletin",
-            "Hydrological Markup Language bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "hml_parse",
-            "invalid_hml_bulletin",
-            "recognized HML bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Hml(HmlCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &HML_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_hml_bulletin(context.body_text)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Hml(HmlCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_mos(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Mos,
         looks_like_mos_text_product,
-    ) {
-        return None;
-    }
-    let Some(reference_time) = context.reference_time else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "mos_bulletin",
-            "Model output statistics guidance",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "mos_parse",
-            "missing_reference_time",
-            "recognized MOS bulletin, but header timestamp could not be resolved",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    let Some(bulletin) = parse_mos_bulletin(context.body_text, reference_time) else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "mos_bulletin",
-            "Model output statistics guidance",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "mos_parse",
-            "invalid_mos_bulletin",
-            "recognized MOS bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Mos(MosCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &MOS_TEXT_SPEC,
+        |context| {
+            let reference_time = require_reference_time(context.reference_time)?;
+            parsed(
+                parse_mos_bulletin(context.body_text, reference_time)
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Mos(MosCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_mcd(
@@ -681,76 +695,55 @@ pub(super) fn classify_text_mcd(
 pub(super) fn classify_text_ero(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::Ero,
         looks_like_ero_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) = parse_ero_bulletin(context.body_text, Some(context.header.afos.as_str()))
-    else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "ero_bulletin",
-            "Excessive rainfall outlook",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "ero_parse",
-            "invalid_ero_bulletin",
-            "recognized ERO bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::Ero(EroCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &ERO_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_ero_bulletin(context.body_text, Some(context.header.afos.as_str()))
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::Ero(EroCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 pub(super) fn classify_text_spc_outlook(
     context: &TextClassificationContext<'_>,
 ) -> Option<ClassificationCandidate> {
-    if !matches_routed_text_family(
+    classify_supported_text(
         context,
         TextProductRouting::SpcOutlook,
         looks_like_spc_outlook_text_product,
-    ) {
-        return None;
-    }
-    let Some(bulletin) =
-        parse_spc_outlook_bulletin(context.body_text, Some(context.header.afos.as_str()))
-    else {
-        return Some(malformed_supported_family(
-            ProductEnrichmentSource::TextHeader,
-            "spc_outlook_bulletin",
-            "SPC outlook bulletin",
-            Some(context.header.clone()),
-            None,
-            context.pil.clone(),
-            context.bbb_kind,
-            context.body_request(),
-            "spc_outlook_parse",
-            "invalid_spc_outlook_bulletin",
-            "recognized SPC outlook bulletin, but structured parsing failed",
-            first_nonempty_line(context.body_text),
-        ));
-    };
-    Some(ClassificationCandidate::SpcOutlook(SpcOutlookCandidate {
-        header: context.header.clone(),
-        pil: context.pil.clone(),
-        bbb_kind: context.bbb_kind,
-        body_request: context.body_request(),
-        bulletin,
-        issues: Vec::new(),
-    }))
+        &SPC_OUTLOOK_TEXT_SPEC,
+        |context| {
+            parsed(
+                parse_spc_outlook_bulletin(context.body_text, Some(context.header.afos.as_str()))
+                    .ok_or(super::common::SupportedFamilyFailure::ParseFailure)?,
+            )
+        },
+        |parts, bulletin, _issues| {
+            ClassificationCandidate::SpcOutlook(SpcOutlookCandidate {
+                header: parts.header,
+                pil: parts.pil,
+                bbb_kind: parts.bbb_kind,
+                body_request: parts.body_request,
+                bulletin,
+                issues: Vec::new(),
+            })
+        },
+    )
 }
 
 fn matches_routed_text_family(
