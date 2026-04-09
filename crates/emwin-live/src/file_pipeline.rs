@@ -6,7 +6,10 @@
 
 use chrono::{DateTime, Utc};
 use crc32fast::Hasher;
-use emwin_db::{BlobEntry, BlobRole, PersistRequest};
+use emwin_db::{
+    BlobEntry, BlobRole, PersistRequest,
+    build_completed_file_metadata as build_db_completed_file_metadata,
+};
 use emwin_protocol::ingest::ProductOrigin;
 use emwin_service::{CompletedFileMetadata, SourceKind};
 use std::path::{Path, PathBuf};
@@ -80,7 +83,7 @@ pub(crate) fn build_completed_file_metadata(
     origin: ProductOrigin,
     data: &[u8],
 ) -> CompletedFileMetadata {
-    CompletedFileMetadata::build(filename, timestamp_utc, source_kind(origin), data)
+    build_db_completed_file_metadata(filename, timestamp_utc, source_kind(origin), data)
 }
 
 #[cfg(test)]

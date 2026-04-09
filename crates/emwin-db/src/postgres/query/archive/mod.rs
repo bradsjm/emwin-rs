@@ -13,4 +13,4 @@ pub(crate) use aggregates::{
 };
 pub(crate) use features::list_archived_features_query;
 pub(crate) use issues::{get_archived_issue_query, list_archived_issues_query};
-pub(crate) use products::{archived_product_detail_from_row, list_archived_products_query};
+pub(crate) use products::list_archived_products_query;

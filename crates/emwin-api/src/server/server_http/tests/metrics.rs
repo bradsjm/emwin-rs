@@ -3,8 +3,8 @@ use crate::server::build_router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use emwin_db::{
-    BlobEntry, BlobRole, CompletedFileMetadata, NoopMetadataSink, PersistRequest,
-    PersistenceConfig, PersistenceRuntime,
+    BlobEntry, BlobRole, NoopMetadataSink, PersistRequest, PersistenceConfig, PersistenceRuntime,
+    build_completed_file_metadata,
 };
 use emwin_service::SourceKind;
 use tempfile::tempdir;
@@ -23,7 +23,7 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
         NoopMetadataSink,
     );
     let producer = runtime.producer();
-    let metadata = CompletedFileMetadata::build(
+    let metadata = build_completed_file_metadata(
         "TEST.TXT",
         1,
         SourceKind::Qbt,

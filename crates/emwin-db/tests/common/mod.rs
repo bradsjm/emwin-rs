@@ -3,7 +3,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use emwin_db::{
     BlobRole, BlobWriter, CompletedFileMetadata, MetadataSink, PersistedRequest, PostgresConfig,
-    PostgresMetadataSink, StoredBlob,
+    PostgresMetadataSink, StoredBlob, build_completed_file_metadata,
 };
 use emwin_service::{IncidentChange, IncidentChangeAction, IncidentChangeTrigger, SourceKind};
 use sqlx::Row;
@@ -45,7 +45,7 @@ pub(crate) async fn connect_test_sink() -> Option<PostgresMetadataSink> {
 }
 
 pub(crate) fn sample_metadata() -> CompletedFileMetadata {
-    CompletedFileMetadata::build(
+    build_completed_file_metadata(
         "FFWOAXNE.TXT",
         1_704_070_800,
         SourceKind::Qbt,
@@ -139,7 +139,7 @@ pub(crate) fn build_vtec_metadata(
         "000\nWUUS53 KOAX 051200\nFFWOAX\n\nFlash Flood Warning\nNational Weather Service Omaha/Valley NE\n1200 PM CST Wed Mar 5 2025\n\n{ugc_line}\n{}\n",
         vtec_lines.join("\n")
     );
-    CompletedFileMetadata::build(
+    build_completed_file_metadata(
         filename,
         timestamp_utc,
         SourceKind::Qbt,

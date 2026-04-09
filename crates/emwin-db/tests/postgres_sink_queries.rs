@@ -336,7 +336,7 @@ async fn archived_product_list_supports_filters_and_cursor_pagination() {
     product_ids.push(
         persist_metadata(
             &sink,
-            emwin_db::CompletedFileMetadata::build(
+            emwin_db::build_completed_file_metadata(
                 filenames[2],
                 1_741_182_600,
                 SourceKind::Qbt,
@@ -402,7 +402,7 @@ async fn archived_product_list_supports_bounding_box_filters() {
 
     let inside_id = persist_metadata(
         &sink,
-        emwin_db::CompletedFileMetadata::build(
+        emwin_db::build_completed_file_metadata(
             filenames[0],
             1_741_182_900,
             SourceKind::Qbt,
@@ -424,7 +424,7 @@ LAT...LON 4143 9613 4145 9610 4140 9608 4138 9612
     .await;
     let outside_id = persist_metadata(
         &sink,
-        emwin_db::CompletedFileMetadata::build(
+        emwin_db::build_completed_file_metadata(
             filenames[1],
             1_741_183_200,
             SourceKind::Qbt,

@@ -1,13 +1,37 @@
+use emwin_parser::{detail_product_v2, enrich_product, summarize_product_v2};
 pub use emwin_service::CompletedFileMetadata;
+use emwin_service::SourceKind;
+
+/// Builds the shared metadata DTO from raw product bytes at the persistence boundary.
+pub fn build_completed_file_metadata(
+    filename: &str,
+    timestamp_utc: u64,
+    origin: SourceKind,
+    data: &[u8],
+) -> CompletedFileMetadata {
+    let product = enrich_product(filename, data);
+    let product_summary = summarize_product_v2(&product);
+    let product_detail = detail_product_v2(&product);
+
+    CompletedFileMetadata {
+        filename: filename.to_string(),
+        size: data.len(),
+        timestamp_utc,
+        origin,
+        product,
+        product_summary,
+        product_detail,
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use super::CompletedFileMetadata;
+    use super::build_completed_file_metadata;
     use emwin_service::SourceKind;
 
     #[test]
     fn serialization_preserves_existing_sidecar_shape() {
-        let metadata = CompletedFileMetadata::build(
+        let metadata = build_completed_file_metadata(
             "AFDBOX.TXT",
             1,
             SourceKind::Qbt,

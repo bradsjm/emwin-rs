@@ -1,5 +1,6 @@
 //! Issue archive queries and cursor helpers.
 
+use super::super::mappers::archived_issue_from_row;
 use super::super::{
     archived_issue_select_sql, decode_optional_cursor, encode_cursor, normalize_page_limit,
 };
@@ -54,9 +55,12 @@ pub(crate) async fn list_archived_issues_query(
     builder.push_bind(i64::try_from(limit + 1).expect("limit should fit in i64"));
 
     let mut items = builder
-        .build_query_as::<ArchivedIssue>()
+        .build()
         .fetch_all(pool)
-        .await?;
+        .await?
+        .into_iter()
+        .map(|row| archived_issue_from_row(&row))
+        .collect::<Vec<_>>();
 
     let next_cursor = if items.len() > limit {
         items.pop().expect("overflow item should exist");
@@ -88,9 +92,10 @@ pub(crate) async fn get_archived_issue_query(
             " ORDER BY products.source_timestamp_utc DESC, product_issues.product_id DESC, product_issues.id DESC",
         );
     builder
-        .build_query_as::<ArchivedIssue>()
+        .build()
         .fetch_optional(pool)
         .await
+        .map(|row| row.map(|row| archived_issue_from_row(&row)))
         .map_err(PersistError::from)
 }
 

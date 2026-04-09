@@ -12,10 +12,8 @@ homepage.workspace = true
 base64.workspace = true
 chrono.workspace = true
 emwin-parser = { path = "../emwin-parser" }
-futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

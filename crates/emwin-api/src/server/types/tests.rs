@@ -2,8 +2,9 @@ use super::{
     ArchiveFilterParams, CompletedFileEventPayload, EventFilter, EventKind, EventsQuery,
     TelemetryPayload,
 };
-use crate::server::server_http::event_matches_filter;
-use emwin_service::{CompletedFileMetadata, SourceKind};
+use crate::server::server_http::streams::event_matches_filter;
+use emwin_db::build_completed_file_metadata;
+use emwin_service::SourceKind;
 
 fn empty_events_query() -> EventsQuery {
     EventsQuery {
@@ -176,7 +177,7 @@ AKC090-051300-
         b"ignored".as_slice()
     };
 
-    let metadata = CompletedFileMetadata::build(filename, 1, SourceKind::Qbt, data);
+    let metadata = build_completed_file_metadata(filename, 1, SourceKind::Qbt, data);
 
     EventKind::FileComplete(Box::new(CompletedFileEventPayload::from_metadata(metadata)))
 }

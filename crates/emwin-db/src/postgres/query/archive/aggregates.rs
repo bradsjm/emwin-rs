@@ -4,16 +4,19 @@ use super::super::filters::{
     append_facet_non_null_filter, append_issue_alias_filters, append_product_filters,
     append_vtec_alias_filters,
 };
+use super::super::mappers::{
+    cell_aggregate_bucket_from_row, facet_aggregate_bucket_from_row,
+    timeseries_aggregate_bucket_from_row,
+};
 use super::super::spatial::append_feature_spatial_filter;
 use super::super::sql::{
     archived_feature_source_sql, facet_aggregate_select_sql, geohash_alphabet_sql,
 };
 use crate::error::{PersistError, PersistResult};
 use emwin_service::{
-    AggregateCompleteness, CellAggregateBucket, CellAggregateQuery, CellAggregateResult,
-    CellMeasure, FacetAggregateBucket, FacetAggregateQuery, FacetAggregateResult, FacetDimension,
-    TimeseriesAggregateBucket, TimeseriesAggregateQuery, TimeseriesAggregateResult,
-    TimeseriesMeasure,
+    AggregateCompleteness, CellAggregateQuery, CellAggregateResult, CellMeasure,
+    FacetAggregateQuery, FacetAggregateResult, FacetDimension, TimeseriesAggregateQuery,
+    TimeseriesAggregateResult, TimeseriesMeasure,
 };
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
@@ -41,9 +44,14 @@ pub(crate) async fn list_facet_aggregate_query(
     builder.push(" GROUP BY value ORDER BY count DESC, value ASC LIMIT ");
     builder.push_bind(i64::try_from(limit).expect("limit should fit in i64"));
     let items = builder
-        .build_query_as::<FacetAggregateBucket>()
+        .build()
         .fetch_all(pool)
         .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| facet_aggregate_bucket_from_row(&row))
+                .collect::<Vec<_>>()
+        })
         .map_err(PersistError::from)?;
     Ok(FacetAggregateResult {
         completeness: AggregateCompleteness::exact(),
@@ -112,9 +120,14 @@ pub(crate) async fn list_timeseries_aggregate_query(
     );
 
     let items = builder
-        .build_query_as::<TimeseriesAggregateBucket>()
+        .build()
         .fetch_all(pool)
         .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| timeseries_aggregate_bucket_from_row(&row))
+                .collect::<Vec<_>>()
+        })
         .map_err(PersistError::from)?;
     Ok(TimeseriesAggregateResult {
         completeness: AggregateCompleteness::exact(),
@@ -205,9 +218,14 @@ pub(crate) async fn list_cell_aggregate_query(
         .push_bind(i64::try_from(limit).expect("limit should fit in i64"));
 
     let items = builder
-        .build_query_as::<CellAggregateBucket>()
+        .build()
         .fetch_all(pool)
         .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| cell_aggregate_bucket_from_row(&row))
+                .collect::<Vec<_>>()
+        })
         .map_err(PersistError::from)?;
     Ok(CellAggregateResult {
         completeness: AggregateCompleteness::exact(),

@@ -3,59 +3,87 @@ use emwin_parser::{
 };
 use std::collections::BTreeSet;
 
-/// Raw filter parameters collected from CLI flags or HTTP query strings.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FileFilterInput {
-    pub filename: Option<String>,
-    pub source: Option<String>,
-    pub pil: Option<String>,
-    pub family: Option<String>,
-    pub container: Option<String>,
-    pub wmo_prefix: Option<String>,
-    pub office: Option<String>,
-    pub office_city: Option<String>,
-    pub office_state: Option<String>,
-    pub bbb_kind: Option<String>,
-    pub cccc: Option<String>,
-    pub ttaaii: Option<String>,
-    pub afos: Option<String>,
-    pub bbb: Option<String>,
-    pub has_issues: Option<String>,
-    pub issue_kind: Option<String>,
-    pub issue_code: Option<String>,
-    pub has_vtec: Option<String>,
-    pub has_ugc: Option<String>,
-    pub has_hvtec: Option<String>,
-    pub has_latlon: Option<String>,
-    pub has_time_mot_loc: Option<String>,
-    pub has_wind_hail: Option<String>,
-    pub state: Option<String>,
-    pub county: Option<String>,
-    pub zone: Option<String>,
-    pub fire_zone: Option<String>,
-    pub marine_zone: Option<String>,
-    pub vtec_phenomena: Option<String>,
-    pub vtec_significance: Option<String>,
-    pub vtec_action: Option<String>,
-    pub vtec_office: Option<String>,
-    pub etn: Option<String>,
-    pub hvtec_nwslid: Option<String>,
-    pub hvtec_severity: Option<String>,
-    pub hvtec_cause: Option<String>,
-    pub hvtec_record: Option<String>,
-    pub wind_hail_kind: Option<String>,
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub distance_miles: Option<f64>,
-    pub min_lat: Option<f64>,
-    pub max_lat: Option<f64>,
-    pub min_lon: Option<f64>,
-    pub max_lon: Option<f64>,
-    pub min_wind_mph: Option<f64>,
-    pub min_hail_inches: Option<f64>,
-    pub min_size: Option<usize>,
-    pub max_size: Option<usize>,
+#[macro_export]
+macro_rules! emwin_file_filter_fields {
+    ($callback:ident $(, $args:expr )* $(,)?) => {
+        $callback!(
+            $($args,)*
+            filename, string;
+            source, string;
+            pil, string;
+            family, string;
+            container, string;
+            wmo_prefix, string;
+            office, string;
+            office_city, string;
+            office_state, string;
+            bbb_kind, string;
+            cccc, string;
+            ttaaii, string;
+            afos, string;
+            bbb, string;
+            has_issues, string;
+            issue_kind, string;
+            issue_code, string;
+            has_vtec, string;
+            has_ugc, string;
+            has_hvtec, string;
+            has_latlon, string;
+            has_time_mot_loc, string;
+            has_wind_hail, string;
+            state, string;
+            county, string;
+            zone, string;
+            fire_zone, string;
+            marine_zone, string;
+            vtec_phenomena, string;
+            vtec_significance, string;
+            vtec_action, string;
+            vtec_office, string;
+            etn, string;
+            hvtec_nwslid, string;
+            hvtec_severity, string;
+            hvtec_cause, string;
+            hvtec_record, string;
+            wind_hail_kind, string;
+            lat, f64;
+            lon, f64;
+            distance_miles, f64;
+            min_lat, f64;
+            max_lat, f64;
+            min_lon, f64;
+            max_lon, f64;
+            min_wind_mph, f64;
+            min_hail_inches, f64;
+            min_size, usize;
+            max_size, usize;
+        );
+    };
 }
+
+macro_rules! file_filter_input_type {
+    (string) => {
+        Option<String>
+    };
+    (f64) => {
+        Option<f64>
+    };
+    (usize) => {
+        Option<usize>
+    };
+}
+
+macro_rules! define_file_filter_input {
+    ($( $field:ident, $kind:ident; )*) => {
+        /// Raw filter parameters collected from CLI flags or HTTP query strings.
+        #[derive(Debug, Clone, Default, PartialEq)]
+        pub struct FileFilterInput {
+            $(pub $field: file_filter_input_type!($kind),)*
+        }
+    };
+}
+
+emwin_file_filter_fields!(define_file_filter_input);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileFilterInputError {

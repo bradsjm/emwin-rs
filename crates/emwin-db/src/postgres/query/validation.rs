@@ -1,49 +1,17 @@
 //! Input normalization and validation helpers for archive queries.
 
 use super::{PersistError, PersistResult};
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde::{Deserialize, Serialize};
+use emwin_service::{ProductListQuery, ServiceError};
 
-pub(crate) fn encode_cursor<T: Serialize>(cursor: &T) -> PersistResult<String> {
-    let bytes = serde_json::to_vec(cursor)?;
-    Ok(URL_SAFE_NO_PAD.encode(bytes))
+pub(crate) fn encode_cursor<T: serde::Serialize>(cursor: &T) -> PersistResult<String> {
+    emwin_service::archive::encode_cursor(cursor).map_err(map_service_error)
 }
 
 pub(crate) fn decode_optional_cursor<T>(cursor: Option<&str>) -> PersistResult<Option<T>>
 where
-    T: for<'de> Deserialize<'de>,
+    T: for<'de> serde::Deserialize<'de>,
 {
-    cursor.map(decode_cursor).transpose()
-}
-
-fn decode_cursor<T>(cursor: &str) -> PersistResult<T>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    let bytes = URL_SAFE_NO_PAD
-        .decode(cursor)
-        .map_err(|err| PersistError::InvalidRequest(format!("invalid cursor: {err}")))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|err| PersistError::InvalidRequest(format!("invalid cursor payload: {err}")))
-}
-
-pub(crate) fn validate_lat(name: &str, value: f64) -> PersistResult<()> {
-    if !value.is_finite() || !(-90.0..=90.0).contains(&value) {
-        return Err(PersistError::InvalidRequest(format!(
-            "{name} must be a finite value between -90 and 90"
-        )));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_lon(name: &str, value: f64) -> PersistResult<()> {
-    if !value.is_finite() || !(-180.0..=180.0).contains(&value) {
-        return Err(PersistError::InvalidRequest(format!(
-            "{name} must be a finite value between -180 and 180"
-        )));
-    }
-    Ok(())
+    emwin_service::archive::decode_optional_cursor(cursor).map_err(map_service_error)
 }
 
 pub(crate) fn split_csv_values(
@@ -84,62 +52,40 @@ pub(crate) fn normalize_lower(value: &str) -> String {
 }
 
 pub(crate) fn validate_bbox(
-    query: &super::ProductListQuery,
+    query: &ProductListQuery,
 ) -> PersistResult<Option<(f64, f64, f64, f64)>> {
+    query.validate().map_err(map_service_error)?;
     match (query.min_lat, query.max_lat, query.min_lon, query.max_lon) {
         (None, None, None, None) => Ok(None),
         (Some(min_lat), Some(max_lat), Some(min_lon), Some(max_lon)) => {
-            validate_lat("min_lat", min_lat)?;
-            validate_lat("max_lat", max_lat)?;
-            validate_lon("min_lon", min_lon)?;
-            validate_lon("max_lon", max_lon)?;
-            if min_lat > max_lat {
-                return Err(PersistError::InvalidRequest(
-                    "min_lat must be less than or equal to max_lat".to_string(),
-                ));
-            }
-            if min_lon > max_lon {
-                return Err(PersistError::InvalidRequest(
-                    "min_lon must be less than or equal to max_lon".to_string(),
-                ));
-            }
             Ok(Some((min_lat, max_lat, min_lon, max_lon)))
         }
-        _ => Err(PersistError::InvalidRequest(
-            "min_lat, max_lat, min_lon, and max_lon must be provided together".to_string(),
-        )),
+        _ => unreachable!("validated product queries must provide complete bbox inputs"),
     }
 }
 
 pub(crate) fn validate_point_distance(
-    query: &super::ProductListQuery,
+    query: &ProductListQuery,
 ) -> PersistResult<Option<(f64, f64, f64)>> {
-    if query.distance_miles.is_some() && (query.lat.is_none() || query.lon.is_none()) {
-        return Err(PersistError::InvalidRequest(
-            "distance_miles requires both lat and lon".to_string(),
-        ));
-    }
+    query.validate().map_err(map_service_error)?;
 
-    let distance_miles = match query.distance_miles {
-        Some(distance_miles) if !distance_miles.is_finite() || distance_miles <= 0.0 => {
-            return Err(PersistError::InvalidRequest(
-                "distance_miles must be a finite value greater than 0".to_string(),
-            ));
-        }
-        Some(distance_miles) => distance_miles,
-        None => 5.0,
-    };
+    let distance_miles = query.distance_miles.unwrap_or(5.0);
 
     match (query.lat, query.lon) {
-        (Some(lat), Some(lon)) => {
-            validate_lat("lat", lat)?;
-            validate_lon("lon", lon)?;
-            Ok(Some((lat, lon, distance_miles * 1_609.344)))
-        }
+        (Some(lat), Some(lon)) => Ok(Some((lat, lon, distance_miles * 1_609.344))),
         (None, None) => Ok(None),
-        _ => Err(PersistError::InvalidRequest(
-            "lat and lon must be provided together".to_string(),
-        )),
+        _ => unreachable!("validated product queries must provide lat/lon together"),
+    }
+}
+
+fn map_service_error(error: ServiceError) -> PersistError {
+    match error {
+        ServiceError::InvalidRequest(message)
+        | ServiceError::Runtime(message)
+        | ServiceError::NotConfigured(message) => PersistError::InvalidRequest(message),
+        ServiceError::InvalidConfig(message) => PersistError::InvalidConfig(message),
+        ServiceError::Io(error) => PersistError::Io(error),
+        ServiceError::Json(error) => PersistError::Json(error),
     }
 }
 

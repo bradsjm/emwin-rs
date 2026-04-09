@@ -75,7 +75,7 @@ async fn archived_issue_queries_support_filters_and_cursor_pagination() {
     cleanup_rows(&sink, &filenames, &incident_keys).await;
 
     for (index, filename) in filenames.iter().enumerate() {
-        let metadata = emwin_db::CompletedFileMetadata::build(
+        let metadata = emwin_db::build_completed_file_metadata(
             filename,
             1_741_180_000 + u64::try_from(index).expect("index should fit") * 60,
             SourceKind::Qbt,

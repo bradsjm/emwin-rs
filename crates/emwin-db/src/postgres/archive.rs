@@ -20,7 +20,7 @@ impl PostgresMetadataSink {
         now: chrono::DateTime<chrono::Utc>,
     ) -> PersistResult<IncidentCleanupResult> {
         let pool = self.ensure_pool().await?;
-        let result = sqlx::query_as::<_, IncidentSummary>(
+        let result = sqlx::query(
             "UPDATE incidents
              SET current_status = 'expired',
                  last_updated_at = now()
@@ -44,7 +44,12 @@ impl PostgresMetadataSink {
         )
         .bind(now)
         .fetch_all(&pool)
-        .await;
+        .await
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| query::incident_summary_from_row(&row))
+                .collect::<Vec<_>>()
+        });
 
         match result {
             Ok(incidents) => {
@@ -95,9 +100,10 @@ impl PostgresMetadataSink {
             .push(" AND etn = ")
             .push_bind(key.etn);
         let result = builder
-            .build_query_as::<IncidentDetail>()
+            .build()
             .fetch_optional(&pool)
             .await
+            .map(|row| row.map(|row| query::incident_summary_from_row(&row)))
             .map_err(PersistError::from);
 
         match result {
@@ -152,7 +158,7 @@ impl PostgresMetadataSink {
             .build()
             .fetch_optional(&pool)
             .await
-            .map(|row| row.map(query::archived_product_detail_from_row))
+            .map(|row| row.map(|row| query::archived_product_detail_from_row(&row)))
             .map_err(PersistError::from);
 
         match result {

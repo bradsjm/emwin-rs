@@ -1,6 +1,7 @@
 //! Incident query entrypoints and incident-change loading helpers.
 
 use super::super::prepare::PendingIncidentChange;
+use super::mappers::{archived_product_summary_from_row, incident_summary_from_row};
 use super::{
     IncidentChange, IncidentChangeTrigger, IncidentCursor, IncidentKey, IncidentListQuery,
     IncidentProductsCursor, IncidentProductsQuery, IncidentSummary, PaginatedResponse,
@@ -44,9 +45,10 @@ async fn fetch_incident_summary(
         .push(" AND etn = ")
         .push_bind(key.etn);
     builder
-        .build_query_as::<IncidentSummary>()
+        .build()
         .fetch_optional(pool)
         .await
+        .map(|row| row.map(|row| incident_summary_from_row(&row)))
         .map_err(PersistError::from)
 }
 
@@ -156,9 +158,12 @@ pub(crate) async fn list_incidents_query(
     builder.push_bind(i64::try_from(limit + 1).expect("limit should fit in i64"));
 
     let mut items = builder
-        .build_query_as::<IncidentSummary>()
+        .build()
         .fetch_all(pool)
-        .await?;
+        .await?
+        .into_iter()
+        .map(|row| incident_summary_from_row(&row))
+        .collect::<Vec<_>>();
 
     let next_cursor = if items.len() > limit {
         items.pop().expect("overflow item should exist");
@@ -219,9 +224,12 @@ pub(crate) async fn list_incident_products_query(
     builder.push_bind(i64::try_from(limit + 1).expect("limit should fit in i64"));
 
     let mut items = builder
-        .build_query_as::<ArchivedProductSummary>()
+        .build()
         .fetch_all(pool)
-        .await?;
+        .await?
+        .into_iter()
+        .map(|row| archived_product_summary_from_row(&row))
+        .collect::<Vec<_>>();
 
     let next_cursor = if items.len() > limit {
         items.pop().expect("overflow item should exist");
