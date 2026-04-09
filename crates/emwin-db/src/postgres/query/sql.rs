@@ -30,7 +30,6 @@ pub(crate) fn archived_product_summary_select_sql() -> String {
             source_receiver,
             source_message_id,
             size_bytes,
-            payload_storage_kind,
             (metadata_location IS NOT NULL) AS has_metadata_sidecar,
             source,
             family,

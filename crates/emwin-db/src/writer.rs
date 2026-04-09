@@ -1,18 +1,11 @@
 use crate::error::{PersistError, PersistResult};
-use object_store::aws::AmazonS3Builder;
-use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjectStorePath;
-use object_store::{ObjectStore, ObjectStoreExt};
-use s3::Bucket;
-use s3::bucket_ops::BucketConfiguration;
-use s3::creds::Credentials;
-use s3::region::Region;
-use std::collections::BTreeMap;
+use object_store::{ObjectStore, ObjectStoreExt, parse_url_opts};
 use std::future::Future;
 use std::io::ErrorKind;
-use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use url::Url;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -51,28 +44,9 @@ impl BlobEntry {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlobStorageKind {
-    /// Blob stored on a local or mounted filesystem.
-    Filesystem,
-    /// Blob stored in Amazon S3-compatible object storage.
-    S3,
-}
-
-impl BlobStorageKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Filesystem => "filesystem",
-            Self::S3 => "s3",
-        }
-    }
-}
-
 /// Stable reference returned after a blob has been persisted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredBlob {
-    /// Storage backend that accepted the blob.
-    pub kind: BlobStorageKind,
     /// Semantic role assigned by the enqueue request.
     pub role: BlobRole,
     /// Stable backend-specific location for later lookup.
@@ -92,15 +66,8 @@ impl StorageBlobReader {
         Self
     }
 
-    pub(crate) async fn read(
-        &self,
-        kind: BlobStorageKind,
-        location: &str,
-    ) -> PersistResult<Vec<u8>> {
-        match kind {
-            BlobStorageKind::Filesystem => tokio::fs::read(location).await.map_err(Into::into),
-            BlobStorageKind::S3 => read_s3_object(location).await,
-        }
+    pub(crate) async fn read(&self, location: &str) -> PersistResult<Vec<u8>> {
+        read_object_store_object(location).await
     }
 }
 
@@ -144,278 +111,63 @@ where
     }
 }
 
-/// Filesystem-backed blob writer rooted at a configured directory.
+/// Object-store-backed blob writer rooted at a configured URI and optional path prefix.
 #[derive(Debug, Clone)]
-pub struct FilesystemBlobWriter {
-    root: PathBuf,
-    store: LocalFileSystem,
-}
-
-impl FilesystemBlobWriter {
-    /// Creates a filesystem writer rooted at the provided directory.
-    pub fn new(root: PathBuf) -> Self {
-        let root = normalize_filesystem_root(root);
-        std::fs::create_dir_all(&root).expect("filesystem blob writer root must be creatable");
-        Self {
-            store: LocalFileSystem::new_with_prefix(&root)
-                .expect("filesystem blob writer root must be readable"),
-            root,
-        }
-    }
-
-    fn describe_target(&self) -> String {
-        self.root.display().to_string()
-    }
-}
-
-fn normalize_filesystem_root(root: PathBuf) -> PathBuf {
-    if root.is_absolute() {
-        return root;
-    }
-
-    std::env::current_dir()
-        .map(|cwd| cwd.join(&root))
-        .unwrap_or(root)
-}
-
-/// S3-backed blob writer rooted at a bucket and optional prefix.
-#[derive(Debug, Clone)]
-pub struct S3BlobWriter {
-    state: Arc<S3WriterState>,
-    prefix: Option<String>,
+pub struct ObjectStoreBlobWriter {
     store: Arc<dyn ObjectStore>,
-}
-
-#[derive(Debug)]
-struct S3WriterState {
-    config: ResolvedS3Config,
-    bucket: Box<Bucket>,
-    readiness: Mutex<S3BucketReadiness>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum S3BucketReadiness {
-    Unknown,
-    Ready,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct S3Environment {
-    region: Option<String>,
-    default_region: Option<String>,
-    endpoint_url: Option<String>,
-    profile: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ResolvedS3Config {
-    bucket_name: String,
     prefix: Option<String>,
-    region: Region,
-    path_style: bool,
-    profile: Option<String>,
+    root_location: String,
 }
 
-impl S3BlobWriter {
-    /// Creates an S3 writer using env-driven AWS-compatible configuration.
-    pub fn new(bucket_name: String, prefix: Option<String>) -> PersistResult<Self> {
-        let config = resolve_s3_config(bucket_name, prefix, &S3Environment::from_process())?;
-        let normalized_prefix = config.prefix.clone();
-        let bucket = build_bucket(&config)?;
-        let store = build_object_store(&config)?;
+impl ObjectStoreBlobWriter {
+    /// Creates an object store writer using env-driven configuration for the target URI scheme.
+    pub fn new(root_url: Url) -> PersistResult<Self> {
+        if root_url.query().is_some() || root_url.fragment().is_some() {
+            return Err(PersistError::InvalidConfig(format!(
+                "object store URI must not include query or fragment components: `{root_url}`"
+            )));
+        }
+
+        let (store, path) = parse_url_opts(&root_url, std::env::vars()).map_err(|err| {
+            PersistError::InvalidConfig(format!(
+                "invalid object store config for `{root_url}`: {err}"
+            ))
+        })?;
+
         Ok(Self {
-            state: Arc::new(S3WriterState {
-                config,
-                bucket,
-                readiness: Mutex::new(S3BucketReadiness::Unknown),
-            }),
-            prefix: normalized_prefix,
-            store,
+            store: Arc::from(store),
+            prefix: path_prefix(&path),
+            root_location: normalize_object_store_root(&root_url),
         })
-    }
-
-    async fn ensure_bucket_ready(&self) -> PersistResult<Box<Bucket>> {
-        if *self
-            .state
-            .readiness
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            == S3BucketReadiness::Ready
-        {
-            return Ok(self.state.bucket.clone());
-        }
-
-        let bucket = self.state.bucket.clone();
-        if bucket
-            .exists()
-            .await
-            .map_err(|err| PersistError::s3_client("check_bucket", &err))?
-        {
-            self.mark_bucket_ready();
-            return Ok(bucket);
-        }
-
-        let credentials =
-            Credentials::new(None, None, None, None, self.state.config.profile.as_deref())
-                .map_err(|err| {
-                    PersistError::InvalidConfig(format!("invalid S3 credentials: {err}"))
-                })?;
-
-        let response = if self.state.config.path_style {
-            Bucket::create_with_path_style(
-                &self.state.config.bucket_name,
-                self.state.config.region.clone(),
-                credentials,
-                BucketConfiguration::default(),
-            )
-            .await
-            .map_err(|err| PersistError::s3_client("create_bucket", &err))?
-        } else {
-            Bucket::create(
-                &self.state.config.bucket_name,
-                self.state.config.region.clone(),
-                credentials,
-                BucketConfiguration::default(),
-            )
-            .await
-            .map_err(|err| PersistError::s3_client("create_bucket", &err))?
-        };
-
-        if !matches!(response.response_code, 200 | 409) {
-            return Err(PersistError::s3_response(
-                "create_bucket",
-                response.response_code,
-                response.response_text,
-            ));
-        }
-
-        self.mark_bucket_ready();
-        Ok(self.state.bucket.clone())
-    }
-
-    fn mark_bucket_ready(&self) {
-        *self
-            .state
-            .readiness
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = S3BucketReadiness::Ready;
-    }
-
-    fn reset_bucket_ready(&self) {
-        *self
-            .state
-            .readiness
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = S3BucketReadiness::Unknown;
     }
 
     fn describe_target(&self) -> String {
-        match self.prefix.as_deref() {
-            Some(prefix) => format!("s3://{}/{}", self.state.config.bucket_name, prefix),
-            None => format!("s3://{}", self.state.config.bucket_name),
-        }
+        self.root_location.clone()
     }
 }
 
-impl S3Environment {
-    pub(crate) fn from_process() -> Self {
-        let vars = std::env::vars().collect::<BTreeMap<_, _>>();
-        Self::from_map(&vars)
-    }
-
-    fn from_map(vars: &BTreeMap<String, String>) -> Self {
-        Self {
-            region: vars.get("AWS_REGION").cloned(),
-            default_region: vars.get("AWS_DEFAULT_REGION").cloned(),
-            endpoint_url: vars.get("AWS_ENDPOINT_URL").cloned(),
-            profile: vars.get("AWS_PROFILE").cloned(),
-        }
-    }
-}
-
-impl BlobWriter for FilesystemBlobWriter {
+impl BlobWriter for ObjectStoreBlobWriter {
     fn write<'a>(&'a self, entry: &'a BlobEntry) -> BoxFuture<'a, PersistResult<StoredBlob>> {
-        let relative_path = entry.relative_path.clone();
-        let store = self.store.clone();
-        let content_type = entry.content_type.clone();
-        Box::pin(async move {
-            let path = parse_object_store_path(&normalize_relative_path(&relative_path))?;
-            store
-                .put(&path, entry.bytes.clone().into())
-                .await
-                .map_err(|err| filesystem_error_from_object_store("put_object", err))?;
-            let location = store
-                .path_to_filesystem(&path)
-                .map_err(|err| PersistError::InvalidRequest(err.to_string()))?
-                .to_string_lossy()
-                .to_string();
-
-            Ok(StoredBlob {
-                kind: BlobStorageKind::Filesystem,
-                role: entry.role,
-                location,
-                size_bytes: entry.bytes.len(),
-                content_type,
-            })
-        })
-    }
-
-    fn delete<'a>(&'a self, blob: &'a StoredBlob) -> BoxFuture<'a, PersistResult<()>> {
-        let location = blob.location.clone();
-        let store = self.store.clone();
-        let root = self.root.clone();
-        Box::pin(async move {
-            let relative = std::path::Path::new(&location)
-                .strip_prefix(&root)
-                .map_err(|_| {
-                    PersistError::InvalidRequest(format!(
-                        "stored blob location `{location}` does not belong to configured filesystem root"
-                    ))
-                })?;
-            let path =
-                parse_object_store_path(&normalize_relative_path(&relative.to_string_lossy()))?;
-            match store.delete(&path).await {
-                Ok(()) => Ok(()),
-                Err(object_store::Error::NotFound { .. }) => Ok(()),
-                Err(err) => Err(filesystem_error_from_object_store("delete_object", err)),
-            }?;
-            Ok(())
-        })
-    }
-
-    fn backend_name(&self) -> &'static str {
-        BlobStorageKind::Filesystem.as_str()
-    }
-
-    fn target_description(&self) -> String {
-        self.describe_target()
-    }
-}
-
-impl BlobWriter for S3BlobWriter {
-    fn write<'a>(&'a self, entry: &'a BlobEntry) -> BoxFuture<'a, PersistResult<StoredBlob>> {
-        let writer = self.clone();
-        let key = build_object_key(self.prefix.as_deref(), &entry.relative_path);
+        let store = Arc::clone(&self.store);
+        let prefix = self.prefix.clone();
+        let root_location = self.root_location.clone();
         let content_type = entry.content_type.clone();
         let size_bytes = entry.bytes.len();
         let role = entry.role;
         let bytes = entry.bytes.clone();
+        let relative_path = entry.relative_path.clone();
 
         Box::pin(async move {
-            let bucket = writer.ensure_bucket_ready().await?;
+            let key = build_object_key(prefix.as_deref(), &relative_path);
             let path = parse_object_store_path(&key)?;
-            let put_result = writer.store.put(&path, bytes.into()).await;
-            if let Err(err) = put_result {
-                if matches!(err, object_store::Error::NotFound { .. }) {
-                    writer.reset_bucket_ready();
-                }
-                return Err(s3_error_from_object_store("put_object", err));
-            }
+            store
+                .put(&path, bytes.into())
+                .await
+                .map_err(|err| object_store_error_from_object_store("put_object", err, None))?;
 
             Ok(StoredBlob {
-                kind: BlobStorageKind::S3,
                 role,
-                location: format_s3_location(&bucket.name, &key),
+                location: format_object_store_location(&root_location, &relative_path),
                 size_bytes,
                 content_type,
             })
@@ -425,21 +177,28 @@ impl BlobWriter for S3BlobWriter {
     fn delete<'a>(&'a self, blob: &'a StoredBlob) -> BoxFuture<'a, PersistResult<()>> {
         let location = blob.location.clone();
         let store = Arc::clone(&self.store);
-        let bucket_name = self.state.config.bucket_name.clone();
+        let prefix = self.prefix.clone();
+        let root_location = self.root_location.clone();
 
         Box::pin(async move {
-            let key = parse_s3_location(&location, &bucket_name)?;
-            let path = parse_object_store_path(key)?;
+            let relative = strip_object_store_root(&location, &root_location)
+                .map_err(PersistError::InvalidRequest)?;
+            let key = build_object_key(prefix.as_deref(), &relative);
+            let path = parse_object_store_path(&key)?;
             match store.delete(&path).await {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(object_store::Error::NotFound { .. }) => Ok(()),
-                Err(err) => Err(s3_error_from_object_store("delete_object", err)),
+                Err(err) => Err(object_store_error_from_object_store(
+                    "delete_object",
+                    err,
+                    Some(&location),
+                )),
             }
         })
     }
 
     fn backend_name(&self) -> &'static str {
-        BlobStorageKind::S3.as_str()
+        "object_store"
     }
 
     fn target_description(&self) -> String {
@@ -447,116 +206,23 @@ impl BlobWriter for S3BlobWriter {
     }
 }
 
-pub(crate) fn resolve_s3_config(
-    bucket_name: String,
-    prefix: Option<String>,
-    env: &S3Environment,
-) -> PersistResult<ResolvedS3Config> {
-    let endpoint_url = env
-        .endpoint_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    let has_custom_endpoint = endpoint_url.is_some();
-
-    let region_name = env
-        .region
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .or_else(|| {
-            env.default_region
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-        });
-
-    let region = match (has_custom_endpoint, region_name, endpoint_url.clone()) {
-        (true, Some(region), Some(endpoint)) => Region::Custom { region, endpoint },
-        (true, None, Some(endpoint)) => Region::Custom {
-            region: "us-east-1".to_string(),
-            endpoint,
-        },
-        (true, _, None) => unreachable!("custom endpoint mode requires endpoint URL"),
-        (false, Some(region), _) => region.parse().map_err(|err| {
-            PersistError::InvalidConfig(format!("invalid AWS region for S3 writer: {err}"))
-        })?,
-        (false, None, _) => {
-            return Err(PersistError::InvalidConfig(
-                "S3 output requires AWS_REGION or AWS_DEFAULT_REGION unless AWS_ENDPOINT_URL is set"
-                    .to_string(),
-            ));
-        }
-    };
-
-    Ok(ResolvedS3Config {
-        bucket_name,
-        prefix: normalize_prefix(prefix),
-        region,
-        path_style: has_custom_endpoint,
-        profile: env.profile.clone(),
-    })
+fn path_prefix(path: &ObjectStorePath) -> Option<String> {
+    (!path.as_ref().is_empty()).then(|| path.to_string())
 }
 
-pub(crate) fn build_bucket(config: &ResolvedS3Config) -> PersistResult<Box<Bucket>> {
-    let credentials = Credentials::new(None, None, None, None, config.profile.as_deref())
-        .map_err(|err| PersistError::InvalidConfig(format!("invalid S3 credentials: {err}")))?;
-    let bucket = Bucket::new(&config.bucket_name, config.region.clone(), credentials)
-        .map_err(|err| PersistError::InvalidConfig(format!("invalid S3 config: {err}")))?;
-
-    if config.path_style {
-        Ok(bucket.with_path_style())
-    } else {
-        Ok(bucket)
-    }
+fn normalize_object_store_root(url: &Url) -> String {
+    let mut normalized = url.clone();
+    let trimmed_path = normalized.path().trim_end_matches('/').to_string();
+    normalized.set_path(&trimmed_path);
+    normalized.to_string()
 }
 
-pub(crate) fn build_object_store(config: &ResolvedS3Config) -> PersistResult<Arc<dyn ObjectStore>> {
-    let credentials = Credentials::new(None, None, None, None, config.profile.as_deref())
-        .map_err(|err| PersistError::InvalidConfig(format!("invalid S3 credentials: {err}")))?;
-    let mut builder = AmazonS3Builder::new()
-        .with_bucket_name(&config.bucket_name)
-        .with_region(region_name(&config.region))
-        .with_virtual_hosted_style_request(!config.path_style);
-
-    if let Some(access_key_id) = credentials.access_key {
-        builder = builder.with_access_key_id(access_key_id);
-    }
-    if let Some(secret_access_key) = credentials.secret_key {
-        builder = builder.with_secret_access_key(secret_access_key);
-    }
-    if let Some(token) = credentials.session_token.or(credentials.security_token) {
-        builder = builder.with_token(token);
-    }
-    if let Region::Custom { endpoint, .. } = &config.region {
-        builder = builder
-            .with_endpoint(endpoint)
-            .with_allow_http(endpoint.starts_with("http://"));
-    }
-
-    builder
-        .build()
-        .map(|store| Arc::new(store) as Arc<dyn ObjectStore>)
-        .map_err(|err| {
-            PersistError::InvalidConfig(format!("invalid S3 object store config: {err}"))
-        })
-}
-
+#[cfg(test)]
 pub(crate) fn normalize_prefix(prefix: Option<String>) -> Option<String> {
     prefix.and_then(|value| {
         let trimmed = value.trim_matches('/');
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
-}
-
-fn region_name(region: &Region) -> String {
-    match region {
-        Region::Custom { region, .. } => region.clone(),
-        _ => region.to_string(),
-    }
 }
 
 fn normalize_relative_path(relative_path: &str) -> String {
@@ -570,38 +236,51 @@ fn parse_object_store_path(path: &str) -> PersistResult<ObjectStorePath> {
     ObjectStorePath::parse(path).map_err(|err| PersistError::InvalidRequest(err.to_string()))
 }
 
-fn filesystem_error_from_object_store(
+fn object_store_error_from_object_store(
     operation: &'static str,
     err: object_store::Error,
+    location: Option<&str>,
 ) -> PersistError {
     match err {
         object_store::Error::NotFound { path, .. } => PersistError::Io(std::io::Error::new(
             ErrorKind::NotFound,
-            format!("stored blob `{path}` was not found during {operation}"),
+            format!(
+                "stored blob `{}` was not found during {operation}",
+                location.unwrap_or(&path)
+            ),
         )),
         object_store::Error::InvalidPath { source } => {
             PersistError::InvalidRequest(source.to_string())
         }
-        other => PersistError::Io(std::io::Error::other(format!(
-            "filesystem {operation} failed: {other}"
-        ))),
-    }
-}
-
-fn s3_error_from_object_store(operation: &'static str, err: object_store::Error) -> PersistError {
-    match err {
-        object_store::Error::NotFound { path, .. } => PersistError::Io(std::io::Error::new(
-            ErrorKind::NotFound,
-            format!("stored blob `s3://{path}` was not found during {operation}"),
-        )),
-        object_store::Error::InvalidPath { source } => {
-            PersistError::InvalidRequest(source.to_string())
+        object_store::Error::NotSupported { source } => {
+            PersistError::object_store(operation, false, source.to_string())
         }
-        other => PersistError::S3 {
+        object_store::Error::AlreadyExists { source, .. }
+        | object_store::Error::Precondition { source, .. }
+        | object_store::Error::NotModified { source, .. } => {
+            PersistError::object_store(operation, false, source.to_string())
+        }
+        object_store::Error::NotImplemented {
+            operation: not_implemented,
+            implementer,
+        } => PersistError::object_store(
             operation,
-            retryable: true,
-            message: other.to_string(),
-        },
+            false,
+            format!("{not_implemented} by {implementer}"),
+        ),
+        object_store::Error::JoinError { source } => {
+            PersistError::object_store(operation, true, source.to_string())
+        }
+        object_store::Error::PermissionDenied { source, .. } => {
+            PersistError::object_store(operation, false, source.to_string())
+        }
+        object_store::Error::Unauthenticated { source, .. } => {
+            PersistError::object_store(operation, false, source.to_string())
+        }
+        object_store::Error::UnknownConfigurationKey { key, .. } => {
+            PersistError::object_store(operation, false, format!("unknown config key `{key}`"))
+        }
+        other => PersistError::object_store(operation, true, other.to_string()),
     }
 }
 
@@ -613,71 +292,62 @@ pub(crate) fn build_object_key(prefix: Option<&str>, relative_path: &str) -> Str
     }
 }
 
-pub(crate) fn format_s3_location(bucket: &str, key: &str) -> String {
-    format!("s3://{bucket}/{key}")
+pub(crate) fn format_object_store_location(root_location: &str, relative_path: &str) -> String {
+    let normalized_relative_path = normalize_relative_path(relative_path);
+    match root_location.trim_end_matches('/') {
+        "" => normalized_relative_path,
+        root => format!("{root}/{normalized_relative_path}"),
+    }
 }
 
-pub(crate) fn parse_s3_location<'a>(location: &'a str, bucket: &str) -> PersistResult<&'a str> {
-    let prefix = format!("s3://{bucket}/");
-    location.strip_prefix(&prefix).ok_or_else(|| {
+pub(crate) fn strip_object_store_root(
+    location: &str,
+    root_location: &str,
+) -> Result<String, String> {
+    let prefix = format!("{}/", root_location.trim_end_matches('/'));
+    location
+        .strip_prefix(&prefix)
+        .map(normalize_relative_path)
+        .ok_or_else(|| {
+            format!(
+                "stored blob location `{location}` does not belong to configured object store root `{root_location}`"
+            )
+        })
+}
+
+async fn read_object_store_object(location: &str) -> PersistResult<Vec<u8>> {
+    let url = Url::parse(location).map_err(|err| {
         PersistError::InvalidRequest(format!(
-            "stored blob location `{location}` does not belong to bucket `{bucket}`"
+            "invalid stored object store location `{location}`: {err}"
         ))
-    })
-}
-
-async fn read_s3_object(location: &str) -> PersistResult<Vec<u8>> {
-    let (bucket_name, _) = split_s3_location(location)?;
-    let config = resolve_s3_config(bucket_name.clone(), None, &S3Environment::from_process())?;
-    let key = parse_s3_location(location, &bucket_name)?;
-    let store = build_object_store(&config)?;
-    let path = parse_object_store_path(key)?;
+    })?;
+    let (store, path) = parse_url_opts(&url, std::env::vars()).map_err(|err| {
+        PersistError::InvalidRequest(format!(
+            "invalid stored object store location `{location}`: {err}"
+        ))
+    })?;
     let response = store
         .get(&path)
         .await
-        .map_err(|err| s3_error_from_object_store("get_object", err))?;
+        .map_err(|err| object_store_error_from_object_store("get_object", err, Some(location)))?;
     response
         .bytes()
         .await
         .map(|bytes| bytes.to_vec())
-        .map_err(|err| PersistError::S3 {
-            operation: "get_object",
-            retryable: true,
-            message: err.to_string(),
-        })
-}
-
-fn split_s3_location(location: &str) -> PersistResult<(String, String)> {
-    let without_scheme = location.strip_prefix("s3://").ok_or_else(|| {
-        PersistError::InvalidRequest(format!("invalid stored S3 location `{location}`"))
-    })?;
-    let (bucket, key) = without_scheme.split_once('/').ok_or_else(|| {
-        PersistError::InvalidRequest(format!("invalid stored S3 location `{location}`"))
-    })?;
-    if bucket.is_empty() || key.is_empty() {
-        return Err(PersistError::InvalidRequest(format!(
-            "invalid stored S3 location `{location}`"
-        )));
-    }
-    Ok((bucket.to_string(), key.to_string()))
+        .map_err(|err| PersistError::object_store("get_object", true, err.to_string()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        FilesystemBlobWriter, ResolvedS3Config, S3BlobWriter, S3BucketReadiness, S3Environment,
-        S3WriterState, build_object_key, format_s3_location, normalize_prefix, parse_s3_location,
-        resolve_s3_config,
+        ObjectStoreBlobWriter, build_object_key, format_object_store_location,
+        normalize_object_store_root, normalize_prefix, strip_object_store_root,
     };
-    use crate::{BlobEntry, BlobRole, BlobStorageKind, BlobWriter};
-    use s3::Bucket;
-    use s3::region::Region;
-    use std::collections::BTreeMap;
-    use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
+    use crate::{BlobEntry, BlobRole, BlobWriter};
+    use url::Url;
 
     #[test]
-    fn s3_key_joining_normalizes_prefix_and_relative_path() {
+    fn object_key_joining_normalizes_prefix_and_relative_path() {
         assert_eq!(
             normalize_prefix(Some("/archive/weather/".to_string())),
             Some("archive/weather".to_string())
@@ -690,134 +360,41 @@ mod tests {
     }
 
     #[test]
-    fn s3_locations_round_trip_with_bucket_prefix() {
-        let location = format_s3_location("example-bucket", "archive/AFDBOX.TXT");
-        assert_eq!(location, "s3://example-bucket/archive/AFDBOX.TXT");
+    fn object_store_locations_round_trip_with_root_prefix() {
+        let location =
+            format_object_store_location("s3://example-bucket/archive", "nested/AFDBOX.TXT");
+        assert_eq!(location, "s3://example-bucket/archive/nested/AFDBOX.TXT");
         assert_eq!(
-            parse_s3_location(&location, "example-bucket").expect("location should parse"),
-            "archive/AFDBOX.TXT"
+            strip_object_store_root(&location, "s3://example-bucket/archive")
+                .expect("location should parse"),
+            "nested/AFDBOX.TXT"
         );
     }
 
     #[test]
-    fn s3_location_rejects_other_buckets() {
-        let err = parse_s3_location("s3://other-bucket/archive/AFDBOX.TXT", "example-bucket")
-            .expect_err("bucket mismatch should fail");
-        assert!(err.to_string().contains("does not belong to bucket"));
-    }
-
-    #[test]
-    fn s3_resolver_uses_hosted_style_when_no_endpoint_is_set() {
-        let env = env_with([(String::from("AWS_REGION"), String::from("us-west-2"))]);
-        let config = resolve_s3_config("bucket".to_string(), Some("archive".to_string()), &env)
-            .expect("hosted style config should resolve");
-
-        assert!(matches!(config.region, Region::UsWest2));
-        assert!(!config.path_style);
-        assert_eq!(config.prefix.as_deref(), Some("archive"));
-    }
-
-    #[test]
-    fn s3_resolver_uses_custom_endpoint_and_path_style() {
-        let env = env_with([
-            (
-                String::from("AWS_ENDPOINT_URL"),
-                String::from("http://localhost:9000"),
-            ),
-            (String::from("AWS_DEFAULT_REGION"), String::from("minio")),
-        ]);
-        let config = resolve_s3_config("bucket".to_string(), None, &env)
-            .expect("custom endpoint config should resolve");
-
-        match config.region {
-            Region::Custom { region, endpoint } => {
-                assert_eq!(region, "minio");
-                assert_eq!(endpoint, "http://localhost:9000");
-            }
-            other => panic!("expected custom region, got {other:?}"),
-        }
-        assert!(config.path_style);
-    }
-
-    #[test]
-    fn s3_resolver_falls_back_to_default_region_for_aws() {
-        let env = env_with([(
-            String::from("AWS_DEFAULT_REGION"),
-            String::from("us-east-1"),
-        )]);
-        let config = resolve_s3_config("bucket".to_string(), None, &env)
-            .expect("default region should resolve");
-
-        assert!(matches!(config.region, Region::UsEast1));
-    }
-
-    #[test]
-    fn s3_resolver_defaults_custom_endpoint_region_to_us_east_1() {
-        let env = env_with([(
-            String::from("AWS_ENDPOINT_URL"),
-            String::from("http://localhost:9000"),
-        )]);
-        let config = resolve_s3_config("bucket".to_string(), None, &env)
-            .expect("custom endpoint should default region");
-
-        match config.region {
-            Region::Custom { region, endpoint } => {
-                assert_eq!(region, "us-east-1");
-                assert_eq!(endpoint, "http://localhost:9000");
-            }
-            other => panic!("expected custom region, got {other:?}"),
-        }
-        assert!(config.path_style);
-    }
-
-    #[test]
-    fn s3_resolver_requires_region_without_custom_endpoint() {
-        let err = resolve_s3_config(
-            "bucket".to_string(),
-            None,
-            &S3Environment::from_map(&BTreeMap::new()),
+    fn object_store_location_rejects_other_roots() {
+        let err = strip_object_store_root(
+            "s3://other-bucket/archive/AFDBOX.TXT",
+            "s3://example-bucket/archive",
         )
-        .expect_err("missing region should fail");
-        assert!(err.to_string().contains("AWS_REGION or AWS_DEFAULT_REGION"));
+        .expect_err("root mismatch should fail");
+        assert!(err.contains("does not belong to configured object store root"));
     }
 
-    #[tokio::test]
-    async fn filesystem_writer_creates_deep_parent_directories() {
-        let temp = tempfile::tempdir().expect("tempdir should exist");
-        let writer = FilesystemBlobWriter::new(temp.path().to_path_buf());
-        let entry = BlobEntry::new(
-            BlobRole::Payload,
-            "qbt/2026/03/16/BOX/nws_text_product/20260316T021530Z-deadbeef-AFDBOX.TXT",
-            b"payload".to_vec(),
-            Some("text/plain"),
-        );
-
-        let stored = writer.write(&entry).await.expect("write should succeed");
-
-        assert_eq!(stored.kind, BlobStorageKind::Filesystem);
+    #[test]
+    fn object_store_root_normalizes_trailing_slashes() {
+        let url = Url::parse("https://storage.example.com/archive/").expect("url should parse");
         assert_eq!(
-            std::fs::read_to_string(temp.path().join(&entry.relative_path))
-                .expect("payload should exist"),
-            "payload"
-        );
-        assert!(
-            std::path::Path::new(&stored.location).is_absolute(),
-            "filesystem blob locations should be absolute"
+            normalize_object_store_root(&url),
+            "https://storage.example.com/archive"
         );
     }
 
     #[tokio::test]
-    async fn filesystem_writer_normalizes_relative_roots_to_absolute_locations() {
-        let temp = tempfile::Builder::new()
-            .prefix("emwin-db-writer-relative-")
-            .tempdir_in(".")
-            .expect("tempdir in cwd should exist");
-        let root = PathBuf::from(
-            temp.path()
-                .file_name()
-                .expect("tempdir should have a file name"),
-        );
-        let writer = FilesystemBlobWriter::new(root.clone());
+    async fn file_writer_persists_file_urls() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+        let root_url = Url::from_directory_path(temp.path()).expect("directory url should build");
+        let writer = ObjectStoreBlobWriter::new(root_url.clone()).expect("writer should build");
         let entry = BlobEntry::new(
             BlobRole::Payload,
             "archive/payload.txt",
@@ -827,50 +404,42 @@ mod tests {
 
         let stored = writer.write(&entry).await.expect("write should succeed");
 
-        assert!(
-            std::path::Path::new(&stored.location).is_absolute(),
-            "relative roots should be persisted as absolute blob locations"
-        );
         assert_eq!(
-            std::fs::read_to_string(std::path::Path::new(&stored.location))
-                .expect("payload should exist at the stored location"),
+            stored.location,
+            format!(
+                "{}/archive/payload.txt",
+                root_url.as_str().trim_end_matches('/')
+            )
+        );
+        let payload_path = temp.path().join("archive/payload.txt");
+        assert_eq!(
+            std::fs::read_to_string(payload_path).expect("payload should exist"),
             "payload"
         );
     }
 
     #[test]
-    fn bucket_readiness_can_be_reset() {
-        let writer = S3BlobWriter {
-            state: Arc::new(S3WriterState {
-                config: ResolvedS3Config {
-                    bucket_name: "bucket".to_string(),
-                    prefix: Some("archive".to_string()),
-                    region: Region::UsEast1,
-                    path_style: false,
-                    profile: None,
-                },
-                bucket: Box::new(
-                    Bucket::new_public("bucket", Region::UsEast1).expect("bucket should build"),
-                ),
-                readiness: Mutex::new(S3BucketReadiness::Ready),
-            }),
-            prefix: Some("archive".to_string()),
-            store: Arc::new(object_store::memory::InMemory::new()),
-        };
-
-        writer.reset_bucket_ready();
+    fn object_store_writer_uses_parsed_prefix_for_target_description() {
+        let writer = ObjectStoreBlobWriter::new(
+            Url::parse("s3://example-bucket/archive/weather/").expect("url should parse"),
+        )
+        .expect("writer should build");
 
         assert_eq!(
-            *writer
-                .state
-                .readiness
-                .lock()
-                .expect("mutex should not be poisoned"),
-            S3BucketReadiness::Unknown
+            writer.target_description(),
+            "s3://example-bucket/archive/weather"
         );
     }
 
-    fn env_with<const N: usize>(entries: [(String, String); N]) -> S3Environment {
-        S3Environment::from_map(&entries.into_iter().collect())
+    #[test]
+    fn object_store_writer_rejects_query_and_fragment_components() {
+        let err = ObjectStoreBlobWriter::new(
+            Url::parse("s3://example-bucket/archive?x=1").expect("url should parse"),
+        )
+        .expect_err("query string should fail");
+        assert!(
+            err.to_string()
+                .contains("must not include query or fragment")
+        );
     }
 }

@@ -627,7 +627,6 @@ pub struct ArchivedProductSummary {
     pub source_receiver: String,
     pub source_message_id: Option<String>,
     pub size_bytes: i64,
-    pub payload_storage_kind: String,
     pub has_metadata_sidecar: bool,
     pub source: String,
     pub family: Option<String>,
@@ -677,7 +676,6 @@ pub struct ArchivedProductDetail {
 pub struct ArchivedPayload {
     pub filename: String,
     pub bytes: Vec<u8>,
-    pub payload_storage_kind: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]

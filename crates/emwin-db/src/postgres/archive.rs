@@ -197,7 +197,7 @@ impl PostgresMetadataSink {
     ) -> PersistResult<Option<ArchivedPayload>> {
         let pool = self.ensure_pool().await?;
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT filename, payload_storage_kind, payload_location FROM products WHERE id = ",
+            "SELECT filename, payload_location FROM products WHERE id = ",
         );
         builder.push_bind(product_id);
         let row = builder
@@ -217,20 +217,9 @@ impl PostgresMetadataSink {
         };
 
         let filename = row.get::<String, _>("filename");
-        let payload_storage_kind = row.get::<String, _>("payload_storage_kind");
         let payload_location = row.get::<String, _>("payload_location");
-        let bytes = self
-            .blob_reader
-            .read(
-                query::parse_blob_storage_kind(&payload_storage_kind)?,
-                &payload_location,
-            )
-            .await?;
-        Ok(Some(ArchivedPayload {
-            filename,
-            bytes,
-            payload_storage_kind,
-        }))
+        let bytes = self.blob_reader.read(&payload_location).await?;
+        Ok(Some(ArchivedPayload { filename, bytes }))
     }
 
     pub async fn list_archived_features(

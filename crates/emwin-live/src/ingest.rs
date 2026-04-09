@@ -276,9 +276,12 @@ mod tests {
         let temp = tempdir().expect("tempdir should succeed");
         let runtime = emwin_db::PersistenceRuntime::spawn(
             emwin_db::PersistenceConfig::new(16),
-            Box::new(emwin_db::FilesystemBlobWriter::new(
-                temp.path().to_path_buf(),
-            )),
+            Box::new(
+                emwin_db::ObjectStoreBlobWriter::new(
+                    url::Url::from_directory_path(temp.path()).expect("directory url should build"),
+                )
+                .expect("writer should build"),
+            ),
             emwin_db::NoopMetadataSink,
         );
         runtime.producer()

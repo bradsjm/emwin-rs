@@ -33,7 +33,7 @@ enum Commands {
     },
     /// Live command with HTTP, SSE, and retained file endpoints.
     Server {
-        /// Optional filesystem path or `s3://bucket[/prefix]` URI for async blob persistence.
+        /// Optional object-store root URI for async blob persistence, for example `file:///tmp/emwin` or `s3://bucket/prefix`.
         #[arg(long, env = "EMWIN_OUTPUT_DIR")]
         output_dir: Option<String>,
         /// Whether completed ZIP/ZIS archives should be extracted before downstream handling.
@@ -405,7 +405,7 @@ mod tests {
                     "--username",
                     "test@example.com",
                     "--output-dir",
-                    "./out",
+                    "file:///tmp/out",
                     "--persist-queue-capacity",
                     "55",
                     "--persist-database-url",
@@ -416,7 +416,7 @@ mod tests {
                     "secret-token",
                 ]
                 .as_slice(),
-                Some("./out"),
+                Some("file:///tmp/out"),
                 Some(55usize),
                 Some("postgres://localhost/emwin"),
                 Some(16u32),

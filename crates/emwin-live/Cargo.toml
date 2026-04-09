@@ -14,6 +14,7 @@ emwin-parser = { path = "../emwin-parser" }
 emwin-db = { path = "../emwin-db" }
 emwin-service = { path = "../emwin-service" }
 chrono.workspace = true
+object_store.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

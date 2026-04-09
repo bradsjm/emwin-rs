@@ -1,7 +1,8 @@
 mod common;
 
 use common::*;
-use emwin_db::{BlobRole, BlobWriter};
+use emwin_db::{BlobRole, BlobWriter, ObjectStoreBlobWriter};
+use url::Url;
 
 #[tokio::test]
 async fn archive_payload_reads_filesystem_backed_bytes() {
@@ -28,8 +29,12 @@ async fn archive_payload_reads_filesystem_backed_bytes() {
         &sink,
         metadata.clone(),
         sample_filesystem_blobs_at(
-            &payload_path.to_string_lossy(),
-            &sidecar_path.to_string_lossy(),
+            Url::from_file_path(&payload_path)
+                .expect("payload file url should build")
+                .as_str(),
+            Url::from_file_path(&sidecar_path)
+                .expect("sidecar file url should build")
+                .as_str(),
         ),
     )
     .await;
@@ -46,21 +51,16 @@ async fn archive_payload_reads_filesystem_backed_bytes() {
 }
 
 #[tokio::test]
-async fn archive_payload_reads_writer_locations_from_relative_filesystem_roots() {
+async fn archive_payload_reads_file_url_backed_bytes() {
     let Some(sink) = connect_test_sink().await else {
         return;
     };
 
-    let temp = tempfile::Builder::new()
-        .prefix("emwin-db-archive-relative-")
-        .tempdir_in(".")
-        .expect("tempdir in cwd should exist");
-    let root = std::path::PathBuf::from(
-        temp.path()
-            .file_name()
-            .expect("tempdir should have a file name"),
-    );
-    let writer = emwin_db::FilesystemBlobWriter::new(root);
+    let temp = tempfile::tempdir().expect("tempdir should exist");
+    let writer = ObjectStoreBlobWriter::new(
+        Url::from_directory_path(temp.path()).expect("directory url should build"),
+    )
+    .expect("writer should build");
     let payload_entry = emwin_db::BlobEntry::new(
         BlobRole::Payload,
         "archive/payload.txt",
@@ -81,10 +81,7 @@ async fn archive_payload_reads_writer_locations_from_relative_filesystem_roots()
         .write(&sidecar_entry)
         .await
         .expect("sidecar write should succeed");
-    assert!(
-        std::path::Path::new(&payload_blob.location).is_absolute(),
-        "relative filesystem roots should persist absolute payload locations"
-    );
+    assert!(payload_blob.location.starts_with("file://"));
 
     let metadata = sample_metadata();
     let incident_key = TestIncidentKey {

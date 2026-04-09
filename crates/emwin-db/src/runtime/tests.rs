@@ -3,9 +3,9 @@ use super::{
     BlobEntry, BlobWriter, EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest,
     PersistedRequest, PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,
 };
+use crate::BlobRole;
 use crate::error::{PersistError, PersistResult};
-use crate::writer::{BoxFuture, FilesystemBlobWriter};
-use crate::{BlobRole, BlobStorageKind};
+use crate::writer::{BoxFuture, ObjectStoreBlobWriter};
 use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::io::Write;
@@ -15,6 +15,7 @@ use tokio::sync::Semaphore;
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 use tracing_subscriber::fmt::MakeWriter;
+use url::Url;
 
 #[derive(Debug, Default)]
 struct RecordingWriter {
@@ -34,7 +35,6 @@ impl BlobWriter for RecordingWriter {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .push(entry.relative_path.clone());
             Ok(crate::writer::StoredBlob {
-                kind: BlobStorageKind::Filesystem,
                 role: entry.role,
                 location: entry.relative_path.clone(),
                 size_bytes: entry.bytes.len(),
@@ -153,7 +153,6 @@ impl BlobWriter for TransientWriter {
             }
 
             Ok(crate::writer::StoredBlob {
-                kind: BlobStorageKind::Filesystem,
                 role: entry.role,
                 location: entry.relative_path.clone(),
                 size_bytes: entry.bytes.len(),
@@ -269,7 +268,6 @@ impl BlobWriter for BlockingWriter {
             }
 
             Ok(crate::writer::StoredBlob {
-                kind: BlobStorageKind::Filesystem,
                 role: entry.role,
                 location: entry.relative_path.clone(),
                 size_bytes: entry.bytes.len(),
@@ -287,17 +285,17 @@ impl BlobWriter for BlockingWriter {
 }
 
 #[derive(Debug, Default)]
-struct S3FailingWriter;
+struct ObjectStoreFailingWriter;
 
-impl BlobWriter for S3FailingWriter {
+impl BlobWriter for ObjectStoreFailingWriter {
     fn write<'a>(
         &'a self,
         _entry: &'a BlobEntry,
     ) -> BoxFuture<'a, PersistResult<crate::writer::StoredBlob>> {
         Box::pin(async {
-            Err(PersistError::s3_response(
+            Err(PersistError::object_store(
                 "put_object",
-                503,
+                true,
                 "service unavailable",
             ))
         })
@@ -311,7 +309,7 @@ impl BlobWriter for S3FailingWriter {
     }
 
     fn backend_name(&self) -> &'static str {
-        "s3"
+        "object_store"
     }
 
     fn target_description(&self) -> String {
@@ -547,7 +545,10 @@ async fn filesystem_writer_keeps_blobs_when_sink_fails() {
     let temp = tempdir().expect("tempdir should succeed");
     let runtime = PersistenceRuntime::spawn(
         PersistenceConfig::new(4),
-        FilesystemBlobWriter::new(temp.path().to_path_buf()),
+        ObjectStoreBlobWriter::new(
+            Url::from_directory_path(temp.path()).expect("directory url should build"),
+        )
+        .expect("writer should build"),
         FailingSink,
     );
     let producer = runtime.producer();
@@ -594,7 +595,10 @@ async fn filesystem_writer_persists_blobs() {
     let temp = tempdir().expect("tempdir should succeed");
     let runtime = PersistenceRuntime::spawn(
         PersistenceConfig::new(4),
-        FilesystemBlobWriter::new(temp.path().to_path_buf()),
+        ObjectStoreBlobWriter::new(
+            Url::from_directory_path(temp.path()).expect("directory url should build"),
+        )
+        .expect("writer should build"),
         NoopMetadataSink,
     );
     let producer = runtime.producer();
@@ -755,7 +759,7 @@ async fn shutdown_drops_queued_requests() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn retry_logs_include_s3_backend_context() {
+async fn retry_logs_include_object_store_backend_context() {
     let buffer = SharedLogBuffer::default();
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
@@ -767,17 +771,17 @@ async fn retry_logs_include_s3_backend_context() {
     let config = PersistenceConfig::new(4)
         .with_retry_delays(Duration::from_millis(1), Duration::from_millis(1))
         .with_failure_log_cooldown(Duration::from_millis(1));
-    let runtime = PersistenceRuntime::spawn(config, S3FailingWriter, NoopMetadataSink);
+    let runtime = PersistenceRuntime::spawn(config, ObjectStoreFailingWriter, NoopMetadataSink);
     let producer = runtime.producer();
 
-    assert!(producer.enqueue(request("broken-s3")).accepted);
+    assert!(producer.enqueue(request("broken-object-store")).accepted);
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     let _ = runtime.shutdown().await.expect("shutdown should succeed");
     let logs = buffer.contents();
     assert!(logs.contains("persistence backend unavailable; retrying"));
     assert!(logs.contains("blob_write"));
-    assert!(logs.contains("s3"));
+    assert!(logs.contains("object_store"));
     assert!(logs.contains("target=s3://example-bucket/archive"));
 }
 

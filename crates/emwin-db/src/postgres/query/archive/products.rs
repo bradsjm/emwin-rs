@@ -3,8 +3,7 @@
 use super::super::filters::append_product_filters;
 use super::super::sql::archived_product_summary_select_sql;
 use super::super::{decode_optional_cursor, encode_cursor, normalize_page_limit};
-use crate::error::{PersistError, PersistResult};
-use crate::writer::BlobStorageKind;
+use crate::error::PersistResult;
 use emwin_service::{
     ArchivedProductDetail, ArchivedProductSummary, PaginatedResponse, ProductCursor,
     ProductListQuery,
@@ -57,17 +56,6 @@ pub(crate) async fn list_archived_products_query(
 
     Ok(PaginatedResponse { items, next_cursor })
 }
-
-pub(crate) fn parse_blob_storage_kind(storage_kind: &str) -> PersistResult<BlobStorageKind> {
-    match storage_kind {
-        "filesystem" => Ok(BlobStorageKind::Filesystem),
-        "s3" => Ok(BlobStorageKind::S3),
-        other => Err(PersistError::InvalidRequest(format!(
-            "unsupported payload storage kind `{other}`"
-        ))),
-    }
-}
-
 pub(crate) fn archived_product_detail_from_row(row: PgRow) -> ArchivedProductDetail {
     ArchivedProductDetail {
         summary: ArchivedProductSummary {
@@ -78,7 +66,6 @@ pub(crate) fn archived_product_detail_from_row(row: PgRow) -> ArchivedProductDet
             source_receiver: row.get("source_receiver"),
             source_message_id: row.get("source_message_id"),
             size_bytes: row.get("size_bytes"),
-            payload_storage_kind: row.get("payload_storage_kind"),
             has_metadata_sidecar: row.get("has_metadata_sidecar"),
             source: row.get("source"),
             family: row.get("family"),

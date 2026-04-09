@@ -547,7 +547,6 @@ mod tests {
                 source_receiver: "qbt".to_string(),
                 source_message_id: Some("message-1".to_string()),
                 size_bytes: 2048,
-                payload_storage_kind: "s3".to_string(),
                 has_metadata_sidecar: true,
                 source: "text_header".to_string(),
                 family: Some("nws_text_product".to_string()),

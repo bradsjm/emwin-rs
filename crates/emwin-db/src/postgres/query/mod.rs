@@ -20,7 +20,7 @@ mod validation;
 pub(super) use archive::{
     archived_product_detail_from_row, get_archived_issue_query, list_archived_features_query,
     list_archived_issues_query, list_archived_products_query, list_cell_aggregate_query,
-    list_facet_aggregate_query, list_timeseries_aggregate_query, parse_blob_storage_kind,
+    list_facet_aggregate_query, list_timeseries_aggregate_query,
 };
 pub(super) use incidents::{
     list_incident_products_query, list_incidents_query, load_incident_changes,

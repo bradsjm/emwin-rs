@@ -6,25 +6,24 @@
 //!
 //! # Features
 //!
-//! - **Filesystem**: Local file storage backend
-//! - **S3**: AWS S3-compatible object storage backend
+//! - **Object Store**: URI-addressed object storage backends supported by `object_store`
 //! - **PostgreSQL**: Metadata persistence with Postgres
 //!
 //! # Example
 //!
-//! Queue completed products for filesystem persistence:
+//! Queue completed products for URI-based object-store persistence:
 //!
 //! ```no_run
 //! use emwin_db::{
-//!     BlobEntry, BlobRole, FilesystemBlobWriter, PersistRequest, PersistenceConfig,
+//!     BlobEntry, BlobRole, ObjectStoreBlobWriter, PersistRequest, PersistenceConfig,
 //!     PersistenceRuntime, NoopMetadataSink,
 //! };
-//! use std::path::PathBuf;
+//! use url::Url;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = PersistenceConfig::new(1000);
-//!     let writer = FilesystemBlobWriter::new(PathBuf::from("./out"));
+//!     let writer = ObjectStoreBlobWriter::new(Url::parse("file:///tmp/emwin-out")?)?;
 //!     let metadata_sink = NoopMetadataSink;
 //!
 //!     let runtime = PersistenceRuntime::spawn(config, Box::new(writer), metadata_sink);
@@ -65,7 +64,4 @@ pub use runtime::{
     EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest, PersistedRequest,
     PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,
 };
-pub use writer::{
-    BlobEntry, BlobRole, BlobStorageKind, BlobWriter, FilesystemBlobWriter, S3BlobWriter,
-    StoredBlob,
-};
+pub use writer::{BlobEntry, BlobRole, BlobWriter, ObjectStoreBlobWriter, StoredBlob};

@@ -1,6 +1,6 @@
 use super::{IncidentChangeAction, IncidentKey, PersistError, PersistResult};
 use crate::metadata::CompletedFileMetadata;
-use crate::writer::{BlobRole, BlobStorageKind, StoredBlob};
+use crate::writer::{BlobRole, StoredBlob};
 use emwin_parser::{
     GenericBody, HvtecCode, ProductBody, ProductHeaderV2, TimeMotLocEntry, UgcArea, UgcSection,
     VtecCode, VtecEventBody,
@@ -31,9 +31,7 @@ pub(super) struct ProductRow {
     pub(super) source_receiver: String,
     pub(super) source_message_id: Option<String>,
     pub(super) size_bytes: i64,
-    pub(super) payload_storage_kind: String,
     pub(super) payload_location: String,
-    pub(super) metadata_storage_kind: Option<String>,
     pub(super) metadata_location: Option<String>,
     pub(super) source: String,
     pub(super) family: Option<String>,
@@ -225,9 +223,7 @@ impl PreparedProduct {
                     metadata.size
                 ))
             })?,
-            payload_storage_kind: blob_storage_kind(payload.kind).to_string(),
             payload_location: payload.location.clone(),
-            metadata_storage_kind: sidecar.map(|blob| blob_storage_kind(blob.kind).to_string()),
             metadata_location: sidecar.map(|blob| blob.location.clone()),
             source: serde_label(&metadata.product_summary.source)?,
             family: metadata.product_summary.family.map(str::to_string),
@@ -744,13 +740,6 @@ fn source_message_id(origin: &SourceKind) -> Option<String> {
         SourceKind::Qbt => None,
         SourceKind::WxWire { message_id, .. } => Some(message_id.clone()),
         _ => None,
-    }
-}
-
-fn blob_storage_kind(kind: BlobStorageKind) -> &'static str {
-    match kind {
-        BlobStorageKind::Filesystem => "filesystem",
-        BlobStorageKind::S3 => "s3",
     }
 }
 

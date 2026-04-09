@@ -6,12 +6,12 @@ CLI application for EMWIN live server workflows. Built on `emwin-live`, `emwin-a
 
 - `query`
   - Archive query command.
-  - Connects directly to persisted Postgres metadata and reads archived payloads through stored filesystem or S3 locations.
+  - Connects directly to persisted Postgres metadata and reads archived payloads through stored object-store locations.
   - Supports archived products, issues, features, and aggregate reads.
 - `server`
   - Live command.
   - Starts `emwin-live` for headless ingest/runtime coordination and serves it through `emwin-api`.
-  - Optional `--output-dir <PATH|s3://bucket[/prefix]>` persists completed payloads asynchronously.
+  - Optional `--output-dir <OBJECT_STORE_ROOT_URI>` persists completed payloads asynchronously.
 
 ## Output formats
 
@@ -49,19 +49,20 @@ Live command: `server`
 - `--max-retained-files <N>`
 - `--quiet`
 - `--openapi-auth-token <TOKEN>` (optional; requires `Authorization: Bearer <token>` on `/v1/*`)
-- `--output-dir <PATH|s3://bucket[/prefix]>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar under canonical archival paths)
+- `--output-dir <OBJECT_STORE_ROOT_URI>` (optional; writes each matching completed file plus a `.JSON` metadata sidecar under canonical archival paths)
 
 Persistence behavior when `--output-dir` is set:
 
 - each persisted product writes the payload file and a sibling `.JSON` metadata sidecar under a canonical archival path such as `qbt/2026/03/16/BOX/nws_text_product/20260316T021530Z-4f2c9d91-AFDBOX.TXT`
-- persistence runs in a background task so live ingest does not wait on filesystem or S3 I/O
+- persistence runs in a background task so live ingest does not wait on filesystem or object-store I/O
 - when `--persist-database-url` is set, the background task also upserts normalized product metadata and spatial child rows into Postgres/PostGIS
 - when `--persist-database-url` is set, startup runs one incident cleanup pass and the server retries cleanup every 5 minutes to mark `active` incidents `expired` after their `end_utc` passes
 - Postgres metadata failures do not roll back payload or sidecar files already written under `--output-dir`
 - Postgres outages no longer abort server startup; the server stays online and background persistence retries with backoff until the database is reachable again
-- S3 persistence attempts to auto-create the target bucket when missing; if S3 is unavailable or bucket creation/checks fail transiently, the server stays online and background persistence retries with backoff
-- transient filesystem write failures, including disk-full conditions, and transient S3 request failures are retried in the background with throttled warnings so live ingest and connected clients keep running
-- persistence failure logs identify the failing backend and target, such as filesystem root, S3 bucket/prefix, or database target
+- local filesystem persistence must use `file://` URIs such as `file:///tmp/emwin`; plain paths are rejected
+- the configured object-store target must already exist; the server no longer tries to create buckets or containers
+- transient filesystem write failures, including disk-full conditions, and transient object-store request failures are retried in the background with throttled warnings so live ingest and connected clients keep running
+- persistence failure logs identify the failing backend and target, such as filesystem root, object-store URI root, or database target
 - if the persistence queue fills, the oldest queued item is evicted so the newest product can still be accepted
 - `.ZIP` and `.ZIS` products are extracted before parsing, filtering, and persistence by default; the extracted entry filename replaces the archive filename
 - corrupt archives are logged as `Corrupt Zip File Received` and dropped when post-processing is enabled
@@ -111,7 +112,7 @@ Supported environment variables include:
 
 Filters are intentionally not configurable through environment variables.
 
-When `EMWIN_OUTPUT_DIR` uses `s3://bucket[/prefix]`, object-store configuration stays env-driven: set `AWS_ENDPOINT_URL` for MinIO or another custom S3-compatible endpoint, `AWS_REGION` or `AWS_DEFAULT_REGION` for region selection, and `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, or `AWS_PROFILE` for credentials. Persisted metadata still stores canonical `s3://bucket/key` references rather than presigned URLs.
+When `EMWIN_OUTPUT_DIR` uses an object-store URL such as `s3://bucket/prefix` or `https://example.com/path`, object-store configuration stays env-driven for that backend. S3-compatible targets still use `AWS_ENDPOINT_URL`, `AWS_REGION` or `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`, and `AWS_PROFILE`.
 
 ## Examples
 
@@ -137,9 +138,9 @@ Live mode:
 
 ```bash
 cargo run -p emwin-cli -- server --username you@example.com --bind 127.0.0.1:8080
-cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out
-cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin
-cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin --max-db-connections 16
+cargo run -p emwin-cli -- server --username you@example.com --output-dir file:///tmp/emwin
+cargo run -p emwin-cli -- server --username you@example.com --output-dir file:///tmp/emwin --persist-database-url postgres://localhost/emwin
+cargo run -p emwin-cli -- server --username you@example.com --output-dir file:///tmp/emwin --persist-database-url postgres://localhost/emwin --max-db-connections 16
 cargo run -p emwin-cli -- server --username you@example.com --output-dir s3://my-bucket/emwin --persist-database-url postgres://localhost/emwin
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password your-pass
 ```
@@ -192,7 +193,7 @@ returned geometry or counted point, not just to product admission.
 - `/v1/issues` lists archived issue rows with optional exact filters `product_id`, `kind`, and `code`
 - `/v1/issues/{issue_id}` fetches one archived issue row
 
-The `query` command mirrors those archive read capabilities locally, including features and aggregate responses. Postgres remains the query backend; S3 is only used indirectly when an archived payload location points at `s3://...`.
+The `query` command mirrors those archive read capabilities locally, including features and aggregate responses. Postgres remains the query backend; remote payload reads are resolved through `object_store` when an archived payload location points at a supported object-store URL.
 
 Authenticated example:
 

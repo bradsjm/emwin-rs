@@ -73,14 +73,14 @@ cargo test -p emwin-cli <test_name> -- --nocapture
 
 ```bash
 cargo run -p emwin-cli -- server --username you@example.com --bind 127.0.0.1:8080
-cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out
+cargo run -p emwin-cli -- server --username you@example.com --output-dir file:///tmp/emwin
 ```
 
 Live mode examples:
 
 ```bash
 cargo run -p emwin-cli -- server --receiver wxwire --username you@example.com --password your-pass
-cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out --persist-database-url postgres://localhost/emwin
+cargo run -p emwin-cli -- server --username you@example.com --output-dir file:///tmp/emwin --persist-database-url postgres://localhost/emwin
 ```
 
 ## Crate Architecture Boundaries

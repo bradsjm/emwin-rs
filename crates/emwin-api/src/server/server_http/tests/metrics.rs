@@ -9,13 +9,17 @@ use emwin_db::{
 use emwin_service::SourceKind;
 use tempfile::tempdir;
 use tower::ServiceExt;
+use url::Url;
 
 #[tokio::test]
 async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
     let temp = tempdir().expect("tempdir should succeed");
     let runtime = PersistenceRuntime::spawn(
         PersistenceConfig::new(4),
-        emwin_db::FilesystemBlobWriter::new(temp.path().to_path_buf()),
+        emwin_db::ObjectStoreBlobWriter::new(
+            Url::from_directory_path(temp.path()).expect("directory url should build"),
+        )
+        .expect("writer should build"),
         NoopMetadataSink,
     );
     let producer = runtime.producer();

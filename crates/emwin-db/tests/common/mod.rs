@@ -2,8 +2,8 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use emwin_db::{
-    BlobRole, BlobStorageKind, BlobWriter, CompletedFileMetadata, MetadataSink, PersistedRequest,
-    PostgresConfig, PostgresMetadataSink, StoredBlob,
+    BlobRole, BlobWriter, CompletedFileMetadata, MetadataSink, PersistedRequest, PostgresConfig,
+    PostgresMetadataSink, StoredBlob,
 };
 use emwin_service::{IncidentChange, IncidentChangeAction, IncidentChangeTrigger, SourceKind};
 use sqlx::Row;
@@ -71,19 +71,17 @@ MAXWINDGUST...60 MPH
 
 pub(crate) fn sample_blobs(_filename: &str) -> Vec<StoredBlob> {
     let payload_location =
-        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
+        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
     let sidecar_location =
-        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
+        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
     vec![
         StoredBlob {
-            kind: BlobStorageKind::Filesystem,
             role: BlobRole::Payload,
             location: payload_location.to_string(),
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
-            kind: BlobStorageKind::Filesystem,
             role: BlobRole::MetadataSidecar,
             location: sidecar_location.to_string(),
             size_bytes: 256,
@@ -92,19 +90,17 @@ pub(crate) fn sample_blobs(_filename: &str) -> Vec<StoredBlob> {
     ]
 }
 
-pub(crate) fn sample_s3_blobs(_filename: &str) -> Vec<StoredBlob> {
+pub(crate) fn sample_object_store_blobs(_filename: &str) -> Vec<StoredBlob> {
     let payload_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
     let sidecar_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
     vec![
         StoredBlob {
-            kind: BlobStorageKind::S3,
             role: BlobRole::Payload,
             location: payload_location.to_string(),
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
-            kind: BlobStorageKind::S3,
             role: BlobRole::MetadataSidecar,
             location: sidecar_location.to_string(),
             size_bytes: 256,
@@ -119,14 +115,12 @@ pub(crate) fn sample_filesystem_blobs_at(
 ) -> Vec<StoredBlob> {
     vec![
         StoredBlob {
-            kind: BlobStorageKind::Filesystem,
             role: BlobRole::Payload,
             location: payload_location.to_string(),
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
-            kind: BlobStorageKind::Filesystem,
             role: BlobRole::MetadataSidecar,
             location: sidecar_location.to_string(),
             size_bytes: 256,

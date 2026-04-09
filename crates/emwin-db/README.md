@@ -5,7 +5,7 @@ Persistence and archive query crate for EMWIN.
 ## What it owns
 
 - Async persistence runtime and queueing
-- Filesystem and S3 blob storage writers
+- Object-store blob persistence and archive readers, including local filesystem via `file://` URIs
 - Postgres metadata persistence and archive service implementation
 - Incident projection persistence and notification plumbing
 - Mapping persistence records onto `emwin-service` contracts

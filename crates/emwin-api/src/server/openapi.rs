@@ -546,8 +546,6 @@ pub(crate) struct ArchiveProductSummarySchema {
     pub(crate) source_message_id: Option<String>,
     #[schema(example = 2140)]
     pub(crate) size_bytes: i64,
-    #[schema(example = "filesystem")]
-    pub(crate) payload_storage_kind: String,
     #[schema(example = true)]
     pub(crate) has_metadata_sidecar: bool,
     #[schema(example = "text_header")]
@@ -606,8 +604,6 @@ pub(crate) struct ArchiveProductDetailSchema {
     pub(crate) source_message_id: Option<String>,
     #[schema(example = 2140)]
     pub(crate) size_bytes: i64,
-    #[schema(example = "filesystem")]
-    pub(crate) payload_storage_kind: String,
     #[schema(example = true)]
     pub(crate) has_metadata_sidecar: bool,
     #[schema(example = "text_header")]
@@ -645,7 +641,7 @@ pub(crate) struct ArchiveProductDetailSchema {
     pub(crate) time_mot_loc_count: i32,
     pub(crate) wind_hail_count: i32,
     pub(crate) issue_count: i32,
-    #[schema(example = "s3://emwin/qbt/2025/03/05/BOX/AFDBOX.TXT")]
+    #[schema(example = "file:///tmp/emwin/qbt/2025/03/05/BOX/AFDBOX.TXT")]
     pub(crate) payload_location: String,
     pub(crate) metadata_location: Option<String>,
     #[schema(value_type = Object)]

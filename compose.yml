@@ -12,21 +12,17 @@ x-emwin-service: &emwin-service
     - .env.compose
   environment:
     EMWIN_BIND: ${EMWIN_BIND:-0.0.0.0:8080}
-    EMWIN_OUTPUT_DIR: ${EMWIN_OUTPUT_DIR:-s3://emwin/emwin}
+    EMWIN_OUTPUT_DIR: ${EMWIN_OUTPUT_DIR:-file:///data}
     EMWIN_PERSIST_DATABASE_URL: ${EMWIN_PERSIST_DATABASE_URL:-postgresql://emwin:emwin@postgres:5432/emwin?sslmode=disable}
     EMWIN_PERSIST_QUEUE_CAPACITY: ${EMWIN_PERSIST_QUEUE_CAPACITY:-1024}
     EMWIN_STATS_INTERVAL_SECS: ${EMWIN_STATS_INTERVAL_SECS:-30}
     EMWIN_FILE_RETENTION_SECS: ${EMWIN_FILE_RETENTION_SECS:-300}
     EMWIN_MAX_RETAINED_FILES: ${EMWIN_MAX_RETAINED_FILES:-1000}
     EMWIN_MAX_CLIENTS: ${EMWIN_MAX_CLIENTS:-100}
-    AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://minio:9000}
-    AWS_REGION: ${AWS_REGION:-us-east-1}
-    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
-    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-emwinminio}
-    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-emwinminiosecret}
     RUST_LOG: ${RUST_LOG:-info}
   tmpfs:
     - /run/emwin:rw,exec,size=256m
+    - /data:rw,size=512m
 
 services:
   postgres:
@@ -45,18 +41,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     tmpfs:
       - /var/lib/postgresql/data:rw,size=512m
-
-  minio:
-    image: minio/minio
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-emwinminio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-emwinminiosecret}
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    tmpfs:
-      - /data:rw,size=512m
 
   emwin-server:
     <<: *emwin-service

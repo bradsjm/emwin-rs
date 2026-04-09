@@ -37,11 +37,13 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
     assert!(row.get::<DateTime<Utc>, _>("ingested_at") <= Utc::now());
     assert_eq!(
         row.get::<String, _>("payload_location"),
-        "/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
+        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),
-        Some("/tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON")
+        Some(
+            "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON"
+        )
     );
     assert!(row.get::<bool, _>("has_vtec"));
     assert!(row.get::<bool, _>("has_ugc"));
@@ -146,7 +148,7 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
 }
 
 #[tokio::test]
-async fn postgres_sink_persists_s3_blob_locations() {
+async fn postgres_sink_persists_object_store_blob_locations() {
     let Some(sink) = connect_test_sink().await else {
         return;
     };
@@ -160,10 +162,15 @@ async fn postgres_sink_persists_s3_blob_locations() {
     };
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
-    persist_metadata_with_blobs(&sink, metadata.clone(), sample_s3_blobs(&metadata.filename)).await;
+    persist_metadata_with_blobs(
+        &sink,
+        metadata.clone(),
+        sample_object_store_blobs(&metadata.filename),
+    )
+    .await;
 
     let row = sqlx::query(
-        "SELECT payload_storage_kind, payload_location, metadata_storage_kind, metadata_location
+        "SELECT payload_location, metadata_location
          FROM products WHERE filename = $1 AND source_timestamp_utc = $2",
     )
     .bind(&metadata.filename)
@@ -172,15 +179,9 @@ async fn postgres_sink_persists_s3_blob_locations() {
     .await
     .expect("persisted product row should exist");
 
-    assert_eq!(row.get::<String, _>("payload_storage_kind"), "s3");
     assert_eq!(
         row.get::<String, _>("payload_location"),
         "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
-    );
-    assert_eq!(
-        row.get::<Option<String>, _>("metadata_storage_kind")
-            .as_deref(),
-        Some("s3")
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),

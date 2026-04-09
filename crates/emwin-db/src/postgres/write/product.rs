@@ -15,9 +15,7 @@ pub(super) async fn upsert_product(
             source_receiver,
             source_message_id,
             size_bytes,
-            payload_storage_kind,
             payload_location,
-            metadata_storage_kind,
             metadata_location,
             source,
             family,
@@ -60,15 +58,13 @@ pub(super) async fn upsert_product(
             $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
             $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
             $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-            $41, $42, $43, $44, $45
+            $41, $42, $43
         ) ON CONFLICT (filename, source_timestamp_utc) DO UPDATE SET
             source_receiver = EXCLUDED.source_receiver,
             source_message_id = EXCLUDED.source_message_id,
             ingested_at = now(),
             size_bytes = EXCLUDED.size_bytes,
-            payload_storage_kind = EXCLUDED.payload_storage_kind,
             payload_location = EXCLUDED.payload_location,
-            metadata_storage_kind = EXCLUDED.metadata_storage_kind,
             metadata_location = EXCLUDED.metadata_location,
             source = EXCLUDED.source,
             family = EXCLUDED.family,
@@ -113,9 +109,7 @@ pub(super) async fn upsert_product(
     .bind(&row.source_receiver)
     .bind(&row.source_message_id)
     .bind(row.size_bytes)
-    .bind(&row.payload_storage_kind)
     .bind(&row.payload_location)
-    .bind(&row.metadata_storage_kind)
     .bind(&row.metadata_location)
     .bind(&row.source)
     .bind(&row.family)

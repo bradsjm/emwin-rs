@@ -21,7 +21,7 @@ sqlx.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-rust-s3.workspace = true
+url.workspace = true
 
 [lints]
 workspace = true

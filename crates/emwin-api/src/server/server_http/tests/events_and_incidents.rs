@@ -441,16 +441,18 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
         metadata,
         blobs: vec![
             emwin_db::StoredBlob {
-                kind: emwin_db::BlobStorageKind::Filesystem,
                 role: emwin_db::BlobRole::Payload,
-                location: payload_path.display().to_string(),
+                location: url::Url::from_file_path(&payload_path)
+                    .expect("payload file url should build")
+                    .to_string(),
                 size_bytes: payload_bytes.len(),
                 content_type: Some("text/plain".to_string()),
             },
             emwin_db::StoredBlob {
-                kind: emwin_db::BlobStorageKind::Filesystem,
                 role: emwin_db::BlobRole::MetadataSidecar,
-                location: metadata_path.display().to_string(),
+                location: url::Url::from_file_path(&metadata_path)
+                    .expect("metadata file url should build")
+                    .to_string(),
                 size_bytes: 11,
                 content_type: Some("application/json".to_string()),
             },
