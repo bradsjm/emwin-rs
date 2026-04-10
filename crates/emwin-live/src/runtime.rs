@@ -239,7 +239,7 @@ impl LiveRuntime {
         LiveStatsSnapshot {
             uptime_secs: state.started_at.elapsed().as_secs(),
             data_blocks_total: state.data_blocks_total.load(Ordering::Relaxed),
-            received_servers: state.received_servers.load(Ordering::Relaxed),
+            active_servers: state.active_servers.load(Ordering::Relaxed),
             retained_files: state
                 .retained_files
                 .lock()
@@ -335,12 +335,32 @@ impl LiveRuntime {
         persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
         upstream_endpoint: Option<String>,
     ) -> Self {
-        Self::new_for_tests_with_archive_status(
+        Self::new_for_tests_with_state(
             retained_files,
             telemetry,
             archive,
             persistence,
             upstream_endpoint,
+            0,
+            None,
+        )
+    }
+
+    pub fn new_for_tests_with_active_servers(
+        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
+        telemetry: crate::types::LiveTelemetry,
+        archive: Option<emwin_db::PostgresMetadataSink>,
+        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
+        upstream_endpoint: Option<String>,
+        active_servers: usize,
+    ) -> Self {
+        Self::new_for_tests_with_state(
+            retained_files,
+            telemetry,
+            archive,
+            persistence,
+            upstream_endpoint,
+            active_servers,
             None,
         )
     }
@@ -351,6 +371,26 @@ impl LiveRuntime {
         archive: Option<emwin_db::PostgresMetadataSink>,
         persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
         upstream_endpoint: Option<String>,
+        archive_status: Option<(String, u64, u64)>,
+    ) -> Self {
+        Self::new_for_tests_with_state(
+            retained_files,
+            telemetry,
+            archive,
+            persistence,
+            upstream_endpoint,
+            0,
+            archive_status,
+        )
+    }
+
+    fn new_for_tests_with_state(
+        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
+        telemetry: crate::types::LiveTelemetry,
+        archive: Option<emwin_db::PostgresMetadataSink>,
+        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
+        upstream_endpoint: Option<String>,
+        active_servers: usize,
         archive_status: Option<(String, u64, u64)>,
     ) -> Self {
         let (shutdown_tx, _shutdown_rx) = watch::channel(false);
@@ -419,6 +459,9 @@ impl LiveRuntime {
         state
             .archive_pool_timeouts_total
             .store(archive_pool_timeouts_total, Ordering::Relaxed);
+        state
+            .active_servers
+            .store(active_servers, Ordering::Relaxed);
 
         Self {
             inner: Arc::new(LiveRuntimeInner {

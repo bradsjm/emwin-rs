@@ -63,6 +63,8 @@ pub struct QbtReceiverTelemetrySnapshot {
     pub frame_events_total: u64,
     /// Total data blocks emitted to handlers.
     pub data_blocks_emitted_total: u64,
+    /// Current number of active endpoints in the round-robin set.
+    pub active_servers: usize,
     /// Total server list updates received.
     pub server_list_updates_total: u64,
     /// Total checksum mismatches detected.

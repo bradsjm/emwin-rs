@@ -187,7 +187,7 @@ async fn run_stats_loop(
                     tracing::info!(
                         uptime_secs = snapshot.uptime_secs,
                         data_blocks_total = snapshot.data_blocks_total,
-                        received_servers = snapshot.received_servers,
+                        active_servers = snapshot.active_servers,
                         retained_files = snapshot.retained_files,
                         connected_clients,
                         upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),
@@ -203,7 +203,7 @@ async fn run_stats_loop(
                     tracing::info!(
                         uptime_secs = snapshot.uptime_secs,
                         data_blocks_total = snapshot.data_blocks_total,
-                        received_servers = snapshot.received_servers,
+                        active_servers = snapshot.active_servers,
                         retained_files = snapshot.retained_files,
                         connected_clients,
                         upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),

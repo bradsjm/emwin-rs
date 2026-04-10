@@ -31,6 +31,8 @@ pub(super) async fn run_connection_loop(
     {
         try_send_event(&event_tx, Err(err), &mut telemetry);
     }
+    sync_active_servers(&mut telemetry, &server_list);
+    emit_telemetry(event_tx.clone(), &mut telemetry, &telemetry_sink);
 
     let mut attempts_in_pass = 0usize;
     while !*shutdown_rx.borrow() {
@@ -233,8 +235,20 @@ async fn run_connected_session(
                                 for event in &events {
                                     if ctx.config.follow_server_list_updates
                                         && let QbtFrameEvent::ServerListUpdate(list) = event
-                                        && let Err(err) = ctx.server_list.apply_server_list(list.clone()) {
-                                        try_send_event(ctx.event_tx, Err(err), ctx.telemetry);
+                                    {
+                                        if let Err(err) = apply_server_list_update(
+                                            ctx.server_list,
+                                            list,
+                                            ctx.telemetry,
+                                        ) {
+                                            try_send_event(ctx.event_tx, Err(err), ctx.telemetry);
+                                        } else {
+                                            emit_telemetry(
+                                                ctx.event_tx.clone(),
+                                                ctx.telemetry,
+                                                ctx.telemetry_sink,
+                                            );
+                                        }
                                     }
                                 }
                                 dispatch_events(ctx.event_tx, ctx.handlers, events, ctx.telemetry);
@@ -352,6 +366,42 @@ fn count_decompression_failures(events: &[QbtFrameEvent]) -> usize {
         .count()
 }
 
+fn sync_active_servers(telemetry: &mut RuntimeTelemetry, server_list: &ServerListManager) {
+    telemetry.snapshot.active_servers = server_list.endpoint_count();
+}
+
+fn emit_telemetry(
+    event_tx: mpsc::Sender<Result<QbtReceiverEvent, QbtReceiverError>>,
+    telemetry: &mut RuntimeTelemetry,
+    telemetry_sink: &Arc<Mutex<QbtReceiverTelemetrySnapshot>>,
+) {
+    telemetry.snapshot.telemetry_events_emitted_total = telemetry
+        .snapshot
+        .telemetry_events_emitted_total
+        .saturating_add(1);
+    try_send_event(
+        &event_tx,
+        Ok(QbtReceiverEvent::Telemetry(telemetry.snapshot.clone())),
+        telemetry,
+    );
+    update_telemetry_sink(telemetry_sink, telemetry);
+}
+
+fn apply_server_list_update(
+    server_list: &mut ServerListManager,
+    list: &crate::qbt_receiver::protocol::model::QbtServerList,
+    telemetry: &mut RuntimeTelemetry,
+) -> QbtReceiverResult<()> {
+    server_list.apply_server_list(list.clone())?;
+    sync_active_servers(telemetry, server_list);
+    tracing::info!(
+        servers_in_update = list.servers.len(),
+        active_servers = telemetry.snapshot.active_servers,
+        "applied upstream server list update"
+    );
+    Ok(())
+}
+
 pub(super) fn try_send_event(
     event_tx: &mpsc::Sender<Result<QbtReceiverEvent, QbtReceiverError>>,
     event: Result<QbtReceiverEvent, QbtReceiverError>,
@@ -395,7 +445,55 @@ pub(super) fn update_telemetry_sink(
 
 #[cfg(test)]
 mod runtime_tests {
-    use super::completed_failed_pass;
+    use super::{
+        RuntimeTelemetry, apply_server_list_update, completed_failed_pass, sync_active_servers,
+    };
+    use crate::qbt_receiver::client::server_list_manager::ServerListManager;
+    use crate::qbt_receiver::protocol::model::QbtServerList;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+    use tracing_subscriber::fmt::MakeWriter;
+
+    #[derive(Clone, Debug, Default)]
+    struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl SharedLogBuffer {
+        fn contents(&self) -> String {
+            String::from_utf8(
+                self.0
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone(),
+            )
+            .expect("logs should be utf-8")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct LogWriter(SharedLogBuffer);
+
+    impl Write for LogWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedLogBuffer {
+        type Writer = LogWriter;
+
+        fn make_writer(&'a self) -> LogWriter {
+            LogWriter(self.clone())
+        }
+    }
 
     #[test]
     fn failed_pass_requires_trying_every_endpoint() {
@@ -403,5 +501,62 @@ mod runtime_tests {
         assert!(!completed_failed_pass(1, 2));
         assert!(completed_failed_pass(2, 2));
         assert!(!completed_failed_pass(1, 0));
+    }
+
+    #[test]
+    fn sync_active_servers_uses_normalized_endpoint_count() {
+        let mut telemetry = RuntimeTelemetry::default();
+        let mut server_list = ServerListManager::new(
+            None,
+            vec![
+                ("b.example".to_string(), 2),
+                ("a.example".to_string(), 1),
+                ("b.example".to_string(), 2),
+            ],
+        );
+
+        sync_active_servers(&mut telemetry, &server_list);
+        assert_eq!(telemetry.snapshot.active_servers, 2);
+
+        server_list
+            .apply_server_list(QbtServerList {
+                servers: vec![("c.example".to_string(), 3)],
+            })
+            .expect("update should apply");
+        sync_active_servers(&mut telemetry, &server_list);
+        assert_eq!(telemetry.snapshot.active_servers, 1);
+    }
+
+    #[test]
+    fn successful_server_list_update_logs_and_updates_active_servers() {
+        let buffer = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(buffer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let mut telemetry = RuntimeTelemetry::default();
+        let mut server_list = ServerListManager::new(None, vec![("a.example".to_string(), 1)]);
+
+        apply_server_list_update(
+            &mut server_list,
+            &QbtServerList {
+                servers: vec![
+                    ("b.example".to_string(), 2),
+                    ("c.example".to_string(), 3),
+                    ("b.example".to_string(), 2),
+                ],
+            },
+            &mut telemetry,
+        )
+        .expect("update should apply");
+
+        assert_eq!(telemetry.snapshot.active_servers, 2);
+        let logs = buffer.contents();
+        assert!(logs.contains("applied upstream server list update"));
+        assert!(logs.contains("servers_in_update=3"));
+        assert!(logs.contains("active_servers=2"));
     }
 }

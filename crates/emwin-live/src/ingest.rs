@@ -24,6 +24,9 @@ pub(crate) async fn run_qbt_ingest_loop(
     persistence: Option<FilePersistenceProducer>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> LiveResult<()> {
+    state
+        .active_servers
+        .store(normalized_server_count(&config.servers), Ordering::Relaxed);
     let mut ingest = IngestReceiver::build(IngestConfig::Qbt(config))?;
     ingest.start()?;
 
@@ -128,7 +131,12 @@ fn handle_ingest_event(
         }
         Ok(IngestEvent::Telemetry(snapshot)) => {
             let telemetry = match snapshot {
-                IngestTelemetry::Qbt(value) => LiveTelemetry::Qbt(serde_json::to_value(value)?),
+                IngestTelemetry::Qbt(value) => {
+                    state
+                        .active_servers
+                        .store(value.active_servers, Ordering::Relaxed);
+                    LiveTelemetry::Qbt(serde_json::to_value(value)?)
+                }
                 IngestTelemetry::WxWire(value) => {
                     LiveTelemetry::WxWire(serde_json::to_value(value)?)
                 }
@@ -255,9 +263,16 @@ fn handle_ingest_event(
     Ok(())
 }
 
+fn normalized_server_count(servers: &[(String, u16)]) -> usize {
+    let mut normalized = servers.to_vec();
+    normalized.sort_unstable();
+    normalized.dedup();
+    normalized.len()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::handle_ingest_event;
+    use super::{handle_ingest_event, normalized_server_count};
     use crate::persistence::FilePersistenceProducer;
     use crate::types::{AppState, LiveEventKind};
     use bytes::Bytes;
@@ -270,6 +285,18 @@ mod tests {
 
     fn test_state() -> Arc<AppState> {
         AppState::new(None, None, true, 16, 60)
+    }
+
+    #[test]
+    fn normalized_server_count_matches_round_robin_dedup() {
+        assert_eq!(
+            normalized_server_count(&[
+                ("b.example".to_string(), 2),
+                ("a.example".to_string(), 1),
+                ("b.example".to_string(), 2),
+            ]),
+            2
+        );
     }
 
     fn persistence_producer() -> FilePersistenceProducer {

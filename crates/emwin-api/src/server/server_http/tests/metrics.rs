@@ -117,6 +117,50 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
 }
 
 #[tokio::test]
+async fn metrics_endpoint_flattens_qbt_active_servers() {
+    let state = build_state(
+        10,
+        emwin_live::LiveRuntime::new_for_tests_with_active_servers(
+            Vec::new(),
+            emwin_live::LiveTelemetry::Qbt(serde_json::json!({
+                "receiver": "qbt",
+                "active_servers": 4,
+                "server_list_updates_total": 2
+            })),
+            None,
+            None,
+            None,
+            4,
+        ),
+        None,
+    );
+    let app = build_router(state, None).expect("router should build");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/metrics")
+                .method("GET")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body should read");
+    let value: serde_json::Value =
+        serde_json::from_slice(&body).expect("body should be json object");
+    assert_eq!(value.get("active_servers"), Some(&serde_json::json!(4)));
+    assert_eq!(
+        value.get("server_list_updates_total"),
+        Some(&serde_json::json!(2))
+    );
+}
+
+#[tokio::test]
 async fn health_endpoint_reports_archive_degraded_when_archive_error_present() {
     let state = build_state(
         10,

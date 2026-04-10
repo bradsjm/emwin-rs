@@ -45,6 +45,7 @@ workspace = true
 
 [dev-dependencies]
 proptest = "1"
+tracing-subscriber.workspace = true
 
 [[test]]
 name = "qbt_receiver"

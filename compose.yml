@@ -12,7 +12,7 @@ x-emwin-service: &emwin-service
     - .env.compose
   environment:
     EMWIN_BIND: ${EMWIN_BIND:-0.0.0.0:8080}
-    EMWIN_OUTPUT_DIR: ${EMWIN_OUTPUT_DIR:-file:///tmp}
+    EMWIN_OUTPUT_DIR: ${EMWIN_OUTPUT_DIR:-file:///data}
     EMWIN_PERSIST_DATABASE_URL: ${EMWIN_PERSIST_DATABASE_URL:-postgresql://emwin:emwin@postgres:5432/emwin?sslmode=disable}
     EMWIN_PERSIST_QUEUE_CAPACITY: ${EMWIN_PERSIST_QUEUE_CAPACITY:-1024}
     EMWIN_STATS_INTERVAL_SECS: ${EMWIN_STATS_INTERVAL_SECS:-30}

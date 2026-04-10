@@ -676,6 +676,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "xmpp-parsers",
 ]
 
