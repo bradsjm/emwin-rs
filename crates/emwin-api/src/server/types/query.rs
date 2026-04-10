@@ -4,6 +4,7 @@ use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct IncidentsQuery {
     pub(crate) office: Option<String>,
     pub(crate) phenomena: Option<String>,
@@ -20,6 +21,7 @@ pub(crate) struct IncidentsQuery {
 macro_rules! define_archive_filter_params {
     (@fields [$($fields:tt)*]) => {
         #[derive(Debug, Deserialize, IntoParams, ToSchema, Clone, Default)]
+        #[into_params(parameter_in = Query)]
         pub(crate) struct ArchiveFilterParams {
             $($fields)*
         }
@@ -123,12 +125,14 @@ impl ArchiveFilterParams {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct ProductsQuery {
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct FeaturesQuery {
     pub(crate) kind: Option<String>,
     pub(crate) limit: Option<usize>,
@@ -136,18 +140,21 @@ pub(crate) struct FeaturesQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct FeaturesGeoJsonQuery {
     pub(crate) kind: Option<String>,
     pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct FacetAggregateHttpQuery {
     pub(crate) dimension: String,
     pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct TimeseriesAggregateHttpQuery {
     pub(crate) measure: String,
     pub(crate) start: chrono::DateTime<chrono::Utc>,
@@ -156,6 +163,7 @@ pub(crate) struct TimeseriesAggregateHttpQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct CellAggregateHttpQuery {
     pub(crate) measure: String,
     pub(crate) precision: u8,
@@ -163,12 +171,14 @@ pub(crate) struct CellAggregateHttpQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct IncidentProductsQuery {
     pub(crate) limit: Option<usize>,
     pub(crate) cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct IncidentEventsQuery {
     pub(crate) action: Option<String>,
     pub(crate) office: Option<String>,
@@ -181,6 +191,7 @@ pub(crate) struct IncidentEventsQuery {
 macro_rules! define_events_query {
     (@fields [$($fields:tt)*]) => {
         #[derive(Debug, Default, Deserialize, IntoParams)]
+        #[into_params(parameter_in = Query)]
         pub(crate) struct EventsQuery {
             pub(crate) event: Option<String>,
             $($fields)*
@@ -229,6 +240,7 @@ impl From<EventsQuery> for FileFilterInput {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(crate) struct ArchiveIssuesQuery {
     pub(crate) product_id: Option<i64>,
     pub(crate) kind: Option<String>,

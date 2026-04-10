@@ -91,6 +91,28 @@ async fn openapi_json_lists_versioned_routes() {
             .iter()
             .all(|param| param["name"] != "filters")
     );
+    assert!(product_params.iter().all(|param| param["in"] == "query"));
+    assert_eq!(
+        product_params
+            .iter()
+            .find(|param| param["name"] == "limit")
+            .expect("limit parameter should exist")["required"],
+        false
+    );
+    assert_eq!(
+        product_params
+            .iter()
+            .find(|param| param["name"] == "cursor")
+            .expect("cursor parameter should exist")["required"],
+        false
+    );
+    assert_eq!(
+        product_params
+            .iter()
+            .find(|param| param["name"] == "office")
+            .expect("office parameter should exist")["required"],
+        false
+    );
     assert!(!body_text.contains("\"name\":\"filters\""));
 }
 
