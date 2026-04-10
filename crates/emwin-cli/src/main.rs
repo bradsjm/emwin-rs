@@ -53,10 +53,10 @@ enum Commands {
         /// Receiver backend to use.
         #[arg(long, value_enum, env = "EMWIN_RECEIVER", default_value_t = ReceiverKind::Qbt)]
         receiver: ReceiverKind,
-        /// Custom server endpoints (comma-separated or multiple).
+        /// Custom QBT server endpoints (comma-separated or multiple). Pins the runtime to this list.
         #[arg(long = "server", env = "EMWIN_SERVER", value_delimiter = ',')]
         servers: Vec<String>,
-        /// Path to persisted server list file.
+        /// Path to persisted automatic QBT server list file. Rejected when --server is set.
         #[arg(long, env = "EMWIN_SERVER_LIST_PATH")]
         server_list_path: Option<String>,
         /// Bind address for the HTTP server.

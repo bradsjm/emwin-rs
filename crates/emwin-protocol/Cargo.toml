@@ -45,3 +45,8 @@ workspace = true
 
 [dev-dependencies]
 proptest = "1"
+
+[[test]]
+name = "qbt_receiver"
+path = "tests/qbt_receiver.rs"
+required-features = ["qbt"]

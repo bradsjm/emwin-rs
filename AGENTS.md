@@ -38,6 +38,7 @@ Run commands from repository root unless noted.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo test -p emwin-protocol --features qbt
 ```
 
 ### Build commands
@@ -57,6 +58,7 @@ cargo test -p emwin-protocol
 cargo test -p emwin-api
 cargo test -p emwin-live
 cargo test -p emwin-cli
+cargo test -p emwin-protocol --features qbt
 ```
 
 ### Running a single test (important)
@@ -65,40 +67,41 @@ Use the test name as a filter:
 
 ```bash
 cargo test -p emwin-protocol checksum_fixture
-cargo test -p emwin-protocol protocol::codec::tests::v2_compressed_roundtrip
+cargo test -p emwin-protocol --features qbt protocol::codec::tests::v2_compressed_roundtrip
 cargo test -p emwin-cli cli_output_channeling
 ```
 
 Use exact matching when names are ambiguous:
 
 ```bash
-cargo test -p emwin-protocol protocol::codec::tests::checksum_strict_drop -- --exact
+cargo test -p emwin-protocol --features qbt protocol::codec::tests::checksum_strict_drop -- --exact
 ```
 
 Run one integration test target file:
 
 ```bash
-cargo test -p emwin-protocol --test protocol_parity
+cargo test -p emwin-protocol --features qbt --test qbt_receiver
 cargo test -p emwin-cli --test cli_contract
 ```
 
 Run one integration test function from a test target:
 
 ```bash
-cargo test -p emwin-protocol --test protocol_parity server_update_full_format -- --exact
+cargo test -p emwin-protocol --features qbt --test qbt_receiver full_server_list_frame_ignores_satellite_entries -- --exact
 ```
 
 List available tests before selecting one:
 
 ```bash
 cargo test -p emwin-protocol -- --list
+cargo test -p emwin-protocol --features qbt -- --list
 cargo test -p emwin-cli -- --list
 ```
 
 Debug failing tests with output:
 
 ```bash
-cargo test -p emwin-protocol <test_name> -- --nocapture
+cargo test -p emwin-protocol --features qbt <test_name> -- --nocapture
 ```
 
 ## Local Run Commands

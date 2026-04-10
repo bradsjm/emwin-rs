@@ -239,7 +239,7 @@ Full form:
 Delimiter semantics:
 
 - regular servers: `|`
-- sat servers: `+`
+- any trailing `SatServers` section is ignored by the receiver/client model
 
 Malformed entries:
 
@@ -249,20 +249,22 @@ Malformed entries:
 
 ### 7.2 TCP Operational Use of Server Lists
 
-For EMWIN TCP operation, both regular servers and sat servers are used as candidate
+For EMWIN TCP operation, only the regular `/ServerList/...` entries are used as candidate
 connection endpoints.
 
 Operational behavior:
 
 - Server list frames are transmitted regularly by upstream and treated as live endpoint state.
-- Each received server list update replaces the runtime candidate list (after validation/filtering).
-- The replacement list is sorted, deduplicated, and used for deterministic rotation instead of shuffling.
-- On connection loss/failure, the failed endpoint is removed from the local available list and the
-  client immediately hops to the next available endpoint.
-- Failed endpoints remain excluded until a fresh upstream server list arrives (which replaces and
-  rebuilds the active set).
-- Connection attempts are short-lived and clamped to a maximum of 5 seconds before hopping to
-  the next candidate endpoint.
+- Each received server list update replaces the runtime candidate list after validation/filtering.
+- The replacement list is sorted, deduplicated, and used for deterministic round-robin rotation.
+- The client attempts each candidate endpoint at most once per pass.
+- On connection loss/failure, the client immediately hops to the next endpoint in the pass.
+- After one full pass fails to establish a surviving connection, the client waits
+  `reconnect_delay_secs` before starting the next pass.
+- Connection attempts are short-lived and clamped to a maximum of 5 seconds per endpoint.
+- When the caller pins servers explicitly, automatic server-list load/save/update behavior is disabled.
+- Relay passthrough preserves raw upstream `/ServerList/...` frames as received; relay forwarding
+  does not normalize or rewrite those wire bytes.
 
 Why this matters:
 
@@ -343,7 +345,7 @@ channel full:
 Reconnect/survivability behavior:
 
 - watchdog timeout closes current session and triggers reconnect loop
-- endpoint rotation + bounded backoff are applied
+- one-pass round-robin endpoint rotation is applied before each reconnect delay
 - process continues unless explicitly stopped
 
 ### 10.1 Core Telemetry Schema
@@ -495,10 +497,10 @@ Interpretation:
 | P-010 | `FILLFILE.TXT` is never emitted as data event | `protocol::codec::tests::fillfile_filtered` | `N/A (unit coverage)` | No | Implemented |
 | P-011 | `.TXT` and `.WMO` trailing padding is trimmed | `protocol::codec::tests::trim_padding_text_wmo` | `N/A (unit coverage)` | No | Implemented |
 | P-012 | Simple server list format parses and filters invalid entries | `protocol::server_list::tests::server_list_simple_parse` | `crates/emwin-protocol/tests/protocol_parity.rs::server_update_simple` | Yes | Implemented |
-| P-013 | Full server list format parses regular and sat entries | `protocol::server_list::tests::server_list_full_parse` | `crates/emwin-protocol/tests/protocol_parity.rs::server_update_full_format` | Yes | Implemented |
+| P-013 | Full server list format preserves regular entries and ignores any satellite suffix | `protocol::server_list::tests::server_list_full_parse_ignores_satellite_entries` | `crates/emwin-protocol/tests/qbt_receiver.rs::full_server_list_frame_ignores_satellite_entries` | Yes | Implemented |
 | P-014 | Unknown/corrupt frame triggers byte-skip + resync and decode continues | `protocol::codec::tests::unknown_frame_resync` | `crates/emwin-protocol/tests/protocol_parity.rs::mixed_corruption_stream` | Yes | Required |
 | P-015 | Handler exceptions are isolated | `client::tests::handler_error_isolated` | `N/A (unit coverage)` | No | Implemented |
-| P-016 | Reconnect failover rotates endpoints with backoff | `client::reconnect::tests::reconnect_backoff_logic` | `crates/emwin-protocol/tests/reconnect_failover.rs::reconnect_failover_rotates_endpoints_with_backoff` | No | Implemented |
+| P-016 | Reconnect failover rotates endpoints through one pass before delaying | `N/A (runtime behavior)` | `crates/emwin-protocol/tests/qbt_receiver.rs::watchdog_timeout_reconnects_without_termination` | No | Implemented |
 | P-017 | Watchdog recovery reconnects without terminating process | `client::watchdog::tests::watchdog_timeout_trigger` | `crates/emwin-protocol/tests/reconnect_failover.rs::watchdog_timeout_reconnects_without_termination` | No | Required |
 | P-018 | Decoder remains functional when trailing suffix null bytes are absent | `N/A (unit coverage)` | `crates/emwin-protocol/tests/live_capture_replay.rs::live_capture_replay_manifest_cases` (`mutation-remove-first-suffix-null6`) | No | Required |
 

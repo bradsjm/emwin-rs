@@ -27,6 +27,8 @@ Run from repo root.
 ```bash
 cargo build -p emwin-protocol
 cargo test -p emwin-protocol
+cargo build -p emwin-protocol --features qbt
+cargo test -p emwin-protocol --features qbt
 ```
 
 ### Required quality gates for this crate
@@ -35,6 +37,7 @@ cargo test -p emwin-protocol
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p emwin-protocol
+cargo test -p emwin-protocol --features qbt
 ```
 
 ### Run a single unit/integration test
@@ -43,39 +46,38 @@ Use test-name filter:
 
 ```bash
 cargo test -p emwin-protocol checksum_fixture
-cargo test -p emwin-protocol protocol::codec::tests::v2_compressed_roundtrip
+cargo test -p emwin-protocol --features qbt protocol::codec::tests::v2_compressed_roundtrip
 ```
 
 Use exact match when names collide:
 
 ```bash
-cargo test -p emwin-protocol protocol::codec::tests::checksum_strict_drop -- --exact
+cargo test -p emwin-protocol --features qbt protocol::codec::tests::checksum_strict_drop -- --exact
 ```
 
 Run one integration target:
 
 ```bash
-cargo test -p emwin-protocol --test protocol_parity
-cargo test -p emwin-protocol --test protocol_prop
-cargo test -p emwin-protocol --test reconnect_failover
+cargo test -p emwin-protocol --features qbt --test qbt_receiver
 ```
 
 Run one integration test function:
 
 ```bash
-cargo test -p emwin-protocol --test protocol_parity server_update_full_format -- --exact
+cargo test -p emwin-protocol --features qbt --test qbt_receiver full_server_list_frame_ignores_satellite_entries -- --exact
 ```
 
 Discover available tests:
 
 ```bash
 cargo test -p emwin-protocol -- --list
+cargo test -p emwin-protocol --features qbt -- --list
 ```
 
 Debug with test output:
 
 ```bash
-cargo test -p emwin-protocol <test_name> -- --nocapture
+cargo test -p emwin-protocol --features qbt <test_name> -- --nocapture
 ```
 
 ## Crate Architecture Boundaries

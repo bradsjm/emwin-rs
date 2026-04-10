@@ -35,12 +35,12 @@ pub struct ReceivedProduct {
 
 /// Source that provided a product.
 ///
-/// Distinguishes between QBT satellite and Weather Wire sources with
+/// Distinguishes between QBT TCP and Weather Wire sources with
 /// source-specific metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ProductOrigin {
-    /// Product from QBT satellite receiver
+    /// Product from QBT receiver
     #[cfg(feature = "qbt")]
     Qbt,
     /// Product from Weather Wire receiver with metadata

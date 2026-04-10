@@ -28,35 +28,14 @@ pub fn parse_server_list_frame(
 
     let payload = content.trim_end_matches('\0');
     let mut warnings = Vec::new();
-    let mut out = QbtServerList::default();
+    let servers_part = split_regular_servers(payload);
 
-    let full_marker = "\\QbtServerList\\/SatServers/";
-    let sat_end_marker = "\\SatServers\\";
-
-    let servers_part;
-    let sat_part;
-
-    if let Some(start_idx) = payload.find(full_marker) {
-        let sat_start = start_idx + full_marker.len();
-        if let Some(end_rel) = payload[sat_start..].find(sat_end_marker) {
-            servers_part = &payload["/ServerList/".len()..start_idx];
-            sat_part = Some(&payload[sat_start..sat_start + end_rel]);
-        } else {
-            servers_part = &payload["/ServerList/".len()..];
-            sat_part = None;
-        }
-    } else {
-        servers_part = &payload["/ServerList/".len()..];
-        sat_part = None;
-    }
-
-    out.servers = parse_list_entries(servers_part, '|', &mut warnings);
-
-    if let Some(sat_payload) = sat_part {
-        out.sat_servers = parse_list_entries(sat_payload, '+', &mut warnings);
-    }
-
-    Ok((out, warnings))
+    Ok((
+        QbtServerList {
+            servers: parse_list_entries(servers_part, '|', &mut warnings),
+        },
+        warnings,
+    ))
 }
 
 /// Parses a delimited list of endpoints and records malformed entries as warnings.
@@ -81,6 +60,21 @@ fn parse_list_entries(
         .collect()
 }
 
+fn split_regular_servers(payload: &str) -> &str {
+    const SATELLITE_MARKERS: [&str; 2] = [
+        "\\ServerList\\/SatServers/",
+        "\\QbtServerList\\/SatServers/",
+    ];
+
+    let regular = &payload["/ServerList/".len()..];
+    SATELLITE_MARKERS
+        .iter()
+        .filter_map(|marker| regular.find(marker))
+        .min()
+        .map(|idx| &regular[..idx])
+        .unwrap_or(regular)
+}
+
 /// Parses a server list frame and falls back to the empty list on failure.
 ///
 /// This convenience API exists for callers that only need the best-effort endpoint set.
@@ -99,16 +93,14 @@ mod tests {
         let content = "/ServerList/a.example:2211|bad|b.example:1000\0";
         let (list, warnings) = parse_server_list_frame(content).expect("simple list should parse");
         assert_eq!(list.servers.len(), 2);
-        assert!(list.sat_servers.is_empty());
         assert_eq!(warnings.len(), 1);
     }
 
     #[test]
-    fn server_list_full_parse() {
-        let content = "/ServerList/a.example:2211|b.example:1000\\QbtServerList\\/SatServers/s1:3000+s2:3001\\SatServers\\\0";
+    fn server_list_full_parse_ignores_satellite_entries() {
+        let content = "/ServerList/a.example:2211|b.example:1000\\ServerList\\/SatServers/s1:3000+s2:3001\\SatServers\\\0";
         let (list, warnings) = parse_server_list_frame(content).expect("full list should parse");
         assert_eq!(list.servers.len(), 2);
-        assert_eq!(list.sat_servers.len(), 2);
         assert!(warnings.is_empty());
     }
 }

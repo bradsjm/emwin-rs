@@ -46,10 +46,8 @@ pub struct QbtSegment {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct QbtServerList {
-    /// Primary server endpoints as (host, port) tuples.
+    /// EMWIN server endpoints as (host, port) tuples.
     pub servers: Vec<(String, u16)>,
-    /// Satellite server endpoints as (host, port) tuples.
-    pub sat_servers: Vec<(String, u16)>,
 }
 
 /// Warning events that can occur during protocol processing.

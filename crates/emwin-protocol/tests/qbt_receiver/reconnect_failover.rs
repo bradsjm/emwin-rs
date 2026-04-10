@@ -147,3 +147,78 @@ async fn watchdog_timeout_reconnects_without_termination() {
         "expected server to observe at least one accepted connection"
     );
 }
+
+#[tokio::test]
+async fn failed_endpoint_rotates_to_next_server_without_waiting_for_full_delay() {
+    let failed_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("failed listener should bind");
+    let failed_port = failed_listener
+        .local_addr()
+        .expect("failed listener should have local addr")
+        .port();
+    drop(failed_listener);
+
+    let listener_ok = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("listener should bind");
+    let address_ok = listener_ok
+        .local_addr()
+        .expect("listener should have local addr");
+
+    let server_task = tokio::spawn(async move {
+        let payload = encoded_valid_data_frame();
+        let (mut socket, _) = listener_ok.accept().await.expect("client should connect");
+        let mut auth_buf = [0u8; 128];
+        let _ = tokio::time::timeout(Duration::from_millis(200), socket.read(&mut auth_buf)).await;
+        socket
+            .write_all(&payload)
+            .await
+            .expect("payload write should succeed");
+    });
+
+    let mut client = QbtReceiver::builder(QbtReceiverConfig {
+        email: "test@example.com".to_string(),
+        servers: vec![
+            ("127.0.0.1".to_string(), failed_port),
+            ("127.0.0.1".to_string(), address_ok.port()),
+        ],
+        server_list_path: None,
+        follow_server_list_updates: false,
+        reconnect_delay_secs: 5,
+        connection_timeout_secs: 1,
+        watchdog_timeout_secs: 5,
+        max_exceptions: 10,
+        decode: QbtDecodeConfig::default(),
+    })
+    .build()
+    .expect("client should build");
+
+    client.start().expect("client should start");
+    let mut events = client.events().expect("events should be available");
+    let started = Instant::now();
+    let mut connected_endpoint = None;
+
+    while started.elapsed() < Duration::from_secs(3) {
+        match tokio::time::timeout(Duration::from_millis(300), events.next()).await {
+            Ok(Some(Ok(QbtReceiverEvent::Connected(endpoint)))) => {
+                connected_endpoint = Some(endpoint);
+                break;
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => break,
+            Err(_) => {}
+        }
+    }
+
+    drop(events);
+    client.stop().await.expect("client should stop");
+    server_task.await.expect("server task should join");
+    let expected = format!("127.0.0.1:{}", address_ok.port());
+
+    assert_eq!(connected_endpoint.as_deref(), Some(expected.as_str()),);
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "rotation to the next endpoint should happen before the full reconnect delay"
+    );
+}

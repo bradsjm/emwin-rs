@@ -10,6 +10,7 @@ use emwin_protocol::qbt_receiver::{QbtDecodeConfig, QbtReceiverConfig};
 use emwin_protocol::wxwire_receiver::WxWireReceiverConfig;
 use std::path::PathBuf;
 
+#[derive(Debug)]
 /// Receiver-specific configuration produced from CLI live-mode arguments.
 pub(crate) enum LiveReceiverConfig {
     Qbt(QbtReceiverConfig),
@@ -62,6 +63,11 @@ fn build_qbt_receiver_config(request: LiveConfigRequest) -> LiveResult<QbtReceiv
         LiveError::invalid_argument(format!("{username_context} requires --username"))
     })?;
     let pin_servers = !raw_servers.is_empty();
+    if pin_servers && server_list_path.is_some() {
+        return Err(LiveError::invalid_argument(
+            "--server-list-path is not supported when --server pins the QBT server list",
+        ));
+    }
     let servers = parse_servers_or_default(&raw_servers)?;
 
     Ok(QbtReceiverConfig {
@@ -113,4 +119,69 @@ fn build_wxwire_receiver_config(request: LiveConfigRequest) -> LiveResult<WxWire
         idle_timeout_secs: idle_timeout_secs.max(1),
         ..WxWireReceiverConfig::default()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LiveConfigRequest, LiveReceiverConfig, build_live_receiver_config};
+    use crate::types::ReceiverKind;
+
+    fn qbt_request() -> LiveConfigRequest {
+        LiveConfigRequest {
+            receiver: ReceiverKind::Qbt,
+            username: Some("user@example.com".to_string()),
+            password: None,
+            raw_servers: Vec::new(),
+            server_list_path: None,
+            idle_timeout_secs: 90,
+            qbt_watchdog_timeout_secs: 20,
+            username_context: "test",
+            password_context: "test",
+        }
+    }
+
+    #[test]
+    fn qbt_pinned_servers_reject_server_list_path() {
+        let mut request = qbt_request();
+        request.raw_servers = vec!["127.0.0.1:2211".to_string()];
+        request.server_list_path = Some("/tmp/emwin-servers.json".to_string());
+
+        match build_live_receiver_config(request) {
+            Ok(_) => panic!("config should reject combo"),
+            Err(err) => assert!(
+                err.to_string().contains("--server-list-path"),
+                "unexpected error: {err}"
+            ),
+        }
+    }
+
+    #[test]
+    fn qbt_pinned_servers_disable_automatic_server_list_behavior() {
+        let mut request = qbt_request();
+        request.raw_servers = vec!["example.com:2211".to_string()];
+
+        let LiveReceiverConfig::Qbt(config) =
+            build_live_receiver_config(request).expect("config should build")
+        else {
+            panic!("expected qbt config");
+        };
+
+        assert!(!config.follow_server_list_updates);
+        assert!(config.server_list_path.is_none());
+        assert_eq!(config.servers, vec![("example.com".to_string(), 2211)]);
+    }
+
+    #[test]
+    fn qbt_default_servers_keep_automatic_server_list_mode() {
+        let mut request = qbt_request();
+        request.server_list_path = Some("/tmp/emwin-servers.json".to_string());
+
+        let config = build_live_receiver_config(request).expect("request must succeed");
+        let LiveReceiverConfig::Qbt(config) = config else {
+            panic!("expected qbt config");
+        };
+
+        assert!(config.follow_server_list_updates);
+        assert!(config.server_list_path.is_some());
+    }
 }

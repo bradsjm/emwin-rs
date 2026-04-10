@@ -9,10 +9,7 @@ fn summary(events: &[QbtFrameEvent]) -> Vec<(String, usize)> {
         .iter()
         .map(|evt| match evt {
             QbtFrameEvent::DataBlock(seg) => ("data".to_string(), seg.content.len()),
-            QbtFrameEvent::ServerListUpdate(list) => (
-                "servers".to_string(),
-                list.servers.len() + list.sat_servers.len(),
-            ),
+            QbtFrameEvent::ServerListUpdate(list) => ("servers".to_string(), list.servers.len()),
             QbtFrameEvent::Warning(_) => ("warning".to_string(), 0),
             _ => ("unknown".to_string(), 0),
         })

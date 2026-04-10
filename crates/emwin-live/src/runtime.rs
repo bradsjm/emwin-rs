@@ -240,7 +240,6 @@ impl LiveRuntime {
             uptime_secs: state.started_at.elapsed().as_secs(),
             data_blocks_total: state.data_blocks_total.load(Ordering::Relaxed),
             received_servers: state.received_servers.load(Ordering::Relaxed),
-            received_sat_servers: state.received_sat_servers.load(Ordering::Relaxed),
             retained_files: state
                 .retained_files
                 .lock()

@@ -4,14 +4,14 @@ Core Rust library for EMWIN protocol parsing, client runtime, and file assembly.
 
 ## What it provides
 
-- **QBT Receiver** (`qbt_receiver`): EMWIN QBT satellite receiver client
+- **QBT Receiver** (`qbt_receiver`): EMWIN QBT TCP receiver client
   - Protocol layer
     - XOR wire transform handling (`0xFF`)
     - Stateful frame decoder (`/PF`, `/ServerList`)
     - V1 + V2 body handling and checksum validation policies
     - Compression policy for V2 payloads (`RequireZlibHeader`, `TryAlways`)
   - Client runtime
-    - TCP connection loop with endpoint rotation and backoff
+    - TCP connection loop with round-robin endpoint rotation
     - Authentication heartbeat
     - Watchdog health monitoring
     - Event stream + handler fanout with fault isolation
@@ -34,7 +34,7 @@ Core Rust library for EMWIN protocol parsing, client runtime, and file assembly.
 
 This crate uses Cargo features to enable receiver implementations:
 
-- `qbt`: QBT satellite receiver
+- `qbt`: QBT TCP receiver
 - `wxwire`: Weather Wire receiver
 - `telemetry-serde`: Enable serialization for telemetry snapshots
 
@@ -186,7 +186,7 @@ fn decode_wire_chunk(wire: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 ## Public Modules
 
 - `ingest`: Unified product ingestion abstraction
-- `qbt_receiver`: EMWIN QBT satellite receiver
+- `qbt_receiver`: EMWIN QBT TCP receiver
 - `wxwire_receiver`: Weather Wire XMPP receiver
 
 ## Key Exported Types
@@ -228,10 +228,10 @@ fn decode_wire_chunk(wire: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 QbtReceiverConfig {
     email: "you@example.com".to_string(),          // Authentication email
-    servers: default_qbt_upstream_servers(),       // Initial server list
-    server_list_path: None,                        // Optional persistence path
-    follow_server_list_updates: true,              // Accept server list from upstream
-    reconnect_delay_secs: 5,                       // Delay between reconnects
+    servers: default_qbt_upstream_servers(),       // Initial EMWIN server list
+    server_list_path: None,                        // Optional persistence path for automatic mode
+    follow_server_list_updates: true,              // Accept upstream server-list replacements
+    reconnect_delay_secs: 5,                       // Delay after one full failed server pass
     connection_timeout_secs: 5,                    // TCP connect timeout
     watchdog_timeout_secs: 49,                     // Health check timeout
     max_exceptions: 10,                            // Max exceptions before reconnect
@@ -261,6 +261,8 @@ From workspace root:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p emwin-protocol
+cargo test -p emwin-protocol --features qbt
+cargo test -p emwin-protocol --features qbt --test qbt_receiver
 ```
 
 ## Protocol Documentation

@@ -77,7 +77,6 @@ pub struct LiveStatsSnapshot {
     pub uptime_secs: u64,
     pub data_blocks_total: u64,
     pub received_servers: usize,
-    pub received_sat_servers: usize,
     pub retained_files: usize,
     pub upstream_endpoint: Option<String>,
     pub persistence: Option<PersistenceStats>,

@@ -9,7 +9,6 @@
 //! - Server list persistence and management
 
 pub mod connection;
-pub mod reconnect;
 mod runtime;
 pub mod server_list_manager;
 pub mod watchdog;

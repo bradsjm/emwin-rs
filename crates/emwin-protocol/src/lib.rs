@@ -6,7 +6,7 @@
 //!
 //! # Features
 //!
-//! - **qbt**: EMWIN QBT satellite feed receiver
+//! - **qbt**: EMWIN QBT TCP feed receiver
 //! - **wxwire**: Weather Wire/XMPP receiver
 //! - **telemetry-serde**: Enable serde serialization for telemetry types
 //!
@@ -15,9 +15,12 @@
 //! Connect to EMWIN QBT feed and process incoming products:
 //!
 //! ```no_run
+//! # #[cfg(feature = "qbt")]
 //! use emwin_protocol::ingest::{IngestConfig, IngestReceiver};
+//! # #[cfg(feature = "qbt")]
 //! use emwin_protocol::qbt_receiver::{QbtDecodeConfig, QbtReceiverConfig, default_qbt_upstream_servers};
 //!
+//! # #[cfg(feature = "qbt")]
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let mut receiver = IngestReceiver::build(IngestConfig::Qbt(QbtReceiverConfig {
@@ -35,6 +38,8 @@
 //!     receiver.stop().await?;
 //!     Ok(())
 //! }
+//! # #[cfg(not(feature = "qbt"))]
+//! # fn main() {}
 //! ```
 
 #[cfg(any(feature = "qbt", feature = "wxwire"))]

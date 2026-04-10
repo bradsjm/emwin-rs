@@ -1,7 +1,7 @@
 //! Unified product event abstraction and ingestion adapters.
 //!
 //! This module provides a common interface for receiving products from different sources
-//! (QBT satellite and Weather Wire) and normalizing them into a unified event stream.
+//! (QBT TCP and Weather Wire) and normalizing them into a unified event stream.
 //!
 //! ## Core Types
 //!

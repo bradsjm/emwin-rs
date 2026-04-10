@@ -29,9 +29,9 @@ fn corrupted_stream_recovers_and_keeps_following_valid_frame() {
 }
 
 #[test]
-fn full_server_list_frame_decodes_satellite_entries() {
+fn full_server_list_frame_ignores_satellite_entries() {
     let payload =
-        b"/ServerList/a.example:2211|bad-entry\\QbtServerList\\/SatServers/sat1:3000+sat2:3001\\SatServers\\\0";
+        b"/ServerList/a.example:2211|bad-entry\\ServerList\\/SatServers/sat1:3000+sat2:3001\\SatServers\\\0";
     let mut decoded = Vec::new();
     decoded.extend_from_slice(b"\0\0\0\0\0\0");
     decoded.extend_from_slice(payload);
@@ -48,7 +48,6 @@ fn full_server_list_frame_decodes_satellite_entries() {
 
     let server_list = server_list.expect("expected server list update event");
     assert_eq!(server_list.servers.len(), 1);
-    assert_eq!(server_list.sat_servers.len(), 2);
 }
 
 #[test]

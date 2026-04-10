@@ -25,20 +25,17 @@ pub(super) async fn run_connection_loop(
     let mut telemetry = RuntimeTelemetry::default();
     let mut server_list =
         ServerListManager::new(config.server_list_path.clone(), config.servers.clone());
+    let reconnect_delay = Duration::from_secs(config.reconnect_delay_secs.max(1));
     if config.follow_server_list_updates
         && let Err(err) = server_list.load()
     {
         try_send_event(&event_tx, Err(err), &mut telemetry);
     }
 
+    let mut attempts_in_pass = 0usize;
     while !*shutdown_rx.borrow() {
-        telemetry.snapshot.connection_attempts_total = telemetry
-            .snapshot
-            .connection_attempts_total
-            .saturating_add(1);
-        update_telemetry_sink(&telemetry_sink, &telemetry);
-
-        let Some((host, port)) = server_list.next_endpoint() else {
+        let endpoint_count = server_list.endpoint_count();
+        if endpoint_count == 0 {
             try_send_event(
                 &event_tx,
                 Err(QbtReceiverError::Lifecycle(
@@ -48,11 +45,22 @@ pub(super) async fn run_connection_loop(
             );
             update_telemetry_sink(&telemetry_sink, &telemetry);
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(config.reconnect_delay_secs.max(1))) => {}
+                _ = tokio::time::sleep(reconnect_delay) => {}
                 _ = shutdown_rx.changed() => {}
             }
             continue;
-        };
+        }
+
+        telemetry.snapshot.connection_attempts_total = telemetry
+            .snapshot
+            .connection_attempts_total
+            .saturating_add(1);
+        update_telemetry_sink(&telemetry_sink, &telemetry);
+
+        let (host, port) = server_list
+            .next_endpoint()
+            .expect("endpoint count checked above");
+        attempts_in_pass = attempts_in_pass.saturating_add(1);
 
         let connect = connect_with_timeout(
             &host,
@@ -67,6 +75,7 @@ pub(super) async fn run_connection_loop(
 
         match connect {
             Ok(stream) => {
+                attempts_in_pass = 0;
                 telemetry.snapshot.connection_success_total = telemetry
                     .snapshot
                     .connection_success_total
@@ -94,10 +103,6 @@ pub(super) async fn run_connection_loop(
                     try_send_event(&event_tx, Err(err), &mut telemetry);
                 }
 
-                if !*shutdown_rx.borrow() && config.follow_server_list_updates {
-                    server_list.mark_bad_endpoint(&(host.clone(), port));
-                }
-
                 telemetry.snapshot.disconnect_total =
                     telemetry.snapshot.disconnect_total.saturating_add(1);
                 try_send_event(
@@ -110,11 +115,16 @@ pub(super) async fn run_connection_loop(
             Err(err) => {
                 telemetry.snapshot.connection_fail_total =
                     telemetry.snapshot.connection_fail_total.saturating_add(1);
-                if config.follow_server_list_updates {
-                    server_list.mark_bad_endpoint(&(host.clone(), port));
-                }
                 try_send_event(&event_tx, Err(QbtReceiverError::Io(err)), &mut telemetry);
                 update_telemetry_sink(&telemetry_sink, &telemetry);
+            }
+        }
+
+        if !*shutdown_rx.borrow() && completed_failed_pass(attempts_in_pass, endpoint_count) {
+            attempts_in_pass = 0;
+            tokio::select! {
+                _ = tokio::time::sleep(reconnect_delay) => {}
+                _ = shutdown_rx.changed() => {}
             }
         }
 
@@ -300,6 +310,10 @@ fn count_decoder_recoveries(events: &[QbtFrameEvent]) -> usize {
         .count()
 }
 
+fn completed_failed_pass(attempts_in_pass: usize, endpoint_count: usize) -> bool {
+    endpoint_count > 0 && attempts_in_pass >= endpoint_count
+}
+
 fn count_data_blocks(events: &[QbtFrameEvent]) -> usize {
     events
         .iter()
@@ -377,4 +391,17 @@ pub(super) fn update_telemetry_sink(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     *guard = telemetry.snapshot.clone();
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::completed_failed_pass;
+
+    #[test]
+    fn failed_pass_requires_trying_every_endpoint() {
+        assert!(!completed_failed_pass(0, 2));
+        assert!(!completed_failed_pass(1, 2));
+        assert!(completed_failed_pass(2, 2));
+        assert!(!completed_failed_pass(1, 0));
+    }
 }

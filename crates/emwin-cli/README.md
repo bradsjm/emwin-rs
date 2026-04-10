@@ -32,8 +32,8 @@ Common live ingest options:
 - `--receiver <qbt|wxwire>` (optional, default `qbt`)
 - `--username <EMAIL>` (required)
 - `--password <PASSWORD>` (required when `--receiver wxwire`)
-- `--server <host:port>` (optional, repeatable or comma-delimited)
-- `--server-list-path <PATH>` (optional persisted server list path)
+- `--server <host:port>` (optional, repeatable or comma-delimited; pins QBT to that list)
+- `--server-list-path <PATH>` (optional persisted automatic QBT server list path; rejected when `--server` is set)
 - `--post-process-archives <true|false>` (default `true`; extracts the first entry from completed `.ZIP` and `.ZIS` products before parsing and delivery)
 - `--persist-queue-capacity <N>` (default `1024`; bounded async persistence queue, evicts oldest queued item when full)
 - `--persist-database-url <URL>` (optional; writes normalized metadata into Postgres/PostGIS while still storing payload blobs under `--output-dir`)
@@ -72,10 +72,10 @@ Persistence behavior when `--output-dir` is set:
 - when `--persist-database-url` is configured, the server also exposes `/v1/incidents`, `/v1/products/*`, `/v1/issues/*`, and `/v1/streams/incidents`
 - `/v1/incidents`, `/v1/products/*`, and `/v1/issues/*` return `503` when Postgres-backed archive metadata is not configured
 
-If `--server` is omitted, built-in default endpoints are used.
+If `--server` is omitted, built-in default EMWIN endpoints are used and automatic server-list updates remain enabled.
 `--server` and `--server-list-path` are only supported for `--receiver qbt`.
-When `--server` is provided for QBT live mode, the CLI now pins that explicit server set instead
-of later replacing it with server-list updates.
+When `--server` is provided for QBT live mode, the CLI pins that explicit server set and disables
+automatic server-list load/save/update behavior.
 
 ## Environment variables and `.env`
 

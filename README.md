@@ -60,9 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = IngestReceiver::build(IngestConfig::Qbt(QbtReceiverConfig {
         email: "you@example.com".to_string(),
         servers: default_qbt_upstream_servers(),
-        server_list_path: None,
+        server_list_path: None,          // automatic server-list mode only
         follow_server_list_updates: true,
-        reconnect_delay_secs: 5,
+        reconnect_delay_secs: 5,        // delay after one full failed pass
         connection_timeout_secs: 5,
         watchdog_timeout_secs: 49,
         max_exceptions: 10,
@@ -250,6 +250,12 @@ Optional live-mode endpoint/persistence overrides:
 
 - `--server host:port` (repeatable or comma-delimited)
 - `--server-list-path ./servers.json`
+
+For QBT live mode:
+
+- omitting `--server` starts from the built-in EMWIN list and allows automatic server-list updates
+- providing `--server` pins the runtime to that list and disables automatic server-list load/save/update behavior
+- `--server` and `--server-list-path` cannot be combined
 
 Environment and `.env` support:
 

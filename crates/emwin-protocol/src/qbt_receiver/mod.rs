@@ -47,7 +47,6 @@ pub use relay::{
 };
 
 pub mod unstable {
-    pub use super::client::reconnect::{EndpointRotator, next_backoff_secs};
     pub use super::client::watchdog::{HealthObserver, Watchdog};
     pub use super::protocol::auth::{build_logon_message, xor_ff};
     pub use super::protocol::server_list::{parse_server_list_frame, parse_simple_server_list};
