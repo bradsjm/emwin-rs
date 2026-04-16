@@ -40,6 +40,7 @@ pub struct XmppWxWireTransport {
     sm_enabled: bool,
     sm_handled_stanzas: u64,
     last_heartbeat: Instant,
+    write_timeout: Duration,
 }
 
 impl XmppWxWireTransport {
@@ -49,8 +50,16 @@ impl XmppWxWireTransport {
         username: &str,
         password: &str,
         connect_timeout: Duration,
+        write_timeout: Duration,
     ) -> WxWireReceiverResult<Self> {
-        let session = connect_session(endpoint_host, username, password, connect_timeout).await?;
+        let session = connect_session(
+            endpoint_host,
+            username,
+            password,
+            connect_timeout,
+            write_timeout,
+        )
+        .await?;
         Ok(Self {
             socket: session.socket,
             room_bare: session.room_bare,
@@ -59,6 +68,7 @@ impl XmppWxWireTransport {
             sm_enabled: session.sm_enabled,
             sm_handled_stanzas: 0,
             last_heartbeat: Instant::now(),
+            write_timeout,
         })
     }
 
@@ -93,10 +103,7 @@ impl XmppWxWireTransport {
             .socket
             .as_mut()
             .ok_or(WxWireTransportError::ClientNotConnected)?;
-        socket
-            .write_all(xml.as_bytes())
-            .await
-            .map_err(|err| WxWireTransportError::WriteFailed(err.to_string()).into())
+        socket.write_all(xml.as_bytes(), self.write_timeout).await
     }
 
     async fn maybe_send_heartbeat(&mut self) -> WxWireReceiverResult<()> {
@@ -183,7 +190,9 @@ impl WxWireTransport for XmppWxWireTransport {
     ) -> Pin<Box<dyn std::future::Future<Output = WxWireReceiverResult<()>> + Send + 'a>> {
         Box::pin(async move {
             if let Some(mut socket) = self.socket.take() {
-                let _ = socket.write_all(b"</stream:stream>").await;
+                let _ = socket
+                    .write_all(b"</stream:stream>", self.write_timeout)
+                    .await;
                 let _ = socket.shutdown().await;
             }
             Ok(())

@@ -1,4 +1,4 @@
-use super::connection::{connect_with_timeout, endpoint_label};
+use super::connection::{connect_with_timeout, endpoint_label, write_all_with_timeout};
 use super::server_list_manager::ServerListManager;
 use super::watchdog::{HealthObserver, Watchdog};
 use super::{
@@ -12,7 +12,7 @@ use crate::qbt_receiver::protocol::model::{QbtAuthMessage, QbtFrameEvent, QbtPro
 use crate::runtime_support::try_send_with_backpressure_warning;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::sync::{mpsc, watch};
 
 pub(super) async fn run_connection_loop(
@@ -163,7 +163,12 @@ async fn run_connected_session(
         email: ctx.config.email.clone(),
     };
     let initial = xor_ff(build_logon_message(&auth.email).as_bytes());
-    stream.write_all(&initial).await?;
+    write_all_with_timeout(
+        &mut stream,
+        &initial,
+        Duration::from_secs(ctx.config.write_timeout_secs),
+    )
+    .await?;
     ctx.telemetry.snapshot.auth_logon_sent_total = ctx
         .telemetry
         .snapshot
@@ -184,7 +189,12 @@ async fn run_connected_session(
             }
             _ = auth_interval.tick() => {
                 let logon = xor_ff(build_logon_message(&auth.email).as_bytes());
-                stream.write_all(&logon).await?;
+                write_all_with_timeout(
+                    &mut stream,
+                    &logon,
+                    Duration::from_secs(ctx.config.write_timeout_secs),
+                )
+                .await?;
                 ctx.telemetry.snapshot.auth_logon_sent_total = ctx.telemetry.snapshot.auth_logon_sent_total.saturating_add(1);
                 update_telemetry_sink(ctx.telemetry_sink, ctx.telemetry);
             }

@@ -88,6 +88,24 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
     .expect("products schema should be queryable");
     assert_eq!(pruned_summary_column_count, 0);
 
+    let child_product_id_index_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ANY($1)",
+    )
+    .bind(vec![
+        "product_issues_product_id_idx",
+        "product_vtec_product_id_idx",
+        "product_ugc_areas_product_id_idx",
+        "product_hvtec_product_id_idx",
+        "product_time_mot_loc_product_id_idx",
+        "product_polygons_product_id_idx",
+        "product_wind_hail_product_id_idx",
+        "product_search_points_product_id_idx",
+    ])
+    .fetch_one(&sink.pool())
+    .await
+    .expect("child product_id indexes should be queryable");
+    assert_eq!(child_product_id_index_count, 8);
+
     let vtec_count =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM product_vtec WHERE product_id = $1")
             .bind(product_id)

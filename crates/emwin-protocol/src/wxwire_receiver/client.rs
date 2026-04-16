@@ -83,7 +83,8 @@ pub type WxWireReceiverEventHandler =
 
 type TransportFuture =
     Pin<Box<dyn Future<Output = WxWireReceiverResult<Box<dyn WxWireTransport>>> + Send>>;
-type TransportFactory = Arc<dyn Fn(String, String, Duration) -> TransportFuture + Send + Sync>;
+type TransportFactory =
+    Arc<dyn Fn(String, String, Duration, Duration) -> TransportFuture + Send + Sync>;
 
 /// Trait for weather wire clients.
 pub trait WxWireReceiverClient: Send {
@@ -253,7 +254,9 @@ impl WxWireReceiverClient for WxWireReceiver {
         &mut self,
     ) -> Pin<Box<dyn std::future::Future<Output = WxWireReceiverResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.runtime.stop().await;
+            if self.runtime.stop().await {
+                return Err(WxWireLifecycleError::ShutdownTimeout.into());
+            }
             self.ingress_tx = None;
             Ok(())
         })
@@ -391,15 +394,17 @@ mod tests {
     }
 
     fn mock_factory() -> TransportFactory {
-        Arc::new(move |_username, _password, _timeout| {
-            let (tx, rx) = mpsc::channel(8);
-            let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
-            let _ = tx.try_send(stanza.to_string());
-            let label = "primary".to_string();
-            Box::pin(async move {
-                Ok(Box::new(MockTransport { label, rx }) as Box<dyn WxWireTransport>)
-            })
-        })
+        Arc::new(
+            move |_username, _password, _connect_timeout, _write_timeout| {
+                let (tx, rx) = mpsc::channel(8);
+                let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
+                let _ = tx.try_send(stanza.to_string());
+                let label = "primary".to_string();
+                Box::pin(async move {
+                    Ok(Box::new(MockTransport { label, rx }) as Box<dyn WxWireTransport>)
+                })
+            },
+        )
     }
 
     #[tokio::test]
@@ -488,24 +493,26 @@ mod tests {
     async fn initial_connect_failure_retries_and_recovers() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_for_factory = Arc::clone(&attempts);
-        let factory: TransportFactory = Arc::new(move |_username, _password, _timeout| {
-            let current = attempts_for_factory.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move {
-                if current == 0 {
-                    return Err(WxWireTransportError::TcpConnect(
-                        "initial connect failure".to_string(),
-                    )
-                    .into());
-                }
-                let (tx, rx) = mpsc::channel(8);
-                let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
-                let _ = tx.try_send(stanza.to_string());
-                Ok(Box::new(MockTransport {
-                    label: "recovered".to_string(),
-                    rx,
-                }) as Box<dyn WxWireTransport>)
-            })
-        });
+        let factory: TransportFactory = Arc::new(
+            move |_username, _password, _connect_timeout, _write_timeout| {
+                let current = attempts_for_factory.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async move {
+                    if current == 0 {
+                        return Err(WxWireTransportError::TcpConnect(
+                            "initial connect failure".to_string(),
+                        )
+                        .into());
+                    }
+                    let (tx, rx) = mpsc::channel(8);
+                    let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
+                    let _ = tx.try_send(stanza.to_string());
+                    Ok(Box::new(MockTransport {
+                        label: "recovered".to_string(),
+                        rx,
+                    }) as Box<dyn WxWireTransport>)
+                })
+            },
+        );
 
         let mut client = WxWireReceiver::builder(valid_config())
             .with_transport_factory(factory)
@@ -535,26 +542,28 @@ mod tests {
     async fn transport_error_emits_disconnected_and_reconnects() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_for_factory = Arc::clone(&attempts);
-        let factory: TransportFactory = Arc::new(move |_username, _password, _timeout| {
-            let current = attempts_for_factory.fetch_add(1, Ordering::SeqCst);
-            Box::pin(async move {
-                let (tx, rx) = mpsc::channel(8);
-                let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
-                let _ = tx.try_send(stanza.to_string());
-                if current == 0 {
-                    Ok(Box::new(FlakyTransport {
-                        label: "flaky".to_string(),
-                        rx,
-                        fail_once: true,
-                    }) as Box<dyn WxWireTransport>)
-                } else {
-                    Ok(Box::new(MockTransport {
-                        label: "reconnected".to_string(),
-                        rx,
-                    }) as Box<dyn WxWireTransport>)
-                }
-            })
-        });
+        let factory: TransportFactory = Arc::new(
+            move |_username, _password, _connect_timeout, _write_timeout| {
+                let current = attempts_for_factory.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async move {
+                    let (tx, rx) = mpsc::channel(8);
+                    let stanza = "<message xmlns='jabber:client' type='groupchat'><body>S</body><x xmlns='nwws-oi' id='id1' issue='2026-03-05T00:00:00Z' ttaaii='NOUS41' cccc='KOKX' awipsid='AFDOKX'>line</x></message>";
+                    let _ = tx.try_send(stanza.to_string());
+                    if current == 0 {
+                        Ok(Box::new(FlakyTransport {
+                            label: "flaky".to_string(),
+                            rx,
+                            fail_once: true,
+                        }) as Box<dyn WxWireTransport>)
+                    } else {
+                        Ok(Box::new(MockTransport {
+                            label: "reconnected".to_string(),
+                            rx,
+                        }) as Box<dyn WxWireTransport>)
+                    }
+                })
+            },
+        );
 
         let mut client = WxWireReceiver::builder(valid_config())
             .with_transport_factory(factory)
@@ -606,5 +615,79 @@ mod tests {
 
         let queued = rx.try_recv().expect("original event should remain");
         assert!(matches!(queued, Ok(WxWireReceiverEvent::Disconnected)));
+    }
+
+    #[derive(Debug)]
+    struct HangingDisconnectTransport;
+
+    impl WxWireTransport for HangingDisconnectTransport {
+        fn label(&self) -> String {
+            "hanging".to_string()
+        }
+
+        fn next_stanza<'a>(
+            &'a mut self,
+        ) -> Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = crate::wxwire_receiver::error::WxWireReceiverResult<String>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                futures::future::pending::<()>().await;
+                unreachable!()
+            })
+        }
+
+        fn disconnect<'a>(
+            &'a mut self,
+        ) -> Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = crate::wxwire_receiver::error::WxWireReceiverResult<()>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                futures::future::pending::<()>().await;
+                unreachable!()
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_returns_shutdown_timeout_when_transport_hangs() {
+        let factory: TransportFactory = Arc::new(
+            move |_username, _password, _connect_timeout, _write_timeout| {
+                Box::pin(async move {
+                    Ok(Box::new(HangingDisconnectTransport) as Box<dyn WxWireTransport>)
+                })
+            },
+        );
+
+        let mut client = WxWireReceiver::builder(valid_config())
+            .with_transport_factory(factory)
+            .build()
+            .expect("client should build");
+        client.start().expect("client should start");
+        let mut events = client.events().expect("events should be available");
+        let connected = tokio::time::timeout(Duration::from_millis(100), events.next())
+            .await
+            .expect("connected event should arrive before timeout");
+        assert!(matches!(
+            connected,
+            Some(Ok(WxWireReceiverEvent::Connected(_)))
+        ));
+
+        let error = client.stop().await.expect_err("stop should time out");
+        assert!(matches!(
+            error,
+            crate::wxwire_receiver::error::WxWireReceiverError::Lifecycle(
+                WxWireLifecycleError::ShutdownTimeout
+            )
+        ));
     }
 }

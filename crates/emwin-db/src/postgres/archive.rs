@@ -277,6 +277,7 @@ impl PostgresMetadataSink {
         &self,
         query: CellAggregateQuery,
     ) -> PersistResult<CellAggregateResult> {
+        query.validate().map_err(query::map_service_error)?;
         let pool = self.ensure_pool().await?;
         let result = query::list_cell_aggregate_query(&pool, query).await;
         match result {

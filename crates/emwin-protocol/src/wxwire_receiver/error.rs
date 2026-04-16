@@ -39,6 +39,8 @@ pub enum WxWireConfigError {
     ZeroTelemetryEmitInterval,
     #[error("connect_timeout_secs must be >= 1")]
     ZeroConnectTimeout,
+    #[error("write_timeout_secs must be >= 1")]
+    ZeroWriteTimeout,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -67,6 +69,8 @@ pub enum WxWireLifecycleError {
     IngressQueueClosed,
     #[error("weather wire event stream already taken")]
     EventStreamTaken,
+    #[error("weather wire client shutdown timeout")]
+    ShutdownTimeout,
     #[error("{0}")]
     Internal(String),
 }
@@ -114,6 +118,8 @@ pub enum WxWireTransportError {
     StreamEnded,
     #[error("xmpp write failed: {0}")]
     WriteFailed(String),
+    #[error("xmpp write timeout")]
+    WriteTimeout,
     #[error("xmpp socket not available")]
     SocketNotAvailable,
     #[error("invalid tls server name")]

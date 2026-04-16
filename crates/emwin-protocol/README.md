@@ -68,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         follow_server_list_updates: true,
         reconnect_delay_secs: 5,
         connection_timeout_secs: 5,
+        write_timeout_secs: 10,
         watchdog_timeout_secs: 49,
         max_exceptions: 10,
         decode: QbtDecodeConfig::default(),
@@ -99,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = WxWireReceiverConfig {
         username: "you@example.com".to_string(),
         password: "secret".to_string(),
+        write_timeout_secs: 10,
         ..WxWireReceiverConfig::default()
     };
     
@@ -132,6 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         follow_server_list_updates: true,
         reconnect_delay_secs: 5,
         connection_timeout_secs: 5,
+        write_timeout_secs: 10,
         watchdog_timeout_secs: 49,
         max_exceptions: 10,
         decode: QbtDecodeConfig::default(),
@@ -219,7 +222,7 @@ fn decode_wire_chunk(wire: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 - Receiver configs are validated before startup via `build()`.
 - `start()` may only be called once per running instance.
 - `events()` is a single-consumer subscription; calling it more than once returns an error.
-- `stop()` is idempotent and shuts down background tasks before returning.
+- `stop()` is idempotent and aborts the background task if shutdown exceeds the timeout window.
 
 ## Configuration
 
@@ -233,9 +236,10 @@ QbtReceiverConfig {
     follow_server_list_updates: true,              // Accept upstream server-list replacements
     reconnect_delay_secs: 5,                       // Delay after one full failed server pass
     connection_timeout_secs: 5,                    // TCP connect timeout
+    write_timeout_secs: 10,                        // Socket write timeout
     watchdog_timeout_secs: 49,                     // Health check timeout
     max_exceptions: 10,                            // Max exceptions before reconnect
-    decode: QbtDecodeConfig::default(),            // Decoder policies
+    decode: QbtDecodeConfig::default(),            // Decoder policies and server-list buffer cap
 }
 ```
 
@@ -250,6 +254,7 @@ WxWireReceiverConfig {
     inbound_channel_capacity: 512,                 // Stanza buffer size
     telemetry_emit_interval_secs: 5,               // Telemetry frequency
     connect_timeout_secs: 10,                      // Connection timeout
+    write_timeout_secs: 10,                        // Socket write timeout
 }
 ```
 

@@ -245,7 +245,9 @@ impl QbtReceiverClient for QbtReceiver {
         &mut self,
     ) -> Pin<Box<dyn std::future::Future<Output = QbtReceiverResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.runtime.stop().await;
+            if self.runtime.stop().await {
+                return Err(QbtReceiverError::ShutdownTimeout);
+            }
             Ok(())
         })
     }
@@ -262,14 +264,35 @@ impl QbtReceiverClient for QbtReceiver {
 #[cfg(test)]
 mod tests {
     use super::runtime::{dispatch_events, try_send_event};
-    use super::{QbtReceiverEvent, QbtReceiverTelemetrySnapshot, RuntimeTelemetry};
+    use super::{
+        QbtReceiver, QbtReceiverClient, QbtReceiverEvent, QbtReceiverTelemetrySnapshot,
+        RuntimeTelemetry,
+    };
     use crate::qbt_receiver::client::QbtReceiverEventHandler;
+    use crate::qbt_receiver::config::{
+        QbtDecodeConfig, QbtReceiverConfig, default_qbt_upstream_servers,
+    };
     use crate::qbt_receiver::error::QbtReceiverError;
     use crate::qbt_receiver::protocol::model::{QbtFrameEvent, QbtProtocolWarning, QbtServerList};
     use crate::runtime_support::BackpressureTracker;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use tokio::sync::mpsc;
+    use tokio::sync::{mpsc, watch};
+
+    fn valid_config() -> QbtReceiverConfig {
+        QbtReceiverConfig {
+            email: "user@example.com".to_string(),
+            servers: default_qbt_upstream_servers(),
+            server_list_path: None,
+            follow_server_list_updates: false,
+            reconnect_delay_secs: 1,
+            connection_timeout_secs: 1,
+            write_timeout_secs: 1,
+            watchdog_timeout_secs: 1,
+            max_exceptions: 1,
+            decode: QbtDecodeConfig::default(),
+        }
+    }
 
     #[tokio::test]
     async fn handler_error_isolated() {
@@ -432,5 +455,21 @@ mod tests {
             second,
             Ok(QbtReceiverEvent::Frame(QbtFrameEvent::ServerListUpdate(_)))
         ));
+    }
+
+    #[tokio::test]
+    async fn stop_returns_shutdown_timeout_when_runtime_hangs() {
+        let mut client = QbtReceiver::builder(valid_config())
+            .build()
+            .expect("client should build");
+        let (_event_tx, event_rx) = mpsc::channel(1);
+        let (shutdown_tx, _shutdown_rx) = watch::channel(false);
+        let join_handle = tokio::spawn(async move {
+            futures::future::pending::<()>().await;
+        });
+        client.runtime.install(event_rx, shutdown_tx, join_handle);
+
+        let error = client.stop().await.expect_err("stop should time out");
+        assert!(matches!(error, QbtReceiverError::ShutdownTimeout));
     }
 }

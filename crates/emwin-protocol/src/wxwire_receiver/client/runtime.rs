@@ -42,6 +42,7 @@ pub(super) async fn run_weather_wire_loop(
     }
 
     let connect_timeout = Duration::from_secs(config.connect_timeout_secs);
+    let write_timeout = Duration::from_secs(config.write_timeout_secs);
     let mut transport: Option<Box<dyn WxWireTransport>> = None;
     let mut last_message_time = Instant::now();
     let mut reconnect_backoff = RECONNECT_BACKOFF_INITIAL;
@@ -67,6 +68,7 @@ pub(super) async fn run_weather_wire_loop(
                 config.username.clone(),
                 config.password.clone(),
                 connect_timeout,
+                write_timeout,
                 &mut telemetry,
             )
             .await
@@ -261,17 +263,19 @@ async fn connect_single_endpoint(
     username: String,
     password: String,
     connect_timeout: Duration,
+    write_timeout: Duration,
     telemetry: &mut RuntimeTelemetry,
 ) -> WxWireReceiverResult<Box<dyn WxWireTransport>> {
     telemetry.snapshot.connect_attempts_total =
         telemetry.snapshot.connect_attempts_total.saturating_add(1);
-    factory(username, password, connect_timeout).await
+    factory(username, password, connect_timeout, write_timeout).await
 }
 
 pub(super) fn default_transport_factory(
     username: String,
     password: String,
     connect_timeout: Duration,
+    write_timeout: Duration,
 ) -> TransportFuture {
     Box::pin(async move {
         let transport = XmppWxWireTransport::connect(
@@ -279,6 +283,7 @@ pub(super) fn default_transport_factory(
             username.as_str(),
             password.as_str(),
             connect_timeout,
+            write_timeout,
         )
         .await?;
         Ok(Box::new(transport) as Box<dyn WxWireTransport>)

@@ -144,9 +144,9 @@ pub(crate) async fn list_cell_aggregate_query(
             "unsupported cell aggregate measure".to_string(),
         ));
     }
-    if !(1..=12).contains(&query.precision) {
+    if !(1..=6).contains(&query.precision) {
         return Err(PersistError::InvalidRequest(
-            "precision must be between 1 and 12".to_string(),
+            "precision must be between 1 and 6".to_string(),
         ));
     }
 

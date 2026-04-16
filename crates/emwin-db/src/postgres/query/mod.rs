@@ -32,8 +32,8 @@ pub(super) use sql::{
     archived_product_summary_select_sql, incident_select_sql,
 };
 pub(super) use validation::{
-    decode_optional_cursor, encode_cursor, normalize_lower, normalize_upper, split_csv_i64,
-    split_csv_values,
+    decode_optional_cursor, encode_cursor, map_service_error, normalize_lower, normalize_upper,
+    split_csv_i64, split_csv_values,
 };
 
 pub(super) fn normalize_page_limit(limit: usize) -> usize {

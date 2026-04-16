@@ -249,7 +249,7 @@ pub(super) async fn timeseries_aggregate_handler(
     get,
     path = "/v1/aggregates/cells",
     tag = "aggregates",
-    description = "Returns uncursored geohash cell buckets for `product_count`. Each bucket counts distinct products per intersected geohash cell across persisted polygons, paths, and representative points after applying the requested spatial filters.",
+    description = "Returns uncursored geohash cell buckets for `product_count`. Requests must include a complete bbox (`min_lat`, `max_lat`, `min_lon`, `max_lon`), and precision is capped at 6. Each bucket counts distinct products per intersected geohash cell across persisted polygons, paths, and representative points after applying the requested spatial filters.",
     params(ArchiveFilterParams, CellAggregateHttpQuery),
     security(("bearer_auth" = [])),
     responses(

@@ -78,7 +78,7 @@ pub(crate) fn validate_point_distance(
     }
 }
 
-fn map_service_error(error: ServiceError) -> PersistError {
+pub(crate) fn map_service_error(error: ServiceError) -> PersistError {
     match error {
         ServiceError::InvalidRequest(message)
         | ServiceError::Runtime(message)

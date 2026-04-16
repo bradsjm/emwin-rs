@@ -5,8 +5,14 @@
 
 use futures::{Stream, stream};
 use std::pin::Pin;
+use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, watch};
+
+#[cfg(not(test))]
+const STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(test)]
+const STOP_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Type alias for receiver event streams.
 ///
@@ -63,21 +69,31 @@ impl<TEvent, TError> ReceiverRuntime<TEvent, TError> {
     ///
     /// Sends shutdown signal, awaits the background task completion, and
     /// cleans up runtime state.
-    pub(crate) async fn stop(&mut self) {
+    pub(crate) async fn stop(&mut self) -> bool {
         if !self.running {
-            return;
+            return false;
         }
 
         if let Some(tx) = &self.shutdown_tx {
             let _ = tx.send(true);
         }
 
+        let mut timed_out = false;
         if let Some(handle) = self.join_handle.take() {
-            let _ = handle.await;
+            let mut handle = handle;
+            if tokio::time::timeout(STOP_WAIT_TIMEOUT, &mut handle)
+                .await
+                .is_err()
+            {
+                timed_out = true;
+                handle.abort();
+                let _ = handle.await;
+            }
         }
 
         self.running = false;
         self.shutdown_tx = None;
+        timed_out
     }
 
     /// Takes the event stream, returning an error if already taken.

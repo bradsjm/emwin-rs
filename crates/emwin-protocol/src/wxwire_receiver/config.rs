@@ -29,6 +29,8 @@ pub struct WxWireReceiverConfig {
     pub telemetry_emit_interval_secs: u64,
     /// Timeout for establishing the XMPP connection and session.
     pub connect_timeout_secs: u64,
+    /// Timeout for outbound socket writes.
+    pub write_timeout_secs: u64,
 }
 
 impl std::fmt::Debug for WxWireReceiverConfig {
@@ -44,6 +46,7 @@ impl std::fmt::Debug for WxWireReceiverConfig {
                 &self.telemetry_emit_interval_secs,
             )
             .field("connect_timeout_secs", &self.connect_timeout_secs)
+            .field("write_timeout_secs", &self.write_timeout_secs)
             .finish()
     }
 }
@@ -58,6 +61,7 @@ impl Default for WxWireReceiverConfig {
             inbound_channel_capacity: 512,
             telemetry_emit_interval_secs: 5,
             connect_timeout_secs: 10,
+            write_timeout_secs: 10,
         }
     }
 }
@@ -90,6 +94,9 @@ impl WxWireReceiverConfig {
         }
         if self.connect_timeout_secs == 0 {
             return Err(WxWireConfigError::ZeroConnectTimeout.into());
+        }
+        if self.write_timeout_secs == 0 {
+            return Err(WxWireConfigError::ZeroWriteTimeout.into());
         }
 
         Ok(())
@@ -135,5 +142,17 @@ mod tests {
         assert!(debug.contains("username"));
         assert!(debug.contains("<redacted>"));
         assert!(!debug.contains("super-secret"));
+    }
+
+    #[test]
+    fn validate_rejects_zero_write_timeout() {
+        let cfg = WxWireReceiverConfig {
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            write_timeout_secs: 0,
+            ..WxWireReceiverConfig::default()
+        };
+
+        assert!(cfg.validate().is_err());
     }
 }

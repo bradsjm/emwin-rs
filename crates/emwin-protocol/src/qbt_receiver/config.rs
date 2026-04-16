@@ -45,6 +45,8 @@ pub struct QbtDecodeConfig {
     pub compression_policy: QbtV2CompressionPolicy,
     /// Maximum allowed body size for V2 frames (in bytes).
     pub max_v2_body_size: usize,
+    /// Maximum buffered bytes allowed while waiting for a server-list terminator.
+    pub max_server_list_frame_bytes: usize,
 }
 
 impl Default for QbtDecodeConfig {
@@ -53,6 +55,7 @@ impl Default for QbtDecodeConfig {
             checksum_policy: QbtChecksumPolicy::StrictDrop,
             compression_policy: QbtV2CompressionPolicy::RequireZlibHeader,
             max_v2_body_size: 1024,
+            max_server_list_frame_bytes: 65_536,
         }
     }
 }
@@ -72,6 +75,8 @@ pub struct QbtReceiverConfig {
     pub reconnect_delay_secs: u64,
     /// Timeout for establishing connections (in seconds).
     pub connection_timeout_secs: u64,
+    /// Timeout for outbound socket writes (in seconds).
+    pub write_timeout_secs: u64,
     /// Timeout for watchdog health checks (in seconds).
     pub watchdog_timeout_secs: u64,
     /// Maximum number of exceptions before triggering watchdog timeout.
@@ -93,6 +98,9 @@ impl QbtReceiverConfig {
         }
         if self.servers.is_empty() {
             return Err(crate::qbt_receiver::error::QbtReceiverConfigError::NoServers);
+        }
+        if self.write_timeout_secs == 0 {
+            return Err(crate::qbt_receiver::error::QbtReceiverConfigError::ZeroWriteTimeout);
         }
         Ok(())
     }

@@ -2,9 +2,17 @@ use super::{PersistError, PersistResult, PostgresConfig};
 use sqlx::PgPool;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::str::FromStr;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::info;
 
+#[cfg(test)]
+static CONNECT_POOL_CALLS: AtomicUsize = AtomicUsize::new(0);
+
 pub(super) async fn connect_pool(config: &PostgresConfig) -> PersistResult<PgPool> {
+    #[cfg(test)]
+    CONNECT_POOL_CALLS.fetch_add(1, Ordering::Relaxed);
+
     if config.database_url.trim().is_empty() {
         return Err(PersistError::InvalidConfig(
             "postgres database url must not be empty".to_string(),
@@ -69,4 +77,14 @@ pub(super) fn describe_connect_target(options: &PgConnectOptions) -> String {
             _ => format!("{}:{}", options.get_host(), options.get_port()),
         },
     }
+}
+
+#[cfg(test)]
+pub(super) fn reset_connect_pool_calls() {
+    CONNECT_POOL_CALLS.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(super) fn connect_pool_call_count() -> usize {
+    CONNECT_POOL_CALLS.load(Ordering::Relaxed)
 }

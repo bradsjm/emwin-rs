@@ -856,6 +856,10 @@ async fn archived_cell_aggregate_counts_polygon_and_path_products() {
         .list_cell_aggregate(service::CellAggregateQuery {
             filters: service::ProductListQuery {
                 office: Some("KOAX".to_string()),
+                min_lat: Some(41.0),
+                max_lat: Some(42.0),
+                min_lon: Some(-97.0),
+                max_lon: Some(-95.0),
                 limit: 100,
                 ..Default::default()
             },
@@ -1066,6 +1070,45 @@ async fn archived_queries_reject_invalid_cursor_and_spatial_inputs() {
         missing_lon
             .to_string()
             .contains("lat and lon must be provided together")
+    );
+
+    let missing_bbox = sink
+        .list_cell_aggregate(service::CellAggregateQuery {
+            filters: service::ProductListQuery {
+                office: Some("KOAX".to_string()),
+                ..Default::default()
+            },
+            measure: service::CellMeasure::ProductCount,
+            precision: 5,
+            limit: 10,
+        })
+        .await
+        .expect_err("missing bbox should fail");
+    assert!(
+        missing_bbox
+            .to_string()
+            .contains("cell aggregates require min_lat, max_lat, min_lon, and max_lon")
+    );
+
+    let invalid_precision = sink
+        .list_cell_aggregate(service::CellAggregateQuery {
+            filters: service::ProductListQuery {
+                min_lat: Some(41.0),
+                max_lat: Some(42.0),
+                min_lon: Some(-97.0),
+                max_lon: Some(-95.0),
+                ..Default::default()
+            },
+            measure: service::CellMeasure::ProductCount,
+            precision: 7,
+            limit: 10,
+        })
+        .await
+        .expect_err("precision above cap should fail");
+    assert!(
+        invalid_precision
+            .to_string()
+            .contains("cell aggregate precision must be between 1 and 6")
     );
 }
 

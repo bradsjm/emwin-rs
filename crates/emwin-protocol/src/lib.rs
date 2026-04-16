@@ -30,6 +30,7 @@
 //!         follow_server_list_updates: true,
 //!         reconnect_delay_secs: 5,
 //!         connection_timeout_secs: 5,
+//!         write_timeout_secs: 10,
 //!         watchdog_timeout_secs: 49,
 //!         max_exceptions: 10,
 //!         decode: QbtDecodeConfig::default(),

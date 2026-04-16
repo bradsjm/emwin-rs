@@ -8,7 +8,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
@@ -34,6 +34,7 @@ pub(super) async fn connect_session(
     username: &str,
     password: &str,
     connect_timeout: Duration,
+    write_timeout: Duration,
 ) -> WxWireReceiverResult<ConnectedSession> {
     let connect_deadline = Instant::now()
         .checked_add(connect_timeout)
@@ -58,7 +59,10 @@ pub(super) async fn connect_session(
     }
 
     session
-        .send_raw("<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>")
+        .send_raw(
+            "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>",
+            write_timeout,
+        )
         .await?;
     let proceed = session
         .wait_for_tag("proceed", remaining_connect_timeout(connect_deadline)?)
@@ -88,7 +92,7 @@ pub(super) async fn connect_session(
     let auth = format!(
         "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>{auth_payload}</auth>"
     );
-    session.send_raw(auth.as_str()).await?;
+    session.send_raw(auth.as_str(), write_timeout).await?;
 
     let sasl_reply = session
         .wait_for_any_tag(
@@ -117,7 +121,7 @@ pub(super) async fn connect_session(
     let bind_iq = format!(
         "<iq type='set' id='{bind_id}'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/></iq>"
     );
-    session.send_raw(bind_iq.as_str()).await?;
+    session.send_raw(bind_iq.as_str(), write_timeout).await?;
 
     let bind_result = session
         .wait_for_tag("iq", remaining_connect_timeout(connect_deadline)?)
@@ -133,7 +137,10 @@ pub(super) async fn connect_session(
 
     let sm_enabled = if post_auth_features.contains(SM3_NS) {
         session
-            .send_raw("<enable xmlns='urn:xmpp:sm:3' resume='true'/>")
+            .send_raw(
+                "<enable xmlns='urn:xmpp:sm:3' resume='true'/>",
+                write_timeout,
+            )
             .await?;
         let sm_reply = session
             .wait_for_any_tag(
@@ -153,7 +160,7 @@ pub(super) async fn connect_session(
     let join = format!(
         "<presence to='{WXWIRE_ROOM}/{nick}'><x xmlns='http://jabber.org/protocol/muc'><history maxstanzas='25'/></x></presence>"
     );
-    session.send_raw(join.as_str()).await?;
+    session.send_raw(join.as_str(), write_timeout).await?;
 
     let join_confirm = tokio::time::timeout(remaining_connect_timeout(connect_deadline)?, async {
         loop {
@@ -196,10 +203,14 @@ impl XmppSocket {
         }
     }
 
-    pub(super) async fn write_all(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+    pub(super) async fn write_all(
+        &mut self,
+        bytes: &[u8],
+        timeout: Duration,
+    ) -> WxWireReceiverResult<()> {
         match self {
-            Self::Plain(stream) => stream.write_all(bytes).await,
-            Self::Tls(stream) => stream.write_all(bytes).await,
+            Self::Plain(stream) => write_all_with_timeout(stream, bytes, timeout).await,
+            Self::Tls(stream) => write_all_with_timeout(stream, bytes, timeout).await,
         }
     }
 
@@ -245,21 +256,24 @@ impl XmppSession {
         (self.socket, self.read_buf)
     }
 
-    pub(super) async fn send_raw(&mut self, xml: &str) -> WxWireReceiverResult<()> {
+    pub(super) async fn send_raw(
+        &mut self,
+        xml: &str,
+        timeout: Duration,
+    ) -> WxWireReceiverResult<()> {
         self.socket
             .as_mut()
             .ok_or(WxWireTransportError::SocketNotAvailable)?
-            .write_all(xml.as_bytes())
+            .write_all(xml.as_bytes(), timeout)
             .await
-            .map_err(|err| WxWireTransportError::WriteFailed(err.to_string()).into())
     }
 
-    pub(super) async fn open_stream(&mut self, _timeout: Duration) -> WxWireReceiverResult<()> {
+    pub(super) async fn open_stream(&mut self, timeout: Duration) -> WxWireReceiverResult<()> {
         let open = format!(
             "<?xml version='1.0' encoding='utf-8'?><stream:stream xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' to='{}' version='1.0'>",
             self.endpoint_host
         );
-        self.send_raw(open.as_str()).await
+        self.send_raw(open.as_str(), timeout).await
     }
 
     pub(super) async fn upgrade_tls(&mut self, timeout: Duration) -> WxWireReceiverResult<()> {
@@ -369,6 +383,20 @@ fn attach_handshake_timeout_context(
     }
 }
 
+async fn write_all_with_timeout<W>(
+    writer: &mut W,
+    bytes: &[u8],
+    timeout: Duration,
+) -> WxWireReceiverResult<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    tokio::time::timeout(timeout, writer.write_all(bytes))
+        .await
+        .map_err(|_| WxWireTransportError::WriteTimeout)?
+        .map_err(|err| WxWireTransportError::WriteFailed(err.to_string()).into())
+}
+
 pub(super) fn chrono_like_suffix() -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -393,4 +421,26 @@ pub(super) fn append_with_read_limit(
     }
     read_buf.push_str(chunk);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_all_with_timeout;
+    use crate::wxwire_receiver::error::{WxWireReceiverError, WxWireTransportError};
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn write_all_with_timeout_returns_timeout_error() {
+        let (mut writer, _reader) = tokio::io::duplex(1);
+        let payload = vec![b'x'; 1024];
+
+        let error = write_all_with_timeout(&mut writer, &payload, Duration::from_millis(10))
+            .await
+            .expect_err("write should time out");
+
+        assert!(matches!(
+            error,
+            WxWireReceiverError::Transport(WxWireTransportError::WriteTimeout)
+        ));
+    }
 }

@@ -571,6 +571,19 @@ pub struct CellAggregateQuery {
     pub limit: usize,
 }
 
+impl CellAggregateQuery {
+    pub fn validate(&self) -> ServiceResult<()> {
+        self.filters.validate()?;
+        validate_required_bbox_for_cells(&self.filters)?;
+        if !(1..=6).contains(&self.precision) {
+            return Err(ServiceError::InvalidRequest(
+                "cell aggregate precision must be between 1 and 6".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Archived issue list query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchivedIssueListQuery {
@@ -652,7 +665,7 @@ pub fn build_cell_aggregate_query(
         precision,
         limit: limit.unwrap_or(100),
     };
-    query.filters.validate()?;
+    query.validate()?;
     Ok(query)
 }
 
@@ -787,6 +800,20 @@ fn validate_archive_size_inputs(
         ));
     }
     Ok(())
+}
+
+fn validate_required_bbox_for_cells(filters: &ProductListQuery) -> ServiceResult<()> {
+    match (
+        filters.min_lat,
+        filters.max_lat,
+        filters.min_lon,
+        filters.max_lon,
+    ) {
+        (Some(_), Some(_), Some(_), Some(_)) => Ok(()),
+        _ => Err(ServiceError::InvalidRequest(
+            "cell aggregates require min_lat, max_lat, min_lon, and max_lon".to_string(),
+        )),
+    }
 }
 
 fn validate_lat(name: &str, value: f64) -> ServiceResult<()> {

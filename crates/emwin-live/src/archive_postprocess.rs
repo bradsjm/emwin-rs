@@ -9,6 +9,8 @@ use std::io::Read;
 use std::path::Path;
 use thiserror::Error;
 
+const MAX_ARCHIVE_ENTRY_BYTES: usize = 8 * 1024 * 1024;
+
 /// Canonical delivered product after optional archive post-processing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DeliveredProduct {
@@ -30,6 +32,8 @@ pub(crate) enum ArchivePostProcessError {
     EmptyEntryPath,
     #[error("archive entry path is unsafe")]
     UnsafeEntryPath,
+    #[error("archive entry exceeds {limit_bytes} bytes")]
+    EntryTooLarge { limit_bytes: usize },
     #[error("failed to read archive entry")]
     ReadEntry(#[source] std::io::Error),
 }
@@ -63,11 +67,10 @@ pub(crate) fn post_process_archive(
         .enclosed_name()
         .ok_or(ArchivePostProcessError::UnsafeEntryPath)?;
     let delivered_filename = normalize_entry_path(&path)?;
+    let entry_size = entry.size();
 
-    let mut extracted = Vec::new();
-    entry
-        .read_to_end(&mut extracted)
-        .map_err(ArchivePostProcessError::ReadEntry)?;
+    let extracted =
+        read_archive_entry_with_limit(&mut entry, Some(entry_size), MAX_ARCHIVE_ENTRY_BYTES)?;
 
     Ok(DeliveredProduct {
         filename: delivered_filename,
@@ -94,9 +97,38 @@ fn normalize_entry_path(path: &Path) -> Result<String, ArchivePostProcessError> 
     Ok(filename)
 }
 
+fn read_archive_entry_with_limit<R: Read>(
+    reader: &mut R,
+    declared_size: Option<u64>,
+    limit_bytes: usize,
+) -> Result<Vec<u8>, ArchivePostProcessError> {
+    if declared_size.is_some_and(|size| size > limit_bytes as u64) {
+        return Err(ArchivePostProcessError::EntryTooLarge { limit_bytes });
+    }
+
+    let mut extracted = Vec::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let read = reader
+            .read(&mut buf)
+            .map_err(ArchivePostProcessError::ReadEntry)?;
+        if read == 0 {
+            break;
+        }
+        if extracted.len().saturating_add(read) > limit_bytes {
+            return Err(ArchivePostProcessError::EntryTooLarge { limit_bytes });
+        }
+        extracted.extend_from_slice(&buf[..read]);
+    }
+    Ok(extracted)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ArchivePostProcessError, post_process_archive};
+    use super::{
+        ArchivePostProcessError, MAX_ARCHIVE_ENTRY_BYTES, post_process_archive,
+        read_archive_entry_with_limit,
+    };
     use std::io::Write;
     use zip::CompressionMethod;
     use zip::write::FileOptions;
@@ -215,5 +247,37 @@ mod tests {
 
         assert_eq!(delivered.filename, "AFD.ZIP");
         assert_eq!(delivered.data.as_ref(), zip_bytes.as_slice());
+    }
+
+    #[test]
+    fn declared_oversize_entry_is_rejected() {
+        let mut reader = std::io::Cursor::new(Vec::<u8>::new());
+
+        let error = read_archive_entry_with_limit(
+            &mut reader,
+            Some((MAX_ARCHIVE_ENTRY_BYTES + 1) as u64),
+            MAX_ARCHIVE_ENTRY_BYTES,
+        )
+        .expect_err("declared oversize entry should fail");
+
+        assert!(matches!(
+            error,
+            ArchivePostProcessError::EntryTooLarge { limit_bytes }
+                if limit_bytes == MAX_ARCHIVE_ENTRY_BYTES
+        ));
+    }
+
+    #[test]
+    fn streamed_oversize_entry_is_rejected() {
+        let mut reader = std::io::Cursor::new(vec![b'x'; MAX_ARCHIVE_ENTRY_BYTES + 1]);
+
+        let error = read_archive_entry_with_limit(&mut reader, None, MAX_ARCHIVE_ENTRY_BYTES)
+            .expect_err("streamed oversize entry should fail");
+
+        assert!(matches!(
+            error,
+            ArchivePostProcessError::EntryTooLarge { limit_bytes }
+                if limit_bytes == MAX_ARCHIVE_ENTRY_BYTES
+        ));
     }
 }

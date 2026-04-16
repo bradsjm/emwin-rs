@@ -26,6 +26,9 @@ const HEADER_SIZE: usize = 80;
 /// Body size for V1 protocol frames (fixed 1024 bytes).
 const V1_BODY_SIZE: usize = 1024;
 
+/// Minimum buffered size enforced for server-list scans.
+const MIN_SERVER_LIST_FRAME_BYTES: usize = 1024;
+
 /// Trait for decoders that consume raw QBT wire bytes.
 pub trait QbtFrameDecoder {
     /// Feeds one chunk of XOR-obfuscated wire data into the decoder.
@@ -110,6 +113,10 @@ impl Default for QbtProtocolDecoder {
 impl QbtProtocolDecoder {
     /// Creates a decoder with the supplied checksum and compression policy.
     pub fn new(config: QbtDecodeConfig) -> Self {
+        let mut config = config;
+        config.max_server_list_frame_bytes = config
+            .max_server_list_frame_bytes
+            .max(MIN_SERVER_LIST_FRAME_BYTES);
         Self {
             config,
             buffer: BytesMut::new(),
@@ -207,6 +214,18 @@ impl QbtProtocolDecoder {
         out: &mut Vec<QbtFrameEvent>,
     ) -> Result<bool, QbtProtocolError> {
         let Some(end_idx) = self.buffer.iter().position(|b| *b == 0) else {
+            if self.buffer.len() > self.config.max_server_list_frame_bytes {
+                out.push(QbtFrameEvent::Warning(
+                    QbtProtocolWarning::DecoderRecovered {
+                        error: format!(
+                            "server list frame exceeded {} bytes",
+                            self.config.max_server_list_frame_bytes
+                        ),
+                    },
+                ));
+                self.discard_malformed_server_list();
+                return Ok(true);
+            }
             return Ok(false);
         };
 
@@ -219,6 +238,19 @@ impl QbtProtocolDecoder {
         out.extend(warnings.into_iter().map(QbtFrameEvent::Warning));
         self.state = DecoderState::StartFrame;
         Ok(true)
+    }
+
+    fn discard_malformed_server_list(&mut self) {
+        if let Some(sync_pos) = find_subsequence(&self.buffer[1..], SYNC_BYTES).map(|idx| idx + 1) {
+            let _ = self.buffer.split_to(sync_pos);
+        } else {
+            let keep = SYNC_BYTES.len().saturating_sub(1);
+            if self.buffer.len() > keep {
+                let drop_count = self.buffer.len() - keep;
+                let _ = self.buffer.split_to(drop_count);
+            }
+        }
+        self.state = DecoderState::Resync;
     }
 
     fn process_block_header(&mut self) -> Result<bool, QbtProtocolError> {
@@ -434,6 +466,15 @@ fn parse_header(input: &[u8], max_v2_body_size: usize) -> Result<PendingSegment,
         warnings,
         decompression_failed: false,
     })
+}
+
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return None;
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn parse_tag_value<'a>(
@@ -814,6 +855,39 @@ mod tests {
         assert!(events.iter().any(|evt| matches!(
             evt,
             QbtFrameEvent::Warning(QbtProtocolWarning::TimestampParseFallback { .. })
+        )));
+        assert!(
+            events
+                .iter()
+                .any(|evt| matches!(evt, QbtFrameEvent::DataBlock(_)))
+        );
+    }
+
+    #[test]
+    fn oversized_server_list_recovers_and_decodes_next_frame() {
+        let body = [b'A'; V1_BODY_SIZE];
+        let checksum = calculate_qbt_checksum(&body) as u32;
+        let header = build_header("recover.txt", 1, 1, checksum, None);
+
+        let mut oversized_server_list = Vec::new();
+        oversized_server_list.extend_from_slice(SYNC_BYTES);
+        oversized_server_list.extend_from_slice(b"/ServerList/");
+        oversized_server_list.extend(std::iter::repeat_n(b'X', 2048));
+        let next_frame = frame_with_body(header, &body);
+
+        let mut decoder = QbtProtocolDecoder::new(QbtDecodeConfig {
+            max_server_list_frame_bytes: 1024,
+            ..QbtDecodeConfig::default()
+        });
+        let mut events = decoder
+            .feed(&xor_encode(&oversized_server_list))
+            .expect("oversized server list should recover");
+        events.extend(decoder.feed(&next_frame).expect("next frame should decode"));
+
+        assert!(events.iter().any(|evt| matches!(
+            evt,
+            QbtFrameEvent::Warning(QbtProtocolWarning::DecoderRecovered { error })
+                if error.contains("server list frame exceeded")
         )));
         assert!(
             events

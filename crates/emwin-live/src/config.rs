@@ -77,6 +77,7 @@ fn build_qbt_receiver_config(request: LiveConfigRequest) -> LiveResult<QbtReceiv
         follow_server_list_updates: !pin_servers,
         reconnect_delay_secs: 5,
         connection_timeout_secs: 5,
+        write_timeout_secs: 10,
         watchdog_timeout_secs: qbt_watchdog_timeout_secs,
         max_exceptions: 10,
         decode: QbtDecodeConfig::default(),
@@ -117,6 +118,7 @@ fn build_wxwire_receiver_config(request: LiveConfigRequest) -> LiveResult<WxWire
         username,
         password,
         idle_timeout_secs: idle_timeout_secs.max(1),
+        write_timeout_secs: 10,
         ..WxWireReceiverConfig::default()
     })
 }

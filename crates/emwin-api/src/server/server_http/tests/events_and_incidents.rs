@@ -199,7 +199,7 @@ async fn feature_and_aggregate_endpoints_return_service_unavailable_without_arch
         "/v1/features/geojson",
         "/v1/aggregates/facets?dimension=office",
         "/v1/aggregates/timeseries?measure=product_count&start=2025-03-05T12:00:00Z&end=2025-03-05T13:00:00Z&bucket=hour",
-        "/v1/aggregates/cells?measure=product_count&precision=5",
+        "/v1/aggregates/cells?measure=product_count&precision=5&min_lat=41.0&max_lat=42.0&min_lon=-97.0&max_lon=-95.0",
     ] {
         let response = app
             .clone()
@@ -377,6 +377,31 @@ async fn archive_routes_reject_invalid_enum_filters() {
         "/v1/aggregates/facets?dimension=bogus",
         "/v1/aggregates/timeseries?measure=bogus&start=2025-03-05T12:00:00Z&end=2025-03-05T13:00:00Z&bucket=hour",
         "/v1/aggregates/cells?measure=bogus&precision=5",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .method("GET")
+                    .body(axum::body::Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "path={path}");
+    }
+}
+
+#[tokio::test]
+async fn cell_aggregate_route_requires_bbox_and_capped_precision() {
+    let state = test_state_with_archive(10);
+    let app = build_router(state, None).expect("router should build");
+
+    for path in [
+        "/v1/aggregates/cells?measure=product_count&precision=5",
+        "/v1/aggregates/cells?measure=product_count&precision=7&min_lat=41.0&max_lat=42.0&min_lon=-97.0&max_lon=-95.0",
     ] {
         let response = app
             .clone()

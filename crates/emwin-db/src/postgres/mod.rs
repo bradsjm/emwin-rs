@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
 use tracing::info;
 
@@ -67,6 +68,7 @@ impl PostgresConfig {
 pub struct PostgresMetadataSink {
     config: PostgresConfig,
     pool: Arc<Mutex<Option<PgPool>>>,
+    pool_init: Arc<AsyncMutex<()>>,
     reconnect_pending: Arc<AtomicBool>,
     blob_reader: Arc<StorageBlobReader>,
     incident_change_tx: broadcast::Sender<IncidentChange>,
@@ -79,6 +81,7 @@ impl PostgresMetadataSink {
         Self {
             config,
             pool: Arc::new(Mutex::new(None)),
+            pool_init: Arc::new(AsyncMutex::new(())),
             reconnect_pending: Arc::new(AtomicBool::new(false)),
             blob_reader: Arc::new(StorageBlobReader::new()),
             incident_change_tx,
@@ -114,6 +117,18 @@ impl PostgresMetadataSink {
     }
 
     pub(crate) async fn ensure_pool(&self) -> crate::error::PersistResult<PgPool> {
+        {
+            let guard = self
+                .pool
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(pool) = guard.as_ref() {
+                return Ok(pool.clone());
+            }
+        }
+
+        let _init_guard = self.pool_init.lock().await;
+
         {
             let guard = self
                 .pool

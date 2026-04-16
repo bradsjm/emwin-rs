@@ -18,6 +18,12 @@ pub enum QbtReceiverError {
     /// Underlying I/O operation failed.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// Outbound socket write exceeded the configured timeout.
+    #[error("socket write timeout")]
+    WriteTimeout,
+    /// Client shutdown exceeded the allowed timeout and was aborted.
+    #[error("client shutdown timeout")]
+    ShutdownTimeout,
     /// Client lifecycle operation failed (start/stop).
     #[error("client lifecycle error: {0}")]
     Lifecycle(String),
@@ -33,6 +39,9 @@ pub enum QbtReceiverConfigError {
     /// No servers were configured.
     #[error("at least one server is required")]
     NoServers,
+    /// Write timeout must be at least one second.
+    #[error("write_timeout_secs must be >= 1")]
+    ZeroWriteTimeout,
 }
 
 /// Errors related to protocol parsing and validation.
