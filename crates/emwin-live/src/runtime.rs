@@ -5,6 +5,7 @@ use crate::persistence::{
     FilePersistenceRuntime, run_incident_cleanup_loop, shutdown_runtime,
     start_runtime_with_postgres,
 };
+use crate::shared::lock_unpoisoned;
 use crate::types::{
     AppState, IncidentBroadcastEvent, LiveBroadcastEvent, LiveOptions, LiveStatsSnapshot,
     LiveTelemetry, ReceiverKind,
@@ -23,11 +24,21 @@ use std::sync::atomic::Ordering;
 use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
 
+enum RuntimeMode {
+    IngestOnly,
+    PersistenceOnly {
+        persistence_runtime: FilePersistenceRuntime,
+    },
+    PersistenceWithArchive {
+        cleanup: JoinHandle<LiveResult<()>>,
+        incident_relay: JoinHandle<LiveResult<()>>,
+        persistence_runtime: FilePersistenceRuntime,
+    },
+}
+
 struct RuntimeTasks {
     ingest: JoinHandle<LiveResult<()>>,
-    cleanup: Option<JoinHandle<LiveResult<()>>>,
-    incident_relay: Option<JoinHandle<LiveResult<()>>>,
-    persistence_runtime: Option<FilePersistenceRuntime>,
+    mode: RuntimeMode,
 }
 
 struct LiveRuntimeInner {
@@ -171,26 +182,38 @@ impl LiveRuntime {
                 ))
             }
         };
-        let cleanup = cleanup_sink
-            .map(|sink| tokio::spawn(run_incident_cleanup_loop(sink, shutdown_rx.clone())));
-        let incident_relay = archive_sink.map(|sink| {
-            tokio::spawn(run_incident_event_relay_loop(
-                sink,
-                Arc::clone(&state),
-                shutdown_rx.clone(),
-            ))
-        });
+        let mode = match (cleanup_sink, archive_sink, persistence_runtime) {
+            (Some(cleanup_sink), Some(archive_sink), Some(persistence_runtime)) => {
+                RuntimeMode::PersistenceWithArchive {
+                    cleanup: tokio::spawn(run_incident_cleanup_loop(
+                        cleanup_sink,
+                        shutdown_rx.clone(),
+                    )),
+                    incident_relay: tokio::spawn(run_incident_event_relay_loop(
+                        archive_sink,
+                        Arc::clone(&state),
+                        shutdown_rx.clone(),
+                    )),
+                    persistence_runtime,
+                }
+            }
+            (None, None, Some(persistence_runtime)) => RuntimeMode::PersistenceOnly {
+                persistence_runtime,
+            },
+            (None, None, None) => RuntimeMode::IngestOnly,
+            _ => {
+                return Err(LiveError::runtime(
+                    "invalid runtime state: archive services require persistence runtime"
+                        .to_string(),
+                ));
+            }
+        };
 
         Ok(Self {
             inner: Arc::new(LiveRuntimeInner {
                 state,
                 shutdown_tx,
-                tasks: Mutex::new(Some(RuntimeTasks {
-                    ingest,
-                    cleanup,
-                    incident_relay,
-                    persistence_runtime,
-                })),
+                tasks: Mutex::new(Some(RuntimeTasks { ingest, mode })),
             }),
         })
     }
@@ -309,76 +332,28 @@ impl LiveRuntime {
         let _ = self.inner.shutdown_tx.send(true);
 
         await_task(tasks.ingest, "ingest").await?;
-        if let Some(task) = tasks.cleanup {
-            await_task(task, "cleanup").await?;
-        }
-        if let Some(task) = tasks.incident_relay {
-            await_task(task, "incident relay").await?;
-        }
-        if let Some(runtime) = tasks.persistence_runtime {
-            let _ = shutdown_runtime(runtime).await?;
+        match tasks.mode {
+            RuntimeMode::IngestOnly => {}
+            RuntimeMode::PersistenceOnly {
+                persistence_runtime,
+            } => {
+                let _ = shutdown_runtime(persistence_runtime).await?;
+            }
+            RuntimeMode::PersistenceWithArchive {
+                cleanup,
+                incident_relay,
+                persistence_runtime,
+            } => {
+                await_task(cleanup, "cleanup").await?;
+                await_task(incident_relay, "incident relay").await?;
+                let _ = shutdown_runtime(persistence_runtime).await?;
+            }
         }
 
         Ok(())
     }
 
-    pub fn new_for_tests(
-        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
-        telemetry: crate::types::LiveTelemetry,
-        archive: Option<emwin_db::PostgresMetadataSink>,
-        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
-        upstream_endpoint: Option<String>,
-    ) -> Self {
-        Self::new_for_tests_with_state(
-            retained_files,
-            telemetry,
-            archive,
-            persistence,
-            upstream_endpoint,
-            0,
-            None,
-        )
-    }
-
-    pub fn new_for_tests_with_active_servers(
-        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
-        telemetry: crate::types::LiveTelemetry,
-        archive: Option<emwin_db::PostgresMetadataSink>,
-        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
-        upstream_endpoint: Option<String>,
-        active_servers: usize,
-    ) -> Self {
-        Self::new_for_tests_with_state(
-            retained_files,
-            telemetry,
-            archive,
-            persistence,
-            upstream_endpoint,
-            active_servers,
-            None,
-        )
-    }
-
-    pub fn new_for_tests_with_archive_status(
-        retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
-        telemetry: crate::types::LiveTelemetry,
-        archive: Option<emwin_db::PostgresMetadataSink>,
-        persistence: Option<emwin_db::PersistenceProducer<emwin_db::CompletedFileMetadata>>,
-        upstream_endpoint: Option<String>,
-        archive_status: Option<(String, u64, u64)>,
-    ) -> Self {
-        Self::new_for_tests_with_state(
-            retained_files,
-            telemetry,
-            archive,
-            persistence,
-            upstream_endpoint,
-            0,
-            archive_status,
-        )
-    }
-
-    fn new_for_tests_with_state(
+    pub(crate) fn from_test_state(
         retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
         telemetry: crate::types::LiveTelemetry,
         archive: Option<emwin_db::PostgresMetadataSink>,
@@ -390,10 +365,7 @@ impl LiveRuntime {
         let (shutdown_tx, _shutdown_rx) = watch::channel(false);
         let state = AppState::new(persistence, archive, true, 32, 60);
         {
-            let mut retained = state
-                .retained_files
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut retained = lock_unpoisoned(&state.retained_files);
             for (filename, data, timestamp_utc, origin) in retained_files {
                 let origin = match origin {
                     SourceKind::Qbt => emwin_protocol::ingest::ProductOrigin::Qbt,
@@ -420,17 +392,11 @@ impl LiveRuntime {
             }
         }
         {
-            let mut guard = state
-                .telemetry
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.telemetry);
             *guard = telemetry;
         }
         {
-            let mut guard = state
-                .upstream_endpoint
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.upstream_endpoint);
             *guard = upstream_endpoint;
         }
         let (archive_last_error, archive_errors_total, archive_pool_timeouts_total) =
@@ -441,10 +407,7 @@ impl LiveRuntime {
                 None => (None, 0, 0),
             };
         {
-            let mut guard = state
-                .archive_last_error
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.archive_last_error);
             *guard = archive_last_error;
         }
         state
@@ -464,6 +427,14 @@ impl LiveRuntime {
                 tasks: Mutex::new(None),
             }),
         }
+    }
+
+    pub fn archive_query_service(&self) -> Option<Arc<dyn ArchiveQueryService>> {
+        let archive = self.inner.state.archive.clone()?;
+        Some(Arc::new(TrackedArchiveQueryService {
+            state: Arc::clone(&self.inner.state),
+            archive,
+        }))
     }
 }
 
@@ -507,6 +478,12 @@ fn record_archive_result<T>(
     }
 }
 
+#[derive(Clone)]
+struct TrackedArchiveQueryService {
+    state: Arc<AppState>,
+    archive: emwin_db::PostgresMetadataSink,
+}
+
 impl LiveEventService for LiveRuntime {
     fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<LiveBroadcastEvent> {
         LiveRuntime::subscribe_events(self)
@@ -547,18 +524,14 @@ impl IncidentChangeStream for LiveRuntime {
     }
 }
 
-impl ArchiveQueryService for LiveRuntime {
+impl ArchiveQueryService for TrackedArchiveQueryService {
     fn list_incidents(
         &self,
         query: IncidentListQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<IncidentSummary>>>
     {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_incidents(query).await)
+            record_archive_result(&self.state, self.archive.list_incidents(query).await)
         })
     }
 
@@ -566,13 +539,9 @@ impl ArchiveQueryService for LiveRuntime {
         &'a self,
         key: &'a IncidentKey,
     ) -> emwin_service::archive::BoxFuture<'a, ServiceResult<Option<IncidentDetail>>> {
-        Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.get_incident(key).await)
-        })
+        Box::pin(
+            async move { record_archive_result(&self.state, self.archive.get_incident(key).await) },
+        )
     }
 
     fn list_incident_products<'a>(
@@ -584,11 +553,10 @@ impl ArchiveQueryService for LiveRuntime {
         ServiceResult<PaginatedResponse<ArchivedProductSummary>>,
     > {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_incident_products(key, query).await)
+            record_archive_result(
+                &self.state,
+                self.archive.list_incident_products(key, query).await,
+            )
         })
     }
 
@@ -600,11 +568,10 @@ impl ArchiveQueryService for LiveRuntime {
         ServiceResult<PaginatedResponse<ArchivedProductSummary>>,
     > {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_archived_products(query).await)
+            record_archive_result(
+                &self.state,
+                self.archive.list_archived_products(query).await,
+            )
         })
     }
 
@@ -613,11 +580,10 @@ impl ArchiveQueryService for LiveRuntime {
         product_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedProductDetail>>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.get_archived_product(product_id).await)
+            record_archive_result(
+                &self.state,
+                self.archive.get_archived_product(product_id).await,
+            )
         })
     }
 
@@ -627,11 +593,7 @@ impl ArchiveQueryService for LiveRuntime {
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<ArchivedIssue>>>
     {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_archived_issues(query).await)
+            record_archive_result(&self.state, self.archive.list_archived_issues(query).await)
         })
     }
 
@@ -640,11 +602,7 @@ impl ArchiveQueryService for LiveRuntime {
         issue_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedIssue>>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.get_archived_issue(issue_id).await)
+            record_archive_result(&self.state, self.archive.get_archived_issue(issue_id).await)
         })
     }
 
@@ -653,11 +611,10 @@ impl ArchiveQueryService for LiveRuntime {
         product_id: i64,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<Option<ArchivedPayload>>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.read_archived_payload(product_id).await)
+            record_archive_result(
+                &self.state,
+                self.archive.read_archived_payload(product_id).await,
+            )
         })
     }
 
@@ -667,11 +624,10 @@ impl ArchiveQueryService for LiveRuntime {
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<PaginatedResponse<ArchivedFeature>>>
     {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_archived_features(query).await)
+            record_archive_result(
+                &self.state,
+                self.archive.list_archived_features(query).await,
+            )
         })
     }
 
@@ -680,11 +636,7 @@ impl ArchiveQueryService for LiveRuntime {
         query: FacetAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<FacetAggregateResult>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_facet_aggregate(query).await)
+            record_archive_result(&self.state, self.archive.list_facet_aggregate(query).await)
         })
     }
 
@@ -693,11 +645,10 @@ impl ArchiveQueryService for LiveRuntime {
         query: TimeseriesAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<TimeseriesAggregateResult>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_timeseries_aggregate(query).await)
+            record_archive_result(
+                &self.state,
+                self.archive.list_timeseries_aggregate(query).await,
+            )
         })
     }
 
@@ -706,11 +657,7 @@ impl ArchiveQueryService for LiveRuntime {
         query: CellAggregateQuery,
     ) -> emwin_service::archive::BoxFuture<'_, ServiceResult<CellAggregateResult>> {
         Box::pin(async move {
-            let state = Arc::clone(&self.inner.state);
-            let archive = state.archive.as_ref().ok_or_else(|| {
-                ServiceError::NotConfigured("archive database is not configured".to_string())
-            })?;
-            record_archive_result(&state, archive.list_cell_aggregate(query).await)
+            record_archive_result(&self.state, self.archive.list_cell_aggregate(query).await)
         })
     }
 }

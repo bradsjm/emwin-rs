@@ -1,4 +1,4 @@
-use super::payloads::{EventKind, IncidentEventPayload, TelemetryPayload};
+use super::payloads::{IncidentEventPayload, TelemetryPayload};
 use emwin_db::PostgresMetadataSink;
 use emwin_service::{
     CompletedFileMetadata, IncidentBroadcastEvent as ServiceIncidentBroadcastEvent,
@@ -10,13 +10,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use tokio::sync::{broadcast, watch};
-
-/// Lightweight broadcast notification stored in the SSE ring buffer.
-#[derive(Debug, Clone)]
-pub(crate) struct BroadcastEvent {
-    pub(crate) id: u64,
-    pub(crate) kind: EventKind,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct IncidentBroadcastEvent {
@@ -76,11 +69,12 @@ impl ArchiveStatusService for LiveRuntimeArchiveStatusService {
 impl ApiServices {
     pub fn from_live_runtime(runtime: emwin_live::LiveRuntime) -> Self {
         let alert_store = runtime.alert_store();
+        let archive = runtime.archive_query_service();
         let shared = Arc::new(runtime);
         Self {
             live: shared.clone(),
             retained_files: shared.clone(),
-            archive: shared.clone(),
+            archive: archive.unwrap_or_else(|| Arc::new(NotConfiguredArchiveService)),
             incident_stream: shared.clone(),
             archive_status: Arc::new(LiveRuntimeArchiveStatusService { runtime: shared }),
             alert_store: alert_store.map(Arc::new),
@@ -126,14 +120,195 @@ impl ApiServices {
     }
 }
 
+struct NotConfiguredArchiveService;
+
+impl emwin_service::ArchiveQueryService for NotConfiguredArchiveService {
+    fn list_incidents(
+        &self,
+        _query: emwin_service::IncidentListQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<
+            emwin_service::PaginatedResponse<emwin_service::IncidentSummary>,
+        >,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn get_incident<'a>(
+        &'a self,
+        _key: &'a emwin_service::IncidentKey,
+    ) -> emwin_service::archive::BoxFuture<
+        'a,
+        emwin_service::ServiceResult<Option<emwin_service::IncidentDetail>>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_incident_products<'a>(
+        &'a self,
+        _key: &'a emwin_service::IncidentKey,
+        _query: emwin_service::IncidentProductsQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        'a,
+        emwin_service::ServiceResult<
+            emwin_service::PaginatedResponse<emwin_service::ArchivedProductSummary>,
+        >,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_archived_products(
+        &self,
+        _query: emwin_service::ProductListQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<
+            emwin_service::PaginatedResponse<emwin_service::ArchivedProductSummary>,
+        >,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn get_archived_product(
+        &self,
+        _product_id: i64,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<Option<emwin_service::ArchivedProductDetail>>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_archived_issues(
+        &self,
+        _query: emwin_service::ArchivedIssueListQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<
+            emwin_service::PaginatedResponse<emwin_service::ArchivedIssue>,
+        >,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn get_archived_issue(
+        &self,
+        _issue_id: i64,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<Option<emwin_service::ArchivedIssue>>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn read_archived_payload(
+        &self,
+        _product_id: i64,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<Option<emwin_service::ArchivedPayload>>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_archived_features(
+        &self,
+        _query: emwin_service::FeatureListQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<
+            emwin_service::PaginatedResponse<emwin_service::ArchivedFeature>,
+        >,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_facet_aggregate(
+        &self,
+        _query: emwin_service::FacetAggregateQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<emwin_service::FacetAggregateResult>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_timeseries_aggregate(
+        &self,
+        _query: emwin_service::TimeseriesAggregateQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<emwin_service::TimeseriesAggregateResult>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+
+    fn list_cell_aggregate(
+        &self,
+        _query: emwin_service::CellAggregateQuery,
+    ) -> emwin_service::archive::BoxFuture<
+        '_,
+        emwin_service::ServiceResult<emwin_service::CellAggregateResult>,
+    > {
+        Box::pin(async {
+            Err(emwin_service::ServiceError::NotConfigured(
+                "archive database is not configured".to_string(),
+            ))
+        })
+    }
+}
+
 pub(crate) struct AppState {
     pub(crate) services: ApiServices,
-    pub(crate) event_tx: broadcast::Sender<BroadcastEvent>,
     pub(crate) incident_event_tx: broadcast::Sender<IncidentBroadcastEvent>,
     pub(crate) shutdown_rx: watch::Receiver<bool>,
     pub(crate) connected_clients: AtomicUsize,
     pub(crate) max_clients: usize,
-    pub(crate) next_event_id: AtomicU64,
     pub(crate) next_incident_event_id: AtomicU64,
     pub(crate) openapi_auth_token: Option<String>,
     pub(crate) alerting_apprise_api_url: Option<String>,

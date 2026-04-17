@@ -12,18 +12,15 @@ use tower::ServiceExt;
 async fn files_download_accepts_url_encoded_nested_filename() {
     let state = build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests(
-            vec![(
+        emwin_live::test_support::runtime()
+            .retained_files(vec![(
                 "nested/my file.txt".to_string(),
                 b"hello world".to_vec(),
                 1,
                 SourceKind::Qbt,
-            )],
-            emwin_live::LiveTelemetry::Unavailable,
-            None,
-            None,
-            None,
-        ),
+            )])
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .build(),
         None,
     );
 
@@ -51,8 +48,8 @@ async fn files_download_accepts_url_encoded_nested_filename() {
 async fn files_endpoint_serializes_enriched_metadata() {
     let state = build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests(
-            vec![(
+        emwin_live::test_support::runtime()
+            .retained_files(vec![(
                 "TAFPDKGA.TXT".to_string(),
                 b"000
 FTUS42 KFFC 022320
@@ -62,12 +59,9 @@ Body
                 .to_vec(),
                 1,
                 SourceKind::Qbt,
-            )],
-            emwin_live::LiveTelemetry::Unavailable,
-            None,
-            None,
-            None,
-        ),
+            )])
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .build(),
         None,
     );
 

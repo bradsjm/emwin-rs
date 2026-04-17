@@ -73,6 +73,7 @@ pub(crate) struct ArchiveStatus {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) enum EventKind {
     Connected { endpoint: String },
     Disconnected,

@@ -1,7 +1,7 @@
 use super::server_http;
-use super::types::{ApiServices, AppState, EventKind, HttpServerOptions, IncidentEventPayload};
+use super::types::{ApiServices, AppState, HttpServerOptions, IncidentEventPayload};
 use crate::error::{ApiError, ApiResult};
-use emwin_service::{IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind};
+use emwin_service::IncidentBroadcastEvent;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -37,12 +37,10 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = Arc::new(AppState {
         services: services.clone(),
-        event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         incident_event_tx: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
         shutdown_rx: shutdown_rx.clone(),
         connected_clients: AtomicUsize::new(0),
         max_clients: max_clients.max(1),
-        next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
         openapi_auth_token,
         alerting_apprise_api_url,
@@ -54,11 +52,6 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
     let listener = TcpListener::bind(bind_addr).await?;
     super::log_info(quiet, &format!("server listening addr={bind_addr}"));
 
-    let event_relay_task = tokio::spawn(run_event_relay_loop(
-        services.subscribe_events(),
-        Arc::clone(&state),
-        shutdown_rx.clone(),
-    ));
     let incident_relay_task = services.subscribe_incident_changes().map(|rx| {
         tokio::spawn(run_incident_relay_loop(
             rx,
@@ -102,7 +95,6 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
         let _ = shutdown_tx.send(true);
     }
 
-    await_task(event_relay_task, "event relay").await?;
     if let Some(task) = incident_relay_task {
         await_task(task, "incident relay").await?;
     }
@@ -114,26 +106,6 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
     }
 
     tracing::info!("server stopped");
-    Ok(())
-}
-
-async fn run_event_relay_loop(
-    mut rx: broadcast::Receiver<LiveBroadcastEvent>,
-    state: Arc<AppState>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) -> ApiResult<()> {
-    loop {
-        tokio::select! {
-            _ = shutdown_rx.changed() => break,
-            received = rx.recv() => match received {
-                Ok(event) => super::publish(&state, map_live_event(event.kind)),
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(dropped)) => {
-                    super::log_info(state.quiet, &format!("event relay lagged dropped={dropped}"));
-                }
-            }
-        }
-    }
     Ok(())
 }
 
@@ -218,20 +190,6 @@ async fn run_stats_loop(
 
     Ok(())
 }
-
-fn map_live_event(kind: LiveEventKind) -> EventKind {
-    match kind {
-        LiveEventKind::Connected { endpoint } => EventKind::Connected { endpoint },
-        LiveEventKind::Disconnected => EventKind::Disconnected,
-        LiveEventKind::ReceiverFrame(frame) => EventKind::ReceiverFrame(frame),
-        LiveEventKind::ProductAvailable(metadata) => EventKind::FileComplete(Box::new(
-            super::types::CompletedFileEventPayload::from_metadata(*metadata),
-        )),
-        LiveEventKind::Telemetry(value) => EventKind::Telemetry(value),
-        LiveEventKind::Error { message } => EventKind::Error { message },
-    }
-}
-
 async fn await_task(task: tokio::task::JoinHandle<ApiResult<()>>, name: &str) -> ApiResult<()> {
     match task.await {
         Ok(Ok(())) => Ok(()),

@@ -17,7 +17,7 @@ pub use runtime::serve;
 pub use types::{ApiArchiveStatus, ApiServices, HttpServerOptions};
 
 pub(crate) use cors::build_cors_layer;
-pub(crate) use events::{publish, publish_incident_change};
+pub(crate) use events::publish_incident_change;
 #[cfg(test)]
 pub(crate) use test_support::build_router;
 

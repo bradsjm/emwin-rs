@@ -43,13 +43,10 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
 
     let state = build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            None,
-            Some(producer),
-            None,
-        ),
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .persistence(producer)
+            .build(),
         None,
     );
     let app = build_router(state, None).expect("router should build");
@@ -120,18 +117,14 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
 async fn metrics_endpoint_flattens_qbt_active_servers() {
     let state = build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests_with_active_servers(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Qbt(serde_json::json!({
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Qbt(serde_json::json!({
                 "receiver": "qbt",
                 "active_servers": 4,
                 "server_list_updates_total": 2
-            })),
-            None,
-            None,
-            None,
-            4,
-        ),
+            })))
+            .active_servers(4)
+            .build(),
         None,
     );
     let app = build_router(state, None).expect("router should build");
@@ -164,20 +157,13 @@ async fn metrics_endpoint_flattens_qbt_active_servers() {
 async fn health_endpoint_reports_archive_degraded_when_archive_error_present() {
     let state = build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests_with_archive_status(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            Some(emwin_db::PostgresMetadataSink::new(
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .archive(emwin_db::PostgresMetadataSink::new(
                 emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
-            )),
-            None,
-            None,
-            Some((
-                "pool timed out while waiting for an open connection".to_string(),
-                1,
-                1,
-            )),
-        ),
+            ))
+            .archive_status("pool timed out while waiting for an open connection", 1, 1)
+            .build(),
         None,
     );
 

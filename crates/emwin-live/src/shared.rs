@@ -3,6 +3,13 @@
 use crate::default_servers::default_upstream_servers;
 use crate::error::{LiveError, LiveResult};
 use emwin_protocol::qbt_receiver::parse_qbt_server;
+use std::sync::{Mutex, MutexGuard};
+
+pub(crate) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// Parses `--server` values or falls back to the default upstream list.
 pub(crate) fn parse_servers_or_default(raw_servers: &[String]) -> LiveResult<Vec<(String, u16)>> {

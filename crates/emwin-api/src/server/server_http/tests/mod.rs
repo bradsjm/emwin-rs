@@ -21,12 +21,10 @@ fn build_state(
     let (_, shutdown_rx) = watch::channel(false);
     Arc::new(AppState {
         services: ApiServices::from_live_runtime(live),
-        event_tx: broadcast::channel(32).0,
         incident_event_tx: broadcast::channel(32).0,
         shutdown_rx,
         connected_clients: AtomicUsize::new(0),
         max_clients,
-        next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
         openapi_auth_token: token,
         alerting_apprise_api_url: None,
@@ -37,13 +35,9 @@ fn build_state(
 fn test_state(max_clients: usize) -> Arc<AppState> {
     build_state(
         max_clients,
-        emwin_live::LiveRuntime::new_for_tests(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            None,
-            None,
-            None,
-        ),
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .build(),
         None,
     )
 }
@@ -51,13 +45,9 @@ fn test_state(max_clients: usize) -> Arc<AppState> {
 fn test_state_with_auth(max_clients: usize, token: &str) -> Arc<AppState> {
     build_state(
         max_clients,
-        emwin_live::LiveRuntime::new_for_tests(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            None,
-            None,
-            None,
-        ),
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .build(),
         Some(token.to_string()),
     )
 }
@@ -65,15 +55,12 @@ fn test_state_with_auth(max_clients: usize, token: &str) -> Arc<AppState> {
 fn test_state_with_archive(max_clients: usize) -> Arc<AppState> {
     build_state(
         max_clients,
-        emwin_live::LiveRuntime::new_for_tests(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            Some(emwin_db::PostgresMetadataSink::new(
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .archive(emwin_db::PostgresMetadataSink::new(
                 emwin_db::PostgresConfig::new("postgres://example.invalid/emwin"),
-            )),
-            None,
-            None,
-        ),
+            ))
+            .build(),
         None,
     )
 }

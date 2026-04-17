@@ -5,7 +5,7 @@
 //! - `sink`: metadata persistence orchestration
 //! - `write`: transactional write-side helpers for products and child rows
 //! - `query`: archive and incident read-path helpers
-//! - `archive`: payload loading through persisted blob locations
+//! - `archive_service`: payload loading through persisted blob locations
 //! - `prepare`: write-side normalization and projection shaping
 
 pub(super) use crate::error::{PersistError, PersistResult};
@@ -25,7 +25,7 @@ use tokio::sync::broadcast;
 use tracing::info;
 
 mod alerting;
-mod archive;
+mod archive_service;
 mod connection;
 mod prepare;
 mod query;

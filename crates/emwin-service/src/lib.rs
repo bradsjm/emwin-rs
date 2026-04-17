@@ -1,6 +1,5 @@
 pub mod alerting;
 pub mod archive;
-mod archive_filter_fields;
 pub mod error;
 pub mod filter;
 pub mod live;

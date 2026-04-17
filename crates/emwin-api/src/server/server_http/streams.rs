@@ -1,10 +1,11 @@
 use super::super::types::{
-    AppState, BroadcastEvent, ClientGuard, EventFilter, EventKind, EventsQuery,
+    AppState, ClientGuard, CompletedFileEventPayload, EventFilter, EventKind, EventsQuery,
     IncidentBroadcastEvent, IncidentEventFilter, IncidentEventPayload, IncidentEventsQuery,
 };
 use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use emwin_service::LiveEventKind;
 use futures::Stream;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -50,7 +51,7 @@ pub(super) async fn events_handler(
     let filter =
         EventFilter::try_from_query(query).map_err(|err| (StatusCode::BAD_REQUEST, err.message))?;
     let guard = acquire_client_guard(&state, peer)?;
-    let rx = state.event_tx.subscribe();
+    let rx = state.services.subscribe_events();
     let shutdown_rx = state.shutdown_rx.clone();
 
     let stream = futures::stream::unfold(
@@ -73,21 +74,23 @@ pub(super) async fn events_handler(
                         if event.id <= st.last_id {
                             continue;
                         }
-                        if !matches!(event.kind, EventKind::FileComplete(_)) {
+                        let LiveEventKind::ProductAvailable(metadata) = event.kind else {
                             continue;
-                        }
-                        if !event_matches_filter(&st.filter, &event.kind) {
+                        };
+                        let event_kind =
+                            EventKind::FileComplete(Box::new(CompletedFileEventPayload::from_metadata(*metadata)));
+                        if !event_matches_filter(&st.filter, &event_kind) {
                             continue;
                         }
 
                         st.last_id = event.id;
-                        let payload = match serde_json::to_string(&event.kind.to_json()) {
+                        let payload = match serde_json::to_string(&event_kind.to_json()) {
                             Ok(payload) => payload,
                             Err(_) => "{}".to_string(),
                         };
                         let sse = Event::default()
                             .id(event.id.to_string())
-                            .event(event.kind.event_name())
+                            .event(event_kind.event_name())
                             .data(payload);
                         return Some((Ok(sse), st));
                     }
@@ -219,7 +222,7 @@ pub(crate) fn event_matches_filter(filter: &EventFilter, event: &EventKind) -> b
 
 pub(super) struct StreamState {
     pub(super) state: Arc<AppState>,
-    pub(super) rx: Option<tokio::sync::broadcast::Receiver<BroadcastEvent>>,
+    pub(super) rx: Option<tokio::sync::broadcast::Receiver<emwin_service::LiveBroadcastEvent>>,
     pub(super) last_id: u64,
     pub(super) filter: EventFilter,
     pub(super) shutdown_rx: tokio::sync::watch::Receiver<bool>,

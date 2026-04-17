@@ -20,6 +20,7 @@ mod persistence;
 mod retained;
 mod runtime;
 mod shared;
+pub mod test_support;
 mod types;
 
 pub use emwin_service::{

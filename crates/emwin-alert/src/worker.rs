@@ -11,6 +11,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use sha2::Sha256;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::watch;
 
@@ -44,6 +45,11 @@ pub struct AlertDispatchOutcome {
 pub struct TestAlertNotification {
     pub title: String,
     pub body: String,
+}
+
+#[derive(Debug, Default)]
+pub struct AlertWorkerStats {
+    pub source_claim_lost_total: AtomicU64,
 }
 
 #[derive(Debug)]
@@ -98,11 +104,12 @@ pub async fn run_worker(
     }
 
     let client = build_client(config.http_timeout)?;
+    let stats = AlertWorkerStats::default();
 
     loop {
         tokio::select! {
             _ = shutdown_rx.changed() => break,
-            result = run_once(&sink, &config, &client) => {
+            result = run_once(&sink, &config, &client, &stats) => {
                 if let Err(err) = result {
                     tracing::warn!(error = %err, "alert worker iteration failed");
                 }
@@ -127,8 +134,9 @@ async fn run_once(
     sink: &PostgresMetadataSink,
     config: &AlertWorkerConfig,
     client: &ClientWithMiddleware,
+    stats: &AlertWorkerStats,
 ) -> AlertResult<()> {
-    process_source_events(sink, config).await?;
+    process_source_events(sink, config, stats).await?;
     process_delivery_attempts(sink, config, client).await?;
     Ok(())
 }
@@ -136,6 +144,7 @@ async fn run_once(
 async fn process_source_events(
     sink: &PostgresMetadataSink,
     config: &AlertWorkerConfig,
+    stats: &AlertWorkerStats,
 ) -> AlertResult<()> {
     let events = sink
         .claim_pending_alert_source_events(
@@ -215,8 +224,13 @@ async fn process_source_events(
             .mark_alert_source_event_processed(event.id, claimed_at)
             .await?
         {
+            let source_claim_lost_total = stats
+                .source_claim_lost_total
+                .fetch_add(1, Ordering::Relaxed)
+                + 1;
             tracing::warn!(
                 source_event_id = event.id,
+                source_claim_lost_total,
                 "skipped source event finalization because claim lease was lost"
             );
         }

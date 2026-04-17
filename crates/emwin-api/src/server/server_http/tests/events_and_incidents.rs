@@ -521,13 +521,10 @@ TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
 
     let state = super::build_state(
         10,
-        emwin_live::LiveRuntime::new_for_tests(
-            Vec::new(),
-            emwin_live::LiveTelemetry::Unavailable,
-            Some(sink.clone()),
-            None,
-            None,
-        ),
+        emwin_live::test_support::runtime()
+            .telemetry(emwin_live::LiveTelemetry::Unavailable)
+            .archive(sink.clone())
+            .build(),
         None,
     );
     let app = build_router(state, None).expect("router should build");

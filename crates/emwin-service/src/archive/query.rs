@@ -1,4 +1,3 @@
-use crate::emwin_archive_filter_fields;
 use crate::error::{ServiceError, ServiceResult};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -7,59 +6,65 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use strum::{Display, IntoStaticStr};
 
-macro_rules! archive_filter_input_type {
-    (string) => {
-        Option<String>
-    };
-    (bool_string) => {
-        Option<String>
-    };
-    (f64) => {
-        Option<f64>
-    };
-    (usize) => {
-        Option<usize>
-    };
-    (i64) => {
-        Option<i64>
-    };
-    (datetime_utc) => {
-        Option<DateTime<Utc>>
-    };
+/// Flat archive filter input accepted by adapters before type-specific query building.
+#[derive(Debug, Clone, Default)]
+pub struct ArchiveFilterInput {
+    pub filename: Option<String>,
+    pub source_receiver: Option<String>,
+    pub source: Option<String>,
+    pub pil: Option<String>,
+    pub family: Option<String>,
+    pub artifact_kind: Option<String>,
+    pub container: Option<String>,
+    pub wmo_prefix: Option<String>,
+    pub office: Option<String>,
+    pub office_city: Option<String>,
+    pub office_state: Option<String>,
+    pub bbb_kind: Option<String>,
+    pub cccc: Option<String>,
+    pub ttaaii: Option<String>,
+    pub afos: Option<String>,
+    pub bbb: Option<String>,
+    pub has_issues: Option<String>,
+    pub issue_kind: Option<String>,
+    pub issue_code: Option<String>,
+    pub has_vtec: Option<String>,
+    pub has_ugc: Option<String>,
+    pub has_hvtec: Option<String>,
+    pub has_latlon: Option<String>,
+    pub has_time_mot_loc: Option<String>,
+    pub has_wind_hail: Option<String>,
+    pub state: Option<String>,
+    pub county: Option<String>,
+    pub zone: Option<String>,
+    pub fire_zone: Option<String>,
+    pub marine_zone: Option<String>,
+    pub vtec_phenomena: Option<String>,
+    pub vtec_significance: Option<String>,
+    pub vtec_action: Option<String>,
+    pub vtec_office: Option<String>,
+    pub etn: Option<String>,
+    pub hvtec_nwslid: Option<String>,
+    pub hvtec_severity: Option<String>,
+    pub hvtec_cause: Option<String>,
+    pub hvtec_record: Option<String>,
+    pub wind_hail_kind: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub distance_miles: Option<f64>,
+    pub min_lat: Option<f64>,
+    pub max_lat: Option<f64>,
+    pub min_lon: Option<f64>,
+    pub max_lon: Option<f64>,
+    pub min_wind_mph: Option<f64>,
+    pub min_hail_inches: Option<f64>,
+    pub min_size: Option<usize>,
+    pub max_size: Option<usize>,
+    pub source_timestamp_after: Option<i64>,
+    pub source_timestamp_before: Option<i64>,
+    pub ingested_after: Option<DateTime<Utc>>,
+    pub ingested_before: Option<DateTime<Utc>>,
 }
-
-macro_rules! define_archive_filter_input {
-    ($( $field:ident, $kind:ident; )*) => {
-        /// Flat archive filter input accepted by adapters before type-specific query building.
-        #[derive(Debug, Clone, Default)]
-        pub struct ArchiveFilterInput {
-            $(pub $field: archive_filter_input_type!($kind),)*
-        }
-    };
-}
-
-macro_rules! archive_filter_query_value {
-    ($value:ident, $field:ident, bool_string) => {
-        parse_archive_bool(stringify!($field), $value.$field.as_deref())?
-    };
-    ($value:ident, $field:ident, $kind:ident) => {
-        $value.$field
-    };
-}
-
-macro_rules! build_product_list_query_from_filter {
-    ($value:ident, $default_limit:ident, $limit:ident, $cursor:ident;
-        $( $field:ident, $kind:ident; )*
-    ) => {
-        ProductListQuery {
-            $($field: archive_filter_query_value!($value, $field, $kind),)*
-            limit: $limit.unwrap_or($default_limit),
-            cursor: $cursor,
-        }
-    };
-}
-
-emwin_archive_filter_fields!(define_archive_filter_input);
 
 impl ArchiveFilterInput {
     pub fn into_product_list_query(
@@ -68,13 +73,68 @@ impl ArchiveFilterInput {
         limit: Option<usize>,
         cursor: Option<String>,
     ) -> ServiceResult<ProductListQuery> {
-        let query = emwin_archive_filter_fields!(
-            build_product_list_query_from_filter,
-            self,
-            default_limit,
-            limit,
-            cursor
-        );
+        let query = ProductListQuery {
+            filename: self.filename,
+            source_receiver: self.source_receiver,
+            source: self.source,
+            pil: self.pil,
+            family: self.family,
+            artifact_kind: self.artifact_kind,
+            container: self.container,
+            wmo_prefix: self.wmo_prefix,
+            office: self.office,
+            office_city: self.office_city,
+            office_state: self.office_state,
+            bbb_kind: self.bbb_kind,
+            cccc: self.cccc,
+            ttaaii: self.ttaaii,
+            afos: self.afos,
+            bbb: self.bbb,
+            has_issues: parse_archive_bool("has_issues", self.has_issues.as_deref())?,
+            issue_kind: self.issue_kind,
+            issue_code: self.issue_code,
+            has_vtec: parse_archive_bool("has_vtec", self.has_vtec.as_deref())?,
+            has_ugc: parse_archive_bool("has_ugc", self.has_ugc.as_deref())?,
+            has_hvtec: parse_archive_bool("has_hvtec", self.has_hvtec.as_deref())?,
+            has_latlon: parse_archive_bool("has_latlon", self.has_latlon.as_deref())?,
+            has_time_mot_loc: parse_archive_bool(
+                "has_time_mot_loc",
+                self.has_time_mot_loc.as_deref(),
+            )?,
+            has_wind_hail: parse_archive_bool("has_wind_hail", self.has_wind_hail.as_deref())?,
+            state: self.state,
+            county: self.county,
+            zone: self.zone,
+            fire_zone: self.fire_zone,
+            marine_zone: self.marine_zone,
+            vtec_phenomena: self.vtec_phenomena,
+            vtec_significance: self.vtec_significance,
+            vtec_action: self.vtec_action,
+            vtec_office: self.vtec_office,
+            etn: self.etn,
+            hvtec_nwslid: self.hvtec_nwslid,
+            hvtec_severity: self.hvtec_severity,
+            hvtec_cause: self.hvtec_cause,
+            hvtec_record: self.hvtec_record,
+            wind_hail_kind: self.wind_hail_kind,
+            lat: self.lat,
+            lon: self.lon,
+            distance_miles: self.distance_miles,
+            min_lat: self.min_lat,
+            max_lat: self.max_lat,
+            min_lon: self.min_lon,
+            max_lon: self.max_lon,
+            min_wind_mph: self.min_wind_mph,
+            min_hail_inches: self.min_hail_inches,
+            min_size: self.min_size,
+            max_size: self.max_size,
+            source_timestamp_after: self.source_timestamp_after,
+            source_timestamp_before: self.source_timestamp_before,
+            ingested_after: self.ingested_after,
+            ingested_before: self.ingested_before,
+            limit: limit.unwrap_or(default_limit),
+            cursor,
+        };
         query.validate()?;
         Ok(query)
     }

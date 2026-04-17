@@ -17,98 +17,147 @@ pub(crate) struct IncidentsQuery {
     pub(crate) cursor: Option<String>,
 }
 
-macro_rules! define_archive_filter_params {
-    (@fields [$($fields:tt)*]) => {
-        #[derive(Debug, Deserialize, IntoParams, ToSchema, Clone, Default)]
-        #[into_params(parameter_in = Query)]
-        pub(crate) struct ArchiveFilterParams {
-            $($fields)*
-        }
-    };
-    (@fields [$($fields:tt)*] $field:ident, string; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, bool_string; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, f64; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* #[schema(value_type = Option<f64>)] pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, usize; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* #[schema(value_type = Option<usize>)] pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, i64; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* #[schema(value_type = Option<i64>)] pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, datetime_utc; $( $rest:tt )*) => {
-        define_archive_filter_params!(
-            @fields
-            [$($fields)* #[schema(value_type = Option<String>, format = DateTime)] pub(crate) $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    ($( $rows:tt )*) => {
-        define_archive_filter_params!(@fields [] $( $rows )*);
-    };
+#[derive(Debug, Deserialize, IntoParams, ToSchema, Clone, Default)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct ArchiveFilterParams {
+    pub(crate) filename: Option<String>,
+    pub(crate) source_receiver: Option<String>,
+    pub(crate) source: Option<String>,
+    pub(crate) pil: Option<String>,
+    pub(crate) family: Option<String>,
+    pub(crate) artifact_kind: Option<String>,
+    pub(crate) container: Option<String>,
+    pub(crate) wmo_prefix: Option<String>,
+    pub(crate) office: Option<String>,
+    pub(crate) office_city: Option<String>,
+    pub(crate) office_state: Option<String>,
+    pub(crate) bbb_kind: Option<String>,
+    pub(crate) cccc: Option<String>,
+    pub(crate) ttaaii: Option<String>,
+    pub(crate) afos: Option<String>,
+    pub(crate) bbb: Option<String>,
+    pub(crate) has_issues: Option<String>,
+    pub(crate) issue_kind: Option<String>,
+    pub(crate) issue_code: Option<String>,
+    pub(crate) has_vtec: Option<String>,
+    pub(crate) has_ugc: Option<String>,
+    pub(crate) has_hvtec: Option<String>,
+    pub(crate) has_latlon: Option<String>,
+    pub(crate) has_time_mot_loc: Option<String>,
+    pub(crate) has_wind_hail: Option<String>,
+    pub(crate) state: Option<String>,
+    pub(crate) county: Option<String>,
+    pub(crate) zone: Option<String>,
+    pub(crate) fire_zone: Option<String>,
+    pub(crate) marine_zone: Option<String>,
+    pub(crate) vtec_phenomena: Option<String>,
+    pub(crate) vtec_significance: Option<String>,
+    pub(crate) vtec_action: Option<String>,
+    pub(crate) vtec_office: Option<String>,
+    #[schema(value_type = Option<i64>)]
+    pub(crate) etn: Option<String>,
+    pub(crate) hvtec_nwslid: Option<String>,
+    pub(crate) hvtec_severity: Option<String>,
+    pub(crate) hvtec_cause: Option<String>,
+    pub(crate) hvtec_record: Option<String>,
+    pub(crate) wind_hail_kind: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) distance_miles: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) max_lat: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) max_lon: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_wind_mph: Option<String>,
+    #[schema(value_type = Option<f64>)]
+    pub(crate) min_hail_inches: Option<String>,
+    #[schema(value_type = Option<usize>)]
+    pub(crate) min_size: Option<String>,
+    #[schema(value_type = Option<usize>)]
+    pub(crate) max_size: Option<String>,
+    #[schema(value_type = Option<i64>)]
+    pub(crate) source_timestamp_after: Option<String>,
+    #[schema(value_type = Option<i64>)]
+    pub(crate) source_timestamp_before: Option<String>,
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub(crate) ingested_after: Option<String>,
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub(crate) ingested_before: Option<String>,
 }
-
-macro_rules! archive_filter_input_value_from_param {
-    ($value:ident, $field:ident, string) => {
-        $value.$field
-    };
-    ($value:ident, $field:ident, bool_string) => {
-        $value.$field
-    };
-    ($value:ident, $field:ident, f64) => {
-        parse_query_value(stringify!($field), $value.$field)?
-    };
-    ($value:ident, $field:ident, usize) => {
-        parse_query_value(stringify!($field), $value.$field)?
-    };
-    ($value:ident, $field:ident, i64) => {
-        parse_query_value(stringify!($field), $value.$field)?
-    };
-    ($value:ident, $field:ident, datetime_utc) => {
-        parse_datetime_value(stringify!($field), $value.$field)?
-    };
-}
-
-macro_rules! build_archive_filter_input_from_params {
-    ($value:ident; $( $field:ident, $kind:ident; )*) => {
-        ArchiveFilterInput {
-            $($field: archive_filter_input_value_from_param!($value, $field, $kind),)*
-        }
-    };
-}
-
-emwin_service::emwin_archive_filter_fields!(define_archive_filter_params);
 
 impl ArchiveFilterParams {
     pub(crate) fn into_archive_filter_input(self) -> Result<ArchiveFilterInput, String> {
-        Ok(emwin_service::emwin_archive_filter_fields!(
-            build_archive_filter_input_from_params,
-            self
-        ))
+        Ok(ArchiveFilterInput {
+            filename: self.filename,
+            source_receiver: self.source_receiver,
+            source: self.source,
+            pil: self.pil,
+            family: self.family,
+            artifact_kind: self.artifact_kind,
+            container: self.container,
+            wmo_prefix: self.wmo_prefix,
+            office: self.office,
+            office_city: self.office_city,
+            office_state: self.office_state,
+            bbb_kind: self.bbb_kind,
+            cccc: self.cccc,
+            ttaaii: self.ttaaii,
+            afos: self.afos,
+            bbb: self.bbb,
+            has_issues: self.has_issues,
+            issue_kind: self.issue_kind,
+            issue_code: self.issue_code,
+            has_vtec: self.has_vtec,
+            has_ugc: self.has_ugc,
+            has_hvtec: self.has_hvtec,
+            has_latlon: self.has_latlon,
+            has_time_mot_loc: self.has_time_mot_loc,
+            has_wind_hail: self.has_wind_hail,
+            state: self.state,
+            county: self.county,
+            zone: self.zone,
+            fire_zone: self.fire_zone,
+            marine_zone: self.marine_zone,
+            vtec_phenomena: self.vtec_phenomena,
+            vtec_significance: self.vtec_significance,
+            vtec_action: self.vtec_action,
+            vtec_office: self.vtec_office,
+            etn: self.etn,
+            hvtec_nwslid: self.hvtec_nwslid,
+            hvtec_severity: self.hvtec_severity,
+            hvtec_cause: self.hvtec_cause,
+            hvtec_record: self.hvtec_record,
+            wind_hail_kind: self.wind_hail_kind,
+            lat: parse_query_value("lat", self.lat)?,
+            lon: parse_query_value("lon", self.lon)?,
+            distance_miles: parse_query_value("distance_miles", self.distance_miles)?,
+            min_lat: parse_query_value("min_lat", self.min_lat)?,
+            max_lat: parse_query_value("max_lat", self.max_lat)?,
+            min_lon: parse_query_value("min_lon", self.min_lon)?,
+            max_lon: parse_query_value("max_lon", self.max_lon)?,
+            min_wind_mph: parse_query_value("min_wind_mph", self.min_wind_mph)?,
+            min_hail_inches: parse_query_value("min_hail_inches", self.min_hail_inches)?,
+            min_size: parse_query_value("min_size", self.min_size)?,
+            max_size: parse_query_value("max_size", self.max_size)?,
+            source_timestamp_after: parse_query_value(
+                "source_timestamp_after",
+                self.source_timestamp_after,
+            )?,
+            source_timestamp_before: parse_query_value(
+                "source_timestamp_before",
+                self.source_timestamp_before,
+            )?,
+            ingested_after: parse_datetime_value("ingested_after", self.ingested_after)?,
+            ingested_before: parse_datetime_value("ingested_before", self.ingested_before)?,
+        })
     }
 
     pub(crate) fn into_product_list_query(

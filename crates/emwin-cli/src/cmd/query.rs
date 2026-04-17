@@ -198,69 +198,119 @@ pub(crate) struct ProductsArgs {
     cursor: Option<String>,
 }
 
-macro_rules! define_archive_filter_args {
-    (@fields [$($fields:tt)*]) => {
-        #[derive(Debug, Args, Clone, Default)]
-        pub(crate) struct ArchiveFilterArgs {
-            $($fields)*
-        }
-    };
-    (@fields [$($fields:tt)*] $field:ident, string; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long)] $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, bool_string; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long)] $field: Option<String>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, f64; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long)] $field: Option<f64>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, usize; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long)] $field: Option<usize>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, i64; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long)] $field: Option<i64>,]
-            $( $rest )*
-        );
-    };
-    (@fields [$($fields:tt)*] $field:ident, datetime_utc; $( $rest:tt )*) => {
-        define_archive_filter_args!(
-            @fields
-            [$($fields)* #[arg(long, value_parser = parse_rfc3339_utc)] $field: Option<DateTime<Utc>>,]
-            $( $rest )*
-        );
-    };
-    ($( $rows:tt )*) => {
-        define_archive_filter_args!(@fields [] $( $rows )*);
-    };
+#[derive(Debug, Args, Clone, Default)]
+pub(crate) struct ArchiveFilterArgs {
+    #[arg(long)]
+    filename: Option<String>,
+    #[arg(long)]
+    source_receiver: Option<String>,
+    #[arg(long)]
+    source: Option<String>,
+    #[arg(long)]
+    pil: Option<String>,
+    #[arg(long)]
+    family: Option<String>,
+    #[arg(long)]
+    artifact_kind: Option<String>,
+    #[arg(long)]
+    container: Option<String>,
+    #[arg(long)]
+    wmo_prefix: Option<String>,
+    #[arg(long)]
+    office: Option<String>,
+    #[arg(long)]
+    office_city: Option<String>,
+    #[arg(long)]
+    office_state: Option<String>,
+    #[arg(long)]
+    bbb_kind: Option<String>,
+    #[arg(long)]
+    cccc: Option<String>,
+    #[arg(long)]
+    ttaaii: Option<String>,
+    #[arg(long)]
+    afos: Option<String>,
+    #[arg(long)]
+    bbb: Option<String>,
+    #[arg(long)]
+    has_issues: Option<String>,
+    #[arg(long)]
+    issue_kind: Option<String>,
+    #[arg(long)]
+    issue_code: Option<String>,
+    #[arg(long)]
+    has_vtec: Option<String>,
+    #[arg(long)]
+    has_ugc: Option<String>,
+    #[arg(long)]
+    has_hvtec: Option<String>,
+    #[arg(long)]
+    has_latlon: Option<String>,
+    #[arg(long)]
+    has_time_mot_loc: Option<String>,
+    #[arg(long)]
+    has_wind_hail: Option<String>,
+    #[arg(long)]
+    state: Option<String>,
+    #[arg(long)]
+    county: Option<String>,
+    #[arg(long)]
+    zone: Option<String>,
+    #[arg(long)]
+    fire_zone: Option<String>,
+    #[arg(long)]
+    marine_zone: Option<String>,
+    #[arg(long)]
+    vtec_phenomena: Option<String>,
+    #[arg(long)]
+    vtec_significance: Option<String>,
+    #[arg(long)]
+    vtec_action: Option<String>,
+    #[arg(long)]
+    vtec_office: Option<String>,
+    #[arg(long)]
+    etn: Option<String>,
+    #[arg(long)]
+    hvtec_nwslid: Option<String>,
+    #[arg(long)]
+    hvtec_severity: Option<String>,
+    #[arg(long)]
+    hvtec_cause: Option<String>,
+    #[arg(long)]
+    hvtec_record: Option<String>,
+    #[arg(long)]
+    wind_hail_kind: Option<String>,
+    #[arg(long)]
+    lat: Option<f64>,
+    #[arg(long)]
+    lon: Option<f64>,
+    #[arg(long)]
+    distance_miles: Option<f64>,
+    #[arg(long)]
+    min_lat: Option<f64>,
+    #[arg(long)]
+    max_lat: Option<f64>,
+    #[arg(long)]
+    min_lon: Option<f64>,
+    #[arg(long)]
+    max_lon: Option<f64>,
+    #[arg(long)]
+    min_wind_mph: Option<f64>,
+    #[arg(long)]
+    min_hail_inches: Option<f64>,
+    #[arg(long)]
+    min_size: Option<usize>,
+    #[arg(long)]
+    max_size: Option<usize>,
+    #[arg(long)]
+    source_timestamp_after: Option<i64>,
+    #[arg(long)]
+    source_timestamp_before: Option<i64>,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    ingested_after: Option<DateTime<Utc>>,
+    #[arg(long, value_parser = parse_rfc3339_utc)]
+    ingested_before: Option<DateTime<Utc>>,
 }
-
-macro_rules! build_archive_filter_input_from_args {
-    ($value:ident; $( $field:ident, $kind:ident; )*) => {
-        ArchiveFilterInput {
-            $($field: $value.$field,)*
-        }
-    };
-}
-
-emwin_service::emwin_archive_filter_fields!(define_archive_filter_args);
 
 impl ArchiveFilterArgs {
     fn into_product_list_query(
@@ -275,7 +325,63 @@ impl ArchiveFilterArgs {
 
 impl From<ArchiveFilterArgs> for ArchiveFilterInput {
     fn from(value: ArchiveFilterArgs) -> Self {
-        emwin_service::emwin_archive_filter_fields!(build_archive_filter_input_from_args, value)
+        ArchiveFilterInput {
+            filename: value.filename,
+            source_receiver: value.source_receiver,
+            source: value.source,
+            pil: value.pil,
+            family: value.family,
+            artifact_kind: value.artifact_kind,
+            container: value.container,
+            wmo_prefix: value.wmo_prefix,
+            office: value.office,
+            office_city: value.office_city,
+            office_state: value.office_state,
+            bbb_kind: value.bbb_kind,
+            cccc: value.cccc,
+            ttaaii: value.ttaaii,
+            afos: value.afos,
+            bbb: value.bbb,
+            has_issues: value.has_issues,
+            issue_kind: value.issue_kind,
+            issue_code: value.issue_code,
+            has_vtec: value.has_vtec,
+            has_ugc: value.has_ugc,
+            has_hvtec: value.has_hvtec,
+            has_latlon: value.has_latlon,
+            has_time_mot_loc: value.has_time_mot_loc,
+            has_wind_hail: value.has_wind_hail,
+            state: value.state,
+            county: value.county,
+            zone: value.zone,
+            fire_zone: value.fire_zone,
+            marine_zone: value.marine_zone,
+            vtec_phenomena: value.vtec_phenomena,
+            vtec_significance: value.vtec_significance,
+            vtec_action: value.vtec_action,
+            vtec_office: value.vtec_office,
+            etn: value.etn,
+            hvtec_nwslid: value.hvtec_nwslid,
+            hvtec_severity: value.hvtec_severity,
+            hvtec_cause: value.hvtec_cause,
+            hvtec_record: value.hvtec_record,
+            wind_hail_kind: value.wind_hail_kind,
+            lat: value.lat,
+            lon: value.lon,
+            distance_miles: value.distance_miles,
+            min_lat: value.min_lat,
+            max_lat: value.max_lat,
+            min_lon: value.min_lon,
+            max_lon: value.max_lon,
+            min_wind_mph: value.min_wind_mph,
+            min_hail_inches: value.min_hail_inches,
+            min_size: value.min_size,
+            max_size: value.max_size,
+            source_timestamp_after: value.source_timestamp_after,
+            source_timestamp_before: value.source_timestamp_before,
+            ingested_after: value.ingested_after,
+            ingested_before: value.ingested_before,
+        }
     }
 }
 

@@ -36,7 +36,7 @@ pub(crate) use query::{
     IncidentProductsQuery, IncidentsQuery, ProductsQuery, TimeseriesAggregateHttpQuery,
 };
 pub use state::{ApiArchiveStatus, ApiServices, HttpServerOptions};
-pub(crate) use state::{AppState, BroadcastEvent, ClientGuard, IncidentBroadcastEvent};
+pub(crate) use state::{AppState, ClientGuard, IncidentBroadcastEvent};
 pub(crate) use urls::{API_PREFIX, OPENAPI_AUTH_SCHEME_NAME, OPENAPI_JSON_PATH};
 
 #[cfg(test)]
