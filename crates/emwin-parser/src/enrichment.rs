@@ -4,6 +4,8 @@
 //! retains the stable public result types and `enrich_product` entrypoint used
 //! by downstream callers.
 
+#![allow(missing_docs)]
+
 use crate::pipeline::{NormalizedInput, ParsedEnvelope, assemble_product_enrichment, classify};
 use crate::{
     BbbKind, ProductBody, ProductParseIssue, TextProductHeader, WmoHeader, WmoOfficeEntry,

@@ -3,6 +3,8 @@
 //! This module defines configuration structures for the Weather Wire XMPP receiver
 //! and provides validation for required fields.
 
+#![allow(missing_docs)]
+
 use crate::wxwire_receiver::error::{WxWireConfigError, WxWireReceiverError};
 
 /// Primary NWWS-OI endpoint hostname.

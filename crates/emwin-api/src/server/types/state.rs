@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use super::payloads::{IncidentEventPayload, TelemetryPayload};
 use emwin_db::PostgresMetadataSink;
 use emwin_service::{

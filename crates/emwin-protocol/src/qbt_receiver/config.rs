@@ -4,6 +4,8 @@
 //! and the client runtime, along with policy enums for checksum validation
 //! and compression handling.
 
+#![allow(missing_docs)]
+
 use std::path::PathBuf;
 
 pub const DEFAULT_QBT_UPSTREAM_SERVERS: [(&str, u16); 4] = [

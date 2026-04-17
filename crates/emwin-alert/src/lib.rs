@@ -1,5 +1,7 @@
 //! Alert worker runtime and outbound delivery for `emwin-rs`.
 
+#![deny(missing_docs)]
+
 mod error;
 mod worker;
 

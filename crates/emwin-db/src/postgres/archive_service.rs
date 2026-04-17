@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use super::query;
 use super::{PostgresMetadataSink, connection};
 use crate::error::{PersistError, PersistResult};

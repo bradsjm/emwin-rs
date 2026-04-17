@@ -19,6 +19,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
+/// Manages the current QBT server list and optional on-disk persistence.
 pub struct ServerListManager {
     path: Option<PathBuf>,
     current: QbtServerList,
@@ -32,6 +33,7 @@ struct PersistedServerList {
 }
 
 impl ServerListManager {
+    /// Creates a manager for the persisted server list and fallback endpoints.
     pub fn new(path: Option<PathBuf>, default_servers: Vec<(String, u16)>) -> Self {
         let mut manager = Self {
             path,
@@ -44,6 +46,7 @@ impl ServerListManager {
         manager
     }
 
+    /// Loads a persisted server list from disk when a path is configured.
     pub fn load(&mut self) -> QbtReceiverResult<()> {
         let Some(path) = &self.path else {
             return Ok(());
@@ -67,6 +70,7 @@ impl ServerListManager {
         Ok(())
     }
 
+    /// Persists the current server list to disk when a path is configured.
     pub fn save(&self) -> QbtReceiverResult<()> {
         let Some(path) = &self.path else {
             return Ok(());
@@ -75,6 +79,7 @@ impl ServerListManager {
         save_atomic(path, &self.current)
     }
 
+    /// Replaces the current endpoint set with a feed-provided server list.
     pub fn apply_server_list(&mut self, list: QbtServerList) -> QbtReceiverResult<()> {
         if list.servers.is_empty() {
             return Err(QbtReceiverError::Lifecycle(
@@ -87,12 +92,14 @@ impl ServerListManager {
         self.save()
     }
 
+    /// Returns the next endpoint in round-robin order.
     pub fn next_endpoint(&mut self) -> Option<(String, u16)> {
         let endpoint = self.available.pop_front()?;
         self.available.push_back(endpoint.clone());
         Some(endpoint)
     }
 
+    /// Returns the number of active endpoints in the current list.
     pub fn endpoint_count(&self) -> usize {
         self.available.len()
     }

@@ -3,6 +3,8 @@
 //! This module keeps CLI-facing argument validation separate from the protocol crate's config
 //! types so command handlers can stay focused on orchestration.
 
+#![allow(missing_docs)]
+
 use crate::error::{LiveError, LiveResult};
 use crate::shared::parse_servers_or_default;
 use emwin_protocol::qbt_receiver::{QbtDecodeConfig, QbtReceiverConfig};

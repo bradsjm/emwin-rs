@@ -9,6 +9,8 @@
 //! - `events` and `types`: service-facing event and option shaping
 //! - `runtime`: public runtime entrypoint
 
+#![deny(missing_docs)]
+
 mod archive_postprocess;
 mod config;
 mod default_servers;

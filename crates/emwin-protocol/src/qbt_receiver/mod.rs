@@ -46,6 +46,7 @@ pub use relay::{
     QbtRelayState, run_qbt_relay,
 };
 
+#[allow(missing_docs)]
 pub mod unstable {
     pub use super::client::watchdog::{HealthObserver, Watchdog};
     pub use super::protocol::auth::{build_logon_message, xor_ff};

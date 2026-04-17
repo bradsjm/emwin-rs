@@ -3,6 +3,8 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
+#![allow(missing_docs)]
+
 mod alerting;
 mod filters;
 mod payloads;

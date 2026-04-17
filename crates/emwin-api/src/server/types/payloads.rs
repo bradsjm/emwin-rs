@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use super::urls::{
     archive_issue_url, archive_product_raw_url, archive_product_url, incident_detail_url,
     incident_products_url,

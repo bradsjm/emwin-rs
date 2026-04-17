@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 pub mod cf6;
 pub mod cli;
 pub mod cwa;

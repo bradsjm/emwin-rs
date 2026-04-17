@@ -29,6 +29,7 @@ pub use error::{WxWireReceiverError, WxWireReceiverResult};
 pub use model::{WxWireReceiverFile, WxWireReceiverFrameEvent, WxWireReceiverWarning};
 pub use transport::{WxWireTransport, XmppWxWireTransport};
 
+#[allow(missing_docs)]
 pub mod unstable {
     pub use super::client::UnstableWxWireReceiverIngress;
 }

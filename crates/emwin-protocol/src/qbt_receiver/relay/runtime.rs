@@ -31,6 +31,7 @@ struct QueuedChunk {
     _permit: OwnedSemaphorePermit,
 }
 
+/// Runs the QBT relay accept loop and supervisory tasks.
 pub async fn run(
     config: QbtRelayConfig,
     state: Arc<QbtRelayState>,

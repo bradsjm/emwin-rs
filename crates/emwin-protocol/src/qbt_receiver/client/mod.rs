@@ -204,14 +204,17 @@ impl QbtReceiver {
         QbtReceiverBuilder::new(config)
     }
 
+    /// Returns the receiver configuration.
     pub fn config(&self) -> &QbtReceiverConfig {
         &self.config
     }
 
+    /// Registers an additional event handler.
     pub fn subscribe(&mut self, handler: QbtReceiverEventHandler) {
         self.handlers.push(handler);
     }
 
+    /// Returns the current telemetry snapshot.
     pub fn telemetry_snapshot(&self) -> QbtReceiverTelemetrySnapshot {
         lock_unpoisoned(&self.telemetry).clone()
     }

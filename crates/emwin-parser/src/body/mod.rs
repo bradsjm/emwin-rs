@@ -3,6 +3,8 @@
 //! This module provides parsing for geographic and temporal codes found within
 //! NWS text product bodies, including VTEC, UGC, HVTEC, and LAT...LON polygons.
 
+#![allow(missing_docs)]
+
 mod cap;
 mod enrich;
 mod hvtec;

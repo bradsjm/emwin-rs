@@ -1,5 +1,7 @@
 //! Product metadata lookup, hydrologic location lookup, and non-text filename classification.
 
+#![allow(missing_docs)]
+
 mod generated_afos_routing;
 mod generated_text_products;
 mod generated_wmo_office;

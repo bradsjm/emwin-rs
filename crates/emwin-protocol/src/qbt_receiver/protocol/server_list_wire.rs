@@ -20,6 +20,7 @@ impl Default for QbtServerListWireScanner {
 }
 
 impl QbtServerListWireScanner {
+    /// Creates a scanner with the requested internal buffer budget.
     pub fn new(max_buffer_bytes: usize) -> Self {
         Self {
             decoded_buffer: Vec::new(),

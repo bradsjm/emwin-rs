@@ -3,6 +3,8 @@
 // - crates/emwin-parser/data/afos_routing_overrides.json
 // Do not edit manually.
 
+#![allow(missing_docs)]
+
 #[allow(unused_imports)]
 use super::{AfosRoutingOverride, TextProductBodyBehavior, TextProductRouting};
 #[allow(unused_imports)]

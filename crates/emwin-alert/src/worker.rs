@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::error::{AlertError, AlertResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use emwin_db::{AlertContactPointRecord, PostgresMetadataSink};

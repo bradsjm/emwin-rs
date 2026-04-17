@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use emwin_parser::{
     BbbKind, HvtecCause, HvtecRecord, HvtecSeverity, ProductEnrichmentSource, WindHailKind,
 };

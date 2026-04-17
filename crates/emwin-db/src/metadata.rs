@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use emwin_parser::{detail_product_v2, enrich_product, summarize_product_v2};
 pub use emwin_service::CompletedFileMetadata;
 use emwin_service::SourceKind;

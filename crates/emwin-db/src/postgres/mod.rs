@@ -38,6 +38,7 @@ mod write;
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 const INCIDENT_CHANGE_CHANNEL_CAPACITY: usize = 1024;
+/// Default Postgres pool size used by `PostgresConfig::new`.
 pub const DEFAULT_MAX_DB_CONNECTIONS: u32 = 10;
 pub use alerting::AlertContactPointRecord;
 
@@ -107,11 +108,13 @@ impl PostgresMetadataSink {
             .expect("postgres pool is not initialized")
     }
 
+    /// Returns the configured connection target for diagnostics.
     pub fn describe_target(&self) -> String {
         connection::connection_target(&self.config)
             .unwrap_or_else(|_| "postgres target unavailable".to_string())
     }
 
+    /// Subscribes to incident change broadcasts emitted by this sink.
     pub fn subscribe_incident_changes(&self) -> broadcast::Receiver<IncidentChange> {
         self.incident_change_tx.subscribe()
     }

@@ -47,11 +47,13 @@ struct LiveRuntimeInner {
 }
 
 #[derive(Clone)]
+/// Public runtime handle for live ingest and archive serving.
 pub struct LiveRuntime {
     inner: Arc<LiveRuntimeInner>,
 }
 
 impl LiveRuntime {
+    /// Starts a live ingest runtime from normalized options.
     pub async fn start(options: LiveOptions) -> LiveResult<Self> {
         let LiveOptions {
             receiver,
@@ -214,10 +216,12 @@ impl LiveRuntime {
         })
     }
 
+    /// Subscribes to live broadcast events.
     pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<LiveBroadcastEvent> {
         self.inner.state.event_tx.subscribe()
     }
 
+    /// Subscribes to incident change broadcasts when archive support is enabled.
     pub fn subscribe_incident_changes(
         &self,
     ) -> Option<tokio::sync::broadcast::Receiver<IncidentBroadcastEvent>> {
@@ -228,10 +232,12 @@ impl LiveRuntime {
             .map(|_| self.inner.state.incident_event_tx.subscribe())
     }
 
+    /// Returns the current receiver telemetry snapshot.
     pub fn telemetry_snapshot(&self) -> LiveTelemetry {
         lock_unpoisoned(&self.inner.state.telemetry).clone()
     }
 
+    /// Returns a live runtime snapshot for `/metrics` and diagnostics.
     pub fn stats_snapshot(&self) -> LiveStatsSnapshot {
         let state = &self.inner.state;
         let upstream_endpoint = lock_unpoisoned(&state.upstream_endpoint).clone();
@@ -257,18 +263,22 @@ impl LiveRuntime {
         }
     }
 
+    /// Returns the last archive error observed by the runtime.
     pub fn archive_last_error(&self) -> Option<String> {
         lock_unpoisoned(&self.inner.state.archive_last_error).clone()
     }
 
+    /// Returns whether archive persistence is configured.
     pub fn archive_configured(&self) -> bool {
         self.inner.state.archive.is_some()
     }
 
+    /// Returns the configured archive sink when one is available.
     pub fn alert_store(&self) -> Option<emwin_db::PostgresMetadataSink> {
         self.inner.state.archive.clone()
     }
 
+    /// Returns the total number of archive errors observed.
     pub fn archive_errors_total(&self) -> u64 {
         self.inner
             .state
@@ -276,6 +286,7 @@ impl LiveRuntime {
             .load(Ordering::Relaxed)
     }
 
+    /// Returns the total number of archive pool timeout errors observed.
     pub fn archive_pool_timeouts_total(&self) -> u64 {
         self.inner
             .state
@@ -283,14 +294,17 @@ impl LiveRuntime {
             .load(Ordering::Relaxed)
     }
 
+    /// Returns the currently retained completed files.
     pub fn list_retained_files(&self) -> Vec<emwin_service::CompletedFileMetadata> {
         lock_unpoisoned(&self.inner.state.retained_files).list()
     }
 
+    /// Looks up one retained file by filename.
     pub fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
         lock_unpoisoned(&self.inner.state.retained_files).get(filename)
     }
 
+    /// Signals shutdown and waits for background tasks to stop.
     pub async fn shutdown(&self) -> LiveResult<()> {
         let mut guard = self.inner.tasks.lock().await;
         let Some(tasks) = guard.take() else {
@@ -397,6 +411,7 @@ impl LiveRuntime {
         }
     }
 
+    /// Returns the archive query service when archive persistence is enabled.
     pub fn archive_query_service(&self) -> Option<Arc<dyn ArchiveQueryService>> {
         let archive = self.inner.state.archive.clone()?;
         Some(Arc::new(TrackedArchiveQueryService {

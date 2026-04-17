@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! Unified ingest receiver implementation.
 //!
 //! This module provides the [`IngestReceiver`] type which wraps either a QBT or Weather Wire

@@ -3,6 +3,8 @@
 // - crates/emwin-parser/data/text_product_catalog.json
 // Do not edit manually.
 
+#![allow(missing_docs)]
+
 use super::{TextProductBodyBehavior, TextProductCatalogEntry, TextProductRouting};
 use crate::body::BodyExtractorId;
 

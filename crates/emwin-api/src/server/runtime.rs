@@ -11,6 +11,7 @@ use tokio::sync::{broadcast, watch};
 
 const EVENT_CHANNEL_CAPACITY: usize = 4096;
 
+/// Runs the HTTP server until shutdown is requested or a fatal server error occurs.
 pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResult<()> {
     let HttpServerOptions {
         bind,

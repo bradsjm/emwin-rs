@@ -4,6 +4,8 @@
 //! enrichment layer turns raw header fields into routing metadata that later stages can use
 //! without reparsing the original bulletin text.
 
+#![allow(missing_docs)]
+
 mod enrich;
 mod parser;
 

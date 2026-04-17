@@ -3,6 +3,8 @@
 //! This module provides shared state for the relay runtime, including metrics
 //! tracking, client management, and quality monitoring.
 
+#![allow(missing_docs)]
+
 use bytes::Bytes;
 use serde::Serialize;
 use std::collections::HashMap;

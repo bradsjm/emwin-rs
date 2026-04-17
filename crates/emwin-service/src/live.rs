@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::archive::IncidentChange;
 use crate::metadata::CompletedFileMetadata;
 use bytes::Bytes;

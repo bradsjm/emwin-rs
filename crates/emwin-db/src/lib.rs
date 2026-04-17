@@ -51,6 +51,8 @@
 //! }
 //! ```
 
+#![deny(missing_docs)]
+
 mod error;
 mod metadata;
 mod postgres;

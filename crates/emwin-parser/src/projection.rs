@@ -4,6 +4,8 @@
 //! result. This module projects that richer shape into stable v2 summary/detail
 //! contracts used by server mode and persisted sidecars.
 
+#![allow(missing_docs)]
+
 use crate::{
     BbbKind, HvtecCause, HvtecRecord, HvtecSeverity, ProductArtifact, ProductBody,
     ProductEnrichment, ProductEnrichmentSource, ProductParseIssue, UgcArea, UgcSection, VtecCode,

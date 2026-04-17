@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! Error types for Weather Wire receiver.
 //!
 //! This module defines the error types used by the Weather Wire XMPP receiver,

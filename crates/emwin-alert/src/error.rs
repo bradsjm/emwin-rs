@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use thiserror::Error;
 
 pub type AlertResult<T> = Result<T, AlertError>;

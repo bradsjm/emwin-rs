@@ -28,6 +28,8 @@
 //! assert_eq!(enrichment.title, Some("Area Forecast Discussion"));
 //! ```
 
+#![deny(missing_docs)]
+
 mod body;
 mod data;
 mod enrichment;

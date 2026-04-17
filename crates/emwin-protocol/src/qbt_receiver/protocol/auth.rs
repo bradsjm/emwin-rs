@@ -8,7 +8,9 @@ use crate::qbt_receiver::protocol::model::QbtAuthMessage;
 ///
 /// The client must refresh logon state before the server's idle window expires.
 pub const REAUTH_INTERVAL_SECS: u64 = 115;
+/// Wire-format prefix for QBT logon messages.
 pub const LOGON_PREFIX: &str = "ByteBlast Client|NM-";
+/// Wire-format suffix for QBT logon messages.
 pub const LOGON_SUFFIX: &str = "|V2";
 
 /// Builds the wire-format logon message for a user email address.

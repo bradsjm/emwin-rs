@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use super::{PersistError, PersistResult, PostgresMetadataSink};
 use emwin_service::{
     AlertContactPoint, AlertContactPointConfig, AlertContactPointInput, AlertDeliveryAttempt,

@@ -12,9 +12,13 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// One blob to be written by a storage backend.
 #[derive(Debug, Clone)]
 pub struct BlobEntry {
+    /// Semantic role assigned by the enqueue request.
     pub role: BlobRole,
+    /// Backend-relative path for the object.
     pub relative_path: String,
+    /// Raw blob bytes to persist.
     pub bytes: Vec<u8>,
+    /// Optional MIME type attached to the blob.
     pub content_type: Option<String>,
 }
 

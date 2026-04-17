@@ -3,6 +3,8 @@
 // - crates/emwin-parser/data/wmo_offices.json
 // Do not edit manually.
 
+#![allow(missing_docs)]
+
 use super::WmoOfficeEntry;
 
 pub const WMO_OFFICE_GENERATED_AT_UTC: &str = "2026-03-07T03:23:43Z";

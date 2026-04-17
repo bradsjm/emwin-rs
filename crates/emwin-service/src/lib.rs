@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 pub mod alerting;
 pub mod archive;
 pub mod error;

@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::persistence::FilePersistenceProducer;
 use crate::retained::RetainedFiles;
 use emwin_db::PostgresMetadataSink;

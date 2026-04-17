@@ -8,31 +8,44 @@ pub type PersistResult<T> = std::result::Result<T, PersistError>;
 /// Errors produced by the async persistence runtime and blob writers.
 #[derive(Debug, Error)]
 pub enum PersistError {
+    /// File or socket I/O failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// A background task failed to join.
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
+    /// JSON serialization or parsing failed.
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// SQLx query or connection operation failed.
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    /// Database migration application failed.
     #[error(transparent)]
     Migration(#[from] sqlx::migrate::MigrateError),
+    /// An object-store backend operation failed.
     #[error("object store {operation} failed: {message}")]
     ObjectStore {
+        /// Backend operation name.
         operation: &'static str,
+        /// Whether the failure is retryable.
         retryable: bool,
+        /// Human-readable backend error message.
         message: String,
     },
+    /// The persistence runtime has already been closed.
     #[error("persistence runtime is closed")]
     Closed,
+    /// The caller supplied an invalid configuration.
     #[error("invalid persistence config: {0}")]
     InvalidConfig(String),
+    /// The caller supplied an invalid request.
     #[error("invalid persistence request: {0}")]
     InvalidRequest(String),
 }
 
 impl PersistError {
+    /// Builds an object-store failure with retry classification.
     pub fn object_store(
         operation: &'static str,
         retryable: bool,

@@ -3,6 +3,8 @@
 //! The functions here stay allocation-free and operate on plain coordinate values so parsers and
 //! filters can reuse them without bringing in heavier geometry dependencies.
 
+#![allow(missing_docs)]
+
 use serde::Serialize;
 
 /// Latitude and longitude in decimal degrees.

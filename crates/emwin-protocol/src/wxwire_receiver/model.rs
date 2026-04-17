@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;

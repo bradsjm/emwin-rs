@@ -1,5 +1,7 @@
 //! Structured parsed artifact emitted for a product when a specialized parser matches.
 
+#![allow(missing_docs)]
+
 use crate::{
     Cf6Bulletin, CliBulletin, CwaBulletin, DcpBulletin, DsmBulletin, EroBulletin, FdBulletin,
     HmlBulletin, LsrBulletin, McdBulletin, MetarBulletin, MosBulletin, PirepBulletin, SawBulletin,

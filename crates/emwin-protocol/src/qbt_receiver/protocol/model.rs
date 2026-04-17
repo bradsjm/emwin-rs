@@ -3,6 +3,8 @@
 //! This module defines the core data structures used throughout the protocol
 //! layer, including segments, server lists, and event types.
 
+#![allow(missing_docs)]
+
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;

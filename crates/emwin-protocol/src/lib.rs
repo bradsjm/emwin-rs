@@ -43,6 +43,8 @@
 //! # fn main() {}
 //! ```
 
+#![deny(missing_docs)]
+
 #[cfg(any(feature = "qbt", feature = "wxwire"))]
 pub mod ingest;
 #[cfg(feature = "qbt")]
@@ -55,11 +57,13 @@ pub mod wxwire_receiver;
 /// Unstable API surface. Items in this module may change without stability guarantees.
 pub mod unstable {
     #[cfg(feature = "qbt")]
+    #[allow(missing_docs)]
     pub mod qbt_receiver {
         pub use crate::qbt_receiver::unstable::*;
     }
 
     #[cfg(feature = "wxwire")]
+    #[allow(missing_docs)]
     pub mod wxwire_receiver {
         pub use crate::wxwire_receiver::unstable::*;
     }
