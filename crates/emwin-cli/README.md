@@ -243,3 +243,12 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p emwin-cli
 ```
+
+For faster command-specific compile checks, disable default command features and enable only the command family under active development:
+
+```bash
+cargo check -p emwin-cli --no-default-features --features query
+cargo check -p emwin-cli --no-default-features --features relay
+cargo check -p emwin-cli --no-default-features --features server
+cargo check -p emwin-cli --no-default-features --features alert-worker
+```

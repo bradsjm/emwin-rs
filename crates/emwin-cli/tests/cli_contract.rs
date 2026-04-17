@@ -1,3 +1,5 @@
+#![cfg(feature = "query")]
+
 use std::process::Command;
 
 fn command() -> Command {

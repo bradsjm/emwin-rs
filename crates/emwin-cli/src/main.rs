@@ -5,16 +5,31 @@
 
 #![recursion_limit = "4096"]
 
+#[cfg(not(any(
+    feature = "query",
+    feature = "server",
+    feature = "alert-worker",
+    feature = "relay"
+)))]
+compile_error!(
+    "emwin-cli requires at least one command feature: query, server, alert-worker, or relay"
+);
+
+#[cfg(feature = "query")]
 mod cmd;
 mod error;
+#[cfg(feature = "relay")]
 mod relay;
 
-use clap::{ArgAction, Parser, Subcommand, ValueEnum};
+#[cfg(feature = "server")]
+use clap::{ArgAction, ValueEnum};
+use clap::{Parser, Subcommand};
 use std::io::IsTerminal;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 /// Supported upstream receiver backends.
+#[cfg(feature = "server")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ReceiverKind {
     /// QBT/EMWIN TCP receiver.
@@ -27,11 +42,13 @@ enum ReceiverKind {
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Query archived incident and product data directly from persistence.
+    #[cfg(feature = "query")]
     Query {
         #[command(flatten)]
         options: Box<cmd::query::QueryOptions>,
     },
     /// Live command with HTTP, SSE, and retained file endpoints.
+    #[cfg(feature = "server")]
     Server {
         /// Optional object-store root URI for async blob persistence, for example `file:///tmp/emwin` or `s3://bucket/prefix`.
         #[arg(long, env = "EMWIN_OUTPUT_DIR")]
@@ -102,6 +119,7 @@ enum Commands {
         alerting_apprise_api_url: Option<String>,
     },
     /// Run the alert worker against Postgres-backed alerting state.
+    #[cfg(feature = "alert-worker")]
     AlertWorker {
         /// Postgres metadata sink URL used for alerting state.
         #[arg(long, env = "EMWIN_PERSIST_DATABASE_URL")]
@@ -163,6 +181,7 @@ enum Commands {
         max_db_connections: u32,
     },
     /// Run low-latency EMWIN passthrough relay.
+    #[cfg(feature = "relay")]
     Relay {
         #[command(flatten)]
         options: relay::RelayOptions,
@@ -172,14 +191,19 @@ enum Commands {
 impl Commands {
     fn name(&self) -> &'static str {
         match self {
+            #[cfg(feature = "query")]
             Self::Query { .. } => "query",
+            #[cfg(feature = "server")]
             Self::Server { .. } => "server",
+            #[cfg(feature = "alert-worker")]
             Self::AlertWorker { .. } => "alert-worker",
+            #[cfg(feature = "relay")]
             Self::Relay { .. } => "relay",
         }
     }
 }
 
+#[cfg(feature = "server")]
 impl From<ReceiverKind> for emwin_live::ReceiverKind {
     fn from(value: ReceiverKind) -> Self {
         match value {
@@ -207,7 +231,9 @@ async fn main() -> crate::error::CliResult<()> {
     log_startup(&cli.command);
 
     match cli.command {
+        #[cfg(feature = "query")]
         Commands::Query { options } => cmd::query::run(*options).await,
+        #[cfg(feature = "server")]
         Commands::Server {
             output_dir,
             post_process_archives,
@@ -259,6 +285,7 @@ async fn main() -> crate::error::CliResult<()> {
                 .await
                 .map_err(Into::into)
         }
+        #[cfg(feature = "alert-worker")]
         Commands::AlertWorker {
             database_url,
             apprise_api_url,
@@ -309,6 +336,7 @@ async fn main() -> crate::error::CliResult<()> {
                 }
             }
         }
+        #[cfg(feature = "relay")]
         Commands::Relay { options } => relay::runtime::run(options).await,
     }
 }
@@ -347,282 +375,294 @@ mod tests {
 
     #[test]
     fn cli_parses_representative_commands() {
-        let query_cases = [
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "incidents",
-                "--office",
-                "KOAX",
-                "--limit",
-                "25",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "incident",
-                "KOAX",
-                "FF",
-                "W",
-                "2001",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "incident-products",
-                "KOAX",
-                "FF",
-                "W",
-                "2001",
-                "--cursor",
-                "opaque",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "products",
-                "--office",
-                "KOAX",
-                "--artifact-kind",
-                "nws_text_product",
-                "--min-lat",
-                "41.0",
-                "--max-lat",
-                "42.0",
-                "--min-lon=-97.0",
-                "--max-lon=-95.0",
-                "--limit",
-                "25",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "product",
-                "42",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "features",
-                "--kind",
-                "polygon",
-                "--limit",
-                "25",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "features-geojson",
-                "--kind",
-                "search_point",
-                "--limit",
-                "50",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "aggregate-facets",
-                "office",
-                "--limit",
-                "10",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "aggregate-timeseries",
-                "product_count",
-                "--start",
-                "2025-03-05T12:00:00Z",
-                "--end",
-                "2025-03-05T15:00:00Z",
-                "--bucket",
-                "hour",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "aggregate-cells",
-                "product_count",
-                "--precision",
-                "5",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "issues",
-                "--product-id",
-                "42",
-                "--kind",
-                "text_product_parse",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "issue",
-                "7",
-            ]
-            .as_slice(),
-            [
-                "emwin",
-                "query",
-                "--database-url",
-                "postgres://localhost/emwin",
-                "product-raw",
-                "42",
-                "--stdout",
-            ]
-            .as_slice(),
-        ];
-
-        for args in query_cases {
-            let cli = Cli::try_parse_from(args).expect("query args should parse");
-            assert!(matches!(cli.command, Commands::Query { .. }));
-        }
-
-        let server_cases = [
-            (
-                [
-                    "emwin",
-                    "server",
-                    "--username",
-                    "test@example.com",
-                    "--output-dir",
-                    "file:///tmp/out",
-                    "--persist-queue-capacity",
-                    "55",
-                    "--persist-database-url",
-                    "postgres://localhost/emwin",
-                    "--max-db-connections",
-                    "16",
-                    "--openapi-auth-token",
-                    "secret-token",
-                ]
-                .as_slice(),
-                Some("file:///tmp/out"),
-                Some(55usize),
-                Some("postgres://localhost/emwin"),
-                Some(16u32),
-                Some("secret-token"),
-            ),
-            (
-                [
-                    "emwin",
-                    "server",
-                    "--username",
-                    "test@example.com",
-                    "--output-dir",
-                    "s3://bucket/prefix",
-                ]
-                .as_slice(),
-                Some("s3://bucket/prefix"),
-                None,
-                None,
-                None,
-                None,
-            ),
-        ];
-
-        for (
-            args,
-            expected_output_dir,
-            expected_capacity,
-            expected_database_url,
-            expected_max_db_connections,
-            expected_token,
-        ) in server_cases
+        #[cfg(feature = "query")]
         {
-            let cli = Cli::try_parse_from(args).expect("server args should parse");
-            let Commands::Server {
-                output_dir,
-                persist_queue_capacity,
-                persist_database_url,
-                max_db_connections,
-                openapi_auth_token,
-                ..
-            } = cli.command
-            else {
-                panic!("expected server command");
-            };
+            let query_cases = [
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "incidents",
+                    "--office",
+                    "KOAX",
+                    "--limit",
+                    "25",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "incident",
+                    "KOAX",
+                    "FF",
+                    "W",
+                    "2001",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "incident-products",
+                    "KOAX",
+                    "FF",
+                    "W",
+                    "2001",
+                    "--cursor",
+                    "opaque",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "products",
+                    "--office",
+                    "KOAX",
+                    "--artifact-kind",
+                    "nws_text_product",
+                    "--min-lat",
+                    "41.0",
+                    "--max-lat",
+                    "42.0",
+                    "--min-lon=-97.0",
+                    "--max-lon=-95.0",
+                    "--limit",
+                    "25",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "product",
+                    "42",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "features",
+                    "--kind",
+                    "polygon",
+                    "--limit",
+                    "25",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "features-geojson",
+                    "--kind",
+                    "search_point",
+                    "--limit",
+                    "50",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "aggregate-facets",
+                    "office",
+                    "--limit",
+                    "10",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "aggregate-timeseries",
+                    "product_count",
+                    "--start",
+                    "2025-03-05T12:00:00Z",
+                    "--end",
+                    "2025-03-05T15:00:00Z",
+                    "--bucket",
+                    "hour",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "aggregate-cells",
+                    "product_count",
+                    "--precision",
+                    "5",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "issues",
+                    "--product-id",
+                    "42",
+                    "--kind",
+                    "text_product_parse",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "issue",
+                    "7",
+                ]
+                .as_slice(),
+                [
+                    "emwin",
+                    "query",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    "product-raw",
+                    "42",
+                    "--stdout",
+                ]
+                .as_slice(),
+            ];
 
-            assert_eq!(output_dir.as_deref(), expected_output_dir);
-            if let Some(capacity) = expected_capacity {
-                assert_eq!(persist_queue_capacity, capacity);
+            for args in query_cases {
+                let cli = Cli::try_parse_from(args).expect("query args should parse");
+                assert!(matches!(cli.command, Commands::Query { .. }));
             }
-            assert_eq!(persist_database_url.as_deref(), expected_database_url);
-            if let Some(expected_max_db_connections) = expected_max_db_connections {
-                assert_eq!(max_db_connections, expected_max_db_connections);
-            }
-            assert_eq!(openapi_auth_token.as_deref(), expected_token);
         }
 
-        let relay = Cli::try_parse_from(["emwin", "relay", "--username", "test@example.com"])
-            .expect("relay args should parse");
-        assert!(matches!(relay.command, Commands::Relay { .. }));
+        #[cfg(feature = "server")]
+        {
+            let server_cases = [
+                (
+                    [
+                        "emwin",
+                        "server",
+                        "--username",
+                        "test@example.com",
+                        "--output-dir",
+                        "file:///tmp/out",
+                        "--persist-queue-capacity",
+                        "55",
+                        "--persist-database-url",
+                        "postgres://localhost/emwin",
+                        "--max-db-connections",
+                        "16",
+                        "--openapi-auth-token",
+                        "secret-token",
+                    ]
+                    .as_slice(),
+                    Some("file:///tmp/out"),
+                    Some(55usize),
+                    Some("postgres://localhost/emwin"),
+                    Some(16u32),
+                    Some("secret-token"),
+                ),
+                (
+                    [
+                        "emwin",
+                        "server",
+                        "--username",
+                        "test@example.com",
+                        "--output-dir",
+                        "s3://bucket/prefix",
+                    ]
+                    .as_slice(),
+                    Some("s3://bucket/prefix"),
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            ];
 
-        let alert_worker = Cli::try_parse_from([
-            "emwin",
-            "alert-worker",
-            "--database-url",
-            "postgres://localhost/emwin",
-            "--source-claim-lease-secs",
-            "60",
-            "--delivery-claim-lease-secs",
-            "120",
-            "--http-timeout-secs",
-            "15",
-        ])
-        .expect("alert worker args should parse");
-        let Commands::AlertWorker {
-            source_claim_lease_secs,
-            delivery_claim_lease_secs,
-            http_timeout_secs,
-            alert_stats_interval_secs,
-            alert_max_delivery_attempts,
-            ..
-        } = alert_worker.command
-        else {
-            panic!("expected alert-worker command");
-        };
-        assert_eq!(source_claim_lease_secs, 60);
-        assert_eq!(delivery_claim_lease_secs, 120);
-        assert_eq!(http_timeout_secs, 15);
-        assert_eq!(alert_stats_interval_secs, 30);
-        assert_eq!(alert_max_delivery_attempts, 4);
+            for (
+                args,
+                expected_output_dir,
+                expected_capacity,
+                expected_database_url,
+                expected_max_db_connections,
+                expected_token,
+            ) in server_cases
+            {
+                let cli = Cli::try_parse_from(args).expect("server args should parse");
+                let Commands::Server {
+                    output_dir,
+                    persist_queue_capacity,
+                    persist_database_url,
+                    max_db_connections,
+                    openapi_auth_token,
+                    ..
+                } = cli.command
+                else {
+                    panic!("expected server command");
+                };
+
+                assert_eq!(output_dir.as_deref(), expected_output_dir);
+                if let Some(capacity) = expected_capacity {
+                    assert_eq!(persist_queue_capacity, capacity);
+                }
+                assert_eq!(persist_database_url.as_deref(), expected_database_url);
+                if let Some(expected_max_db_connections) = expected_max_db_connections {
+                    assert_eq!(max_db_connections, expected_max_db_connections);
+                }
+                assert_eq!(openapi_auth_token.as_deref(), expected_token);
+            }
+        }
+
+        #[cfg(feature = "relay")]
+        {
+            let relay = Cli::try_parse_from(["emwin", "relay", "--username", "test@example.com"])
+                .expect("relay args should parse");
+            assert!(matches!(relay.command, Commands::Relay { .. }));
+        }
+
+        #[cfg(feature = "alert-worker")]
+        {
+            let alert_worker = Cli::try_parse_from([
+                "emwin",
+                "alert-worker",
+                "--database-url",
+                "postgres://localhost/emwin",
+                "--source-claim-lease-secs",
+                "60",
+                "--delivery-claim-lease-secs",
+                "120",
+                "--http-timeout-secs",
+                "15",
+            ])
+            .expect("alert worker args should parse");
+            let Commands::AlertWorker {
+                source_claim_lease_secs,
+                delivery_claim_lease_secs,
+                http_timeout_secs,
+                alert_stats_interval_secs,
+                alert_max_delivery_attempts,
+                ..
+            } = alert_worker.command
+            else {
+                panic!("expected alert-worker command");
+            };
+            assert_eq!(source_claim_lease_secs, 60);
+            assert_eq!(delivery_claim_lease_secs, 120);
+            assert_eq!(http_timeout_secs, 15);
+            assert_eq!(alert_stats_interval_secs, 30);
+            assert_eq!(alert_max_delivery_attempts, 4);
+        }
     }
 
     #[test]
@@ -630,6 +670,7 @@ mod tests {
         assert!(Cli::try_parse_from(["emwin", "download", "./out"]).is_err());
     }
 
+    #[cfg(feature = "query")]
     #[test]
     fn product_raw_requires_exactly_one_output_sink() {
         assert!(
@@ -660,6 +701,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "query")]
     #[test]
     fn incidents_reject_invalid_rfc3339_timestamp() {
         assert!(
@@ -676,6 +718,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
     #[test]
     fn server_defaults_and_validates_max_db_connections() {
         let cli = Cli::try_parse_from(["emwin", "server", "--username", "test@example.com"])
@@ -701,6 +744,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "alert-worker")]
     #[test]
     fn alert_worker_rejects_zero_lease_and_timeout_values() {
         for arg in [
@@ -723,6 +767,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alert-worker")]
     #[test]
     fn alert_worker_allows_zero_stats_interval() {
         let cli = Cli::try_parse_from([

@@ -52,6 +52,17 @@ cargo build -p emwin-protocol
 cargo build -p emwin-cli
 ```
 
+### Fast CLI feature checks
+
+`emwin-cli` defaults to all commands. Use opt-in feature builds for faster local iteration on one command family:
+
+```bash
+cargo check -p emwin-cli --no-default-features --features query
+cargo check -p emwin-cli --no-default-features --features relay
+cargo check -p emwin-cli --no-default-features --features server
+cargo check -p emwin-cli --no-default-features --features alert-worker
+```
+
 ### Crate-specific test commands
 
 ```bash

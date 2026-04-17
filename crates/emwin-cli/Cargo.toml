@@ -8,13 +8,20 @@ readme.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = ["query", "server", "alert-worker", "relay"]
+query = ["dep:emwin-db", "dep:emwin-service"]
+server = ["dep:emwin-api", "dep:emwin-db", "dep:emwin-live"]
+alert-worker = ["dep:emwin-alert", "dep:emwin-db"]
+relay = ["dep:axum", "dep:emwin-protocol", "emwin-protocol/qbt"]
+
 [dependencies]
-emwin-api = { path = "../emwin-api" }
-emwin-alert = { path = "../emwin-alert" }
-emwin-live = { path = "../emwin-live" }
-emwin-protocol = { path = "../emwin-protocol", default-features = false, features = ["qbt", "wxwire", "telemetry-serde"] }
-emwin-db = { path = "../emwin-db" }
-emwin-service = { path = "../emwin-service" }
+emwin-api = { path = "../emwin-api", optional = true }
+emwin-alert = { path = "../emwin-alert", optional = true }
+emwin-live = { path = "../emwin-live", optional = true }
+emwin-protocol = { path = "../emwin-protocol", default-features = false, features = ["telemetry-serde"], optional = true }
+emwin-db = { path = "../emwin-db", optional = true }
+emwin-service = { path = "../emwin-service", optional = true }
 chrono.workspace = true
 tokio.workspace = true
 clap.workspace = true
@@ -22,7 +29,7 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-axum.workspace = true
+axum = { workspace = true, optional = true }
 thiserror.workspace = true
 dotenvy.workspace = true
 

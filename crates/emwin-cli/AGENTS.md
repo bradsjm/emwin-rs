@@ -28,6 +28,15 @@ cargo build -p emwin-cli
 cargo test -p emwin-cli
 ```
 
+`emwin-cli` defaults to all commands. Use opt-in command feature builds for faster local iteration:
+
+```bash
+cargo check -p emwin-cli --no-default-features --features query
+cargo check -p emwin-cli --no-default-features --features relay
+cargo check -p emwin-cli --no-default-features --features server
+cargo check -p emwin-cli --no-default-features --features alert-worker
+```
+
 ### Required quality gates for this crate
 
 ```bash
