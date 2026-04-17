@@ -142,6 +142,14 @@ enum Commands {
             value_parser = clap::value_parser!(u64).range(1..)
         )]
         http_timeout_secs: u64,
+        /// Maximum delivery attempts before a retryable failure is terminal.
+        #[arg(
+            long,
+            env = "EMWIN_ALERT_MAX_DELIVERY_ATTEMPTS",
+            default_value_t = 4,
+            value_parser = clap::value_parser!(i32).range(1..)
+        )]
+        alert_max_delivery_attempts: i32,
         /// Maximum Postgres connections used by the worker.
         #[arg(
             long,
@@ -257,6 +265,7 @@ async fn main() -> crate::error::CliResult<()> {
             source_claim_lease_secs,
             delivery_claim_lease_secs,
             http_timeout_secs,
+            alert_max_delivery_attempts,
             max_db_connections,
         } => {
             let mut config = emwin_db::PostgresConfig::new(database_url);
@@ -273,6 +282,7 @@ async fn main() -> crate::error::CliResult<()> {
                     source_claim_lease: std::time::Duration::from_secs(source_claim_lease_secs),
                     delivery_claim_lease: std::time::Duration::from_secs(delivery_claim_lease_secs),
                     http_timeout: std::time::Duration::from_secs(http_timeout_secs),
+                    max_delivery_attempts: alert_max_delivery_attempts,
                     apprise_api_url,
                 },
                 shutdown_rx,
@@ -596,6 +606,7 @@ mod tests {
             source_claim_lease_secs,
             delivery_claim_lease_secs,
             http_timeout_secs,
+            alert_max_delivery_attempts,
             ..
         } = alert_worker.command
         else {
@@ -604,6 +615,7 @@ mod tests {
         assert_eq!(source_claim_lease_secs, 60);
         assert_eq!(delivery_claim_lease_secs, 120);
         assert_eq!(http_timeout_secs, 15);
+        assert_eq!(alert_max_delivery_attempts, 4);
     }
 
     #[test]
@@ -688,6 +700,7 @@ mod tests {
             "--source-claim-lease-secs",
             "--delivery-claim-lease-secs",
             "--http-timeout-secs",
+            "--alert-max-delivery-attempts",
         ] {
             assert!(
                 Cli::try_parse_from([

@@ -769,6 +769,7 @@ dependencies = [
  "bytes",
  "flate2",
  "futures",
+ "memchr",
  "minidom",
  "proptest",
  "quick-xml",
@@ -791,6 +792,7 @@ name = "emwin-service"
 version = "0.3.1"
 dependencies = [
  "base64",
+ "bytes",
  "chrono",
  "emwin-parser",
  "serde",

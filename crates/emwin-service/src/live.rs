@@ -1,6 +1,7 @@
 use crate::archive::{BoxFuture, IncidentChange};
 use crate::error::ServiceResult;
 use crate::metadata::CompletedFileMetadata;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::SystemTime;
@@ -27,7 +28,7 @@ pub struct ReceiverFrame {
 
 #[derive(Debug, Clone)]
 pub struct RetainedFile {
-    pub data: Vec<u8>,
+    pub data: Bytes,
     pub completed_at: SystemTime,
     pub metadata: CompletedFileMetadata,
 }

@@ -670,7 +670,7 @@ impl PostgresMetadataSink {
         }
     }
 
-    async fn load_product_metadata_for_source_event(
+    pub async fn load_product_metadata_for_source_event(
         &self,
         event: &AlertSourceEvent,
     ) -> PersistResult<emwin_service::CompletedFileMetadata> {

@@ -7,6 +7,28 @@ use emwin_service::{
     FileFilterInput,
 };
 use sqlx::Row;
+use std::collections::HashSet;
+
+#[test]
+fn postgres_migration_versions_are_unique() {
+    let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mut versions = HashSet::new();
+    for entry in std::fs::read_dir(migrations_dir).expect("migrations directory should be readable")
+    {
+        let entry = entry.expect("migration entry should be readable");
+        let filename = entry
+            .file_name()
+            .into_string()
+            .expect("migration filename should be UTF-8");
+        let Some((version, _description)) = filename.split_once('_') else {
+            continue;
+        };
+        assert!(
+            versions.insert(version.to_string()),
+            "duplicate migration version {version}"
+        );
+    }
+}
 
 #[tokio::test]
 async fn postgres_sink_bootstraps_and_persists_rows() {

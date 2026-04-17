@@ -144,10 +144,16 @@ impl QbtProtocolDecoder {
             return false;
         }
 
-        let pos = self
-            .buffer
-            .windows(SYNC_BYTES.len())
-            .position(|window| window == SYNC_BYTES);
+        let mut pos = None;
+        let mut search_from = 0;
+        while let Some(offset) = memchr::memchr(0, &self.buffer[search_from..]) {
+            let idx = search_from + offset;
+            if self.buffer[idx..].starts_with(SYNC_BYTES) {
+                pos = Some(idx);
+                break;
+            }
+            search_from = idx + 1;
+        }
 
         if let Some(idx) = pos {
             let consume = idx + SYNC_BYTES.len();
@@ -228,6 +234,19 @@ impl QbtProtocolDecoder {
             }
             return Ok(false);
         };
+
+        if end_idx > self.config.max_server_list_frame_bytes {
+            out.push(QbtFrameEvent::Warning(
+                QbtProtocolWarning::DecoderRecovered {
+                    error: format!(
+                        "server list frame exceeded {} bytes",
+                        self.config.max_server_list_frame_bytes
+                    ),
+                },
+            ));
+            self.discard_malformed_server_list();
+            return Ok(true);
+        }
 
         let frame = self.buffer.split_to(end_idx + 1);
         let content = String::from_utf8(frame[..end_idx].to_vec())

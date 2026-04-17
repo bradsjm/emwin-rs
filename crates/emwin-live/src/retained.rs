@@ -1,14 +1,22 @@
 use crate::file_pipeline::build_completed_file_metadata;
+use bytes::Bytes;
 use emwin_protocol::ingest::ProductOrigin;
 use emwin_service::{CompletedFileMetadata, RetainedFile};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
 
+#[derive(Debug, Clone)]
+struct StoredRetainedFile {
+    generation: u64,
+    file: RetainedFile,
+}
+
 /// Bounded in-memory store for completed files.
 #[derive(Debug)]
 pub(crate) struct RetainedFiles {
-    by_name: HashMap<String, RetainedFile>,
-    order: VecDeque<String>,
+    by_name: HashMap<String, StoredRetainedFile>,
+    order: VecDeque<(String, u64)>,
+    next_generation: u64,
     max_entries: usize,
     ttl: Duration,
 }
@@ -18,6 +26,7 @@ impl RetainedFiles {
         Self {
             by_name: HashMap::new(),
             order: VecDeque::new(),
+            next_generation: 1,
             max_entries: max_entries.max(1),
             ttl: ttl.max(Duration::from_secs(1)),
         }
@@ -26,7 +35,7 @@ impl RetainedFiles {
     pub(crate) fn insert(
         &mut self,
         filename: String,
-        data: Vec<u8>,
+        data: Bytes,
         timestamp_utc: u64,
         origin: ProductOrigin,
         completed_at: SystemTime,
@@ -34,27 +43,36 @@ impl RetainedFiles {
         self.evict_expired();
 
         let metadata = build_completed_file_metadata(&filename, timestamp_utc, origin, &data);
+        let generation = self.next_generation;
+        self.next_generation = self.next_generation.saturating_add(1);
 
-        if self.by_name.contains_key(&filename) {
-            self.order.retain(|name| name != &filename);
-        }
-        self.order.push_back(filename.clone());
+        self.order.push_back((filename.clone(), generation));
         self.by_name.insert(
             filename,
-            RetainedFile {
-                data,
-                completed_at,
-                metadata: metadata.clone(),
+            StoredRetainedFile {
+                generation,
+                file: RetainedFile {
+                    data,
+                    completed_at,
+                    metadata: metadata.clone(),
+                },
             },
         );
 
         while self.by_name.len() > self.max_entries {
-            if let Some(oldest) = self.order.pop_front() {
-                self.by_name.remove(&oldest);
+            if let Some((oldest, generation)) = self.order.pop_front() {
+                if self
+                    .by_name
+                    .get(&oldest)
+                    .is_some_and(|stored| stored.generation == generation)
+                {
+                    self.by_name.remove(&oldest);
+                }
             } else {
                 break;
             }
         }
+        self.compact_stale_order_entries();
 
         metadata
     }
@@ -64,14 +82,18 @@ impl RetainedFiles {
         self.order
             .iter()
             .rev()
-            .filter_map(|name| self.by_name.get(name))
-            .map(|file| file.metadata.clone())
+            .filter_map(|(name, generation)| {
+                self.by_name
+                    .get(name)
+                    .filter(|stored| stored.generation == *generation)
+            })
+            .map(|stored| stored.file.metadata.clone())
             .collect()
     }
 
     pub(crate) fn get(&mut self, filename: &str) -> Option<RetainedFile> {
         self.evict_expired();
-        self.by_name.get(filename).cloned()
+        self.by_name.get(filename).map(|stored| stored.file.clone())
     }
 
     pub(crate) fn len(&mut self) -> usize {
@@ -81,12 +103,15 @@ impl RetainedFiles {
 
     fn evict_expired(&mut self) {
         let now = SystemTime::now();
-        self.order.retain(|name| {
-            let Some(file) = self.by_name.get(name) else {
+        self.order.retain(|(name, generation)| {
+            let Some(stored) = self.by_name.get(name) else {
                 return false;
             };
+            if stored.generation != *generation {
+                return false;
+            }
             let age = now
-                .duration_since(file.completed_at)
+                .duration_since(stored.file.completed_at)
                 .unwrap_or(Duration::from_secs(0));
             if age > self.ttl {
                 self.by_name.remove(name);
@@ -95,11 +120,23 @@ impl RetainedFiles {
             true
         });
     }
+
+    fn compact_stale_order_entries(&mut self) {
+        if self.order.len() <= self.max_entries.saturating_mul(4).max(16) {
+            return;
+        }
+        self.order.retain(|(name, generation)| {
+            self.by_name
+                .get(name)
+                .is_some_and(|stored| stored.generation == *generation)
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::RetainedFiles;
+    use bytes::Bytes;
     use emwin_protocol::ingest::ProductOrigin;
     use std::time::{Duration, SystemTime};
 
@@ -110,21 +147,21 @@ mod tests {
 
         files.insert(
             "one.txt".to_string(),
-            b"one".to_vec(),
+            Bytes::from_static(b"one"),
             1,
             ProductOrigin::Qbt,
             now,
         );
         files.insert(
             "two.txt".to_string(),
-            b"two".to_vec(),
+            Bytes::from_static(b"two"),
             2,
             ProductOrigin::Qbt,
             now,
         );
         files.insert(
             "three.txt".to_string(),
-            b"three".to_vec(),
+            Bytes::from_static(b"three"),
             3,
             ProductOrigin::Qbt,
             now,
@@ -138,14 +175,14 @@ mod tests {
         let mut ttl_files = RetainedFiles::new(2, Duration::from_secs(1));
         ttl_files.insert(
             "expired.txt".to_string(),
-            b"expired".to_vec(),
+            Bytes::from_static(b"expired"),
             4,
             ProductOrigin::Qbt,
             now - Duration::from_secs(2),
         );
         ttl_files.insert(
             "fresh.txt".to_string(),
-            b"fresh".to_vec(),
+            Bytes::from_static(b"fresh"),
             5,
             ProductOrigin::Qbt,
             now,
@@ -153,5 +190,34 @@ mod tests {
         let listed = ttl_files.list();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].filename, "fresh.txt");
+    }
+
+    #[test]
+    fn retained_files_replaces_duplicate_without_duplicate_listing() {
+        let mut files = RetainedFiles::new(4, Duration::from_secs(60));
+        let now = SystemTime::now();
+
+        files.insert(
+            "same.txt".to_string(),
+            Bytes::from_static(b"old"),
+            1,
+            ProductOrigin::Qbt,
+            now,
+        );
+        files.insert(
+            "same.txt".to_string(),
+            Bytes::from_static(b"new"),
+            2,
+            ProductOrigin::Qbt,
+            now,
+        );
+
+        let listed = files.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].filename, "same.txt");
+        assert_eq!(
+            files.get("same.txt").expect("file should exist").data,
+            Bytes::from_static(b"new")
+        );
     }
 }

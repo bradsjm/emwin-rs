@@ -1,4 +1,4 @@
-use crate::config::{LiveConfigRequest, LiveReceiverConfig, build_live_receiver_config};
+use crate::config::{LiveConfigRequest, build_qbt_receiver_config, build_wxwire_receiver_config};
 use crate::error::{LiveError, LiveResult};
 use crate::ingest::{run_incident_event_relay_loop, run_qbt_ingest_loop, run_wxwire_ingest_loop};
 use crate::persistence::{
@@ -133,21 +133,16 @@ impl LiveRuntime {
 
         let ingest = match receiver {
             ReceiverKind::Qbt => {
-                let LiveReceiverConfig::Qbt(config) =
-                    build_live_receiver_config(LiveConfigRequest {
-                        receiver: ReceiverKind::Qbt,
-                        username: Some(username),
-                        password,
-                        raw_servers,
-                        server_list_path,
-                        idle_timeout_secs: 90,
-                        qbt_watchdog_timeout_secs: 20,
-                        username_context: "server mode",
-                        password_context: "server mode",
-                    })?
-                else {
-                    unreachable!("qbt live mode must build qbt config");
-                };
+                let config = build_qbt_receiver_config(LiveConfigRequest {
+                    username: Some(username),
+                    password,
+                    raw_servers,
+                    server_list_path,
+                    idle_timeout_secs: 90,
+                    qbt_watchdog_timeout_secs: 20,
+                    username_context: "server mode",
+                    password_context: "server mode",
+                })?;
                 tokio::spawn(run_qbt_ingest_loop(
                     config,
                     Arc::clone(&state),
@@ -157,21 +152,16 @@ impl LiveRuntime {
                 ))
             }
             ReceiverKind::Wxwire => {
-                let LiveReceiverConfig::WxWire(config) =
-                    build_live_receiver_config(LiveConfigRequest {
-                        receiver: ReceiverKind::Wxwire,
-                        username: Some(username),
-                        password,
-                        raw_servers,
-                        server_list_path,
-                        idle_timeout_secs: 90,
-                        qbt_watchdog_timeout_secs: 0,
-                        username_context: "wxwire server mode",
-                        password_context: "wxwire server mode",
-                    })?
-                else {
-                    unreachable!("wxwire live mode must build wxwire config");
-                };
+                let config = build_wxwire_receiver_config(LiveConfigRequest {
+                    username: Some(username),
+                    password,
+                    raw_servers,
+                    server_list_path,
+                    idle_timeout_secs: 90,
+                    qbt_watchdog_timeout_secs: 0,
+                    username_context: "wxwire server mode",
+                    password_context: "wxwire server mode",
+                })?;
                 tokio::spawn(run_wxwire_ingest_loop(
                     config,
                     Arc::clone(&state),
@@ -422,7 +412,7 @@ impl LiveRuntime {
                 };
                 retained.insert(
                     filename,
-                    data,
+                    data.into(),
                     timestamp_utc,
                     origin,
                     std::time::SystemTime::now(),

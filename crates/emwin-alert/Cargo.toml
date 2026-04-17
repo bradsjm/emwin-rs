@@ -1,5 +1,5 @@
 [package]
-name = "emwin-service"
+name = "emwin-alert"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,15 +9,23 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-base64.workspace = true
-bytes.workspace = true
+emwin-db = { path = "../emwin-db" }
+emwin-service = { path = "../emwin-service" }
 chrono.workspace = true
-emwin-parser = { path = "../emwin-parser" }
+hmac.workspace = true
+minijinja.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+reqwest-retry.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-strum.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
 
 [lints]
 workspace = true

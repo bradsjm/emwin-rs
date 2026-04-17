@@ -180,7 +180,7 @@ fn handle_ingest_event(
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 guard.insert(
                     delivered.filename.clone(),
-                    delivered.data.to_vec(),
+                    delivered.data.clone(),
                     timestamp_utc,
                     product.origin.clone(),
                     completed_at,

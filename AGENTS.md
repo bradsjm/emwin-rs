@@ -9,6 +9,7 @@ Use this file as the operational contract for automated coding agents.
 - Toolchain target: stable Rust, workspace `rust-version = 1.94`.
 - Workspace members:
   - `crates/emwin-api`
+  - `crates/emwin-alert`
   - `crates/emwin-live`
   - `crates/emwin-protocol`
   - `crates/emwin-service`

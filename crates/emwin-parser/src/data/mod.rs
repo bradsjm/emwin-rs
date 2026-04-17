@@ -1,24 +1,24 @@
 //! Product metadata lookup, hydrologic location lookup, and non-text filename classification.
 
 mod generated_afos_routing;
-mod generated_nwslid;
 mod generated_text_products;
-mod generated_ugc;
 mod generated_wmo_office;
 mod graphics;
+mod nwslid;
+mod ugc;
 
 use std::sync::OnceLock;
 
 use crate::body::{BodyExtractionPlan, BodyExtractorId, body_extraction_plan};
 
-pub use generated_nwslid::{NWSLID_ENTRY_COUNT, NWSLID_GENERATED_AT_UTC};
 pub use generated_text_products::{TEXT_PRODUCT_ENTRY_COUNT, TEXT_PRODUCT_GENERATED_AT_UTC};
-pub use generated_ugc::{
-    UGC_COUNTY_ENTRY_COUNT, UGC_COUNTY_SOURCE_PATH, UGC_GENERATED_AT_UTC, UGC_ZONE_ENTRY_COUNT,
-    UGC_ZONE_SOURCE_PATH,
-};
 pub use generated_wmo_office::{
     WMO_OFFICE_ENTRY_COUNT, WMO_OFFICE_GENERATED_AT_UTC, WMO_OFFICE_SOURCE_PATH,
+};
+pub use nwslid::{NWSLID_ENTRY_COUNT, NWSLID_GENERATED_AT_UTC};
+pub use ugc::{
+    UGC_COUNTY_ENTRY_COUNT, UGC_COUNTY_SOURCE_PATH, UGC_GENERATED_AT_UTC, UGC_ZONE_ENTRY_COUNT,
+    UGC_ZONE_SOURCE_PATH,
 };
 
 /// Routing policy for AFOS text products in the generated catalog.
@@ -133,10 +133,10 @@ pub fn pil_description(nnn: &str) -> Option<&'static str> {
 /// The lookup normalizes case before performing a binary search over the generated catalog.
 pub fn nwslid_entry(code: &str) -> Option<&'static NwslidEntry> {
     let key = normalize_nwslid(code)?;
-    generated_nwslid::NWSLID_CATALOG
+    nwslid::catalog()
         .binary_search_by_key(&key.as_str(), |entry| entry.nwslid)
         .ok()
-        .map(|index| &generated_nwslid::NWSLID_CATALOG[index])
+        .map(|index| &nwslid::catalog()[index])
 }
 
 /// Looks up a county entry by UGC code.
@@ -145,19 +145,19 @@ pub fn nwslid_entry(code: &str) -> Option<&'static NwslidEntry> {
 /// designator and normalizes before searching the generated catalog.
 pub fn ugc_county_entry(code: &str) -> Option<&'static UgcLocationEntry> {
     let key = normalize_ugc(code, 'C')?;
-    generated_ugc::UGC_COUNTY_CATALOG
+    ugc::county_catalog()
         .binary_search_by_key(&key.as_str(), |entry| entry.code)
         .ok()
-        .map(|index| &generated_ugc::UGC_COUNTY_CATALOG[index])
+        .map(|index| &ugc::county_catalog()[index])
 }
 
 /// Looks up a forecast-zone entry by UGC code.
 pub fn ugc_zone_entry(code: &str) -> Option<&'static UgcLocationEntry> {
     let key = normalize_ugc(code, 'Z')?;
-    generated_ugc::UGC_ZONE_CATALOG
+    ugc::zone_catalog()
         .binary_search_by_key(&key.as_str(), |entry| entry.code)
         .ok()
-        .map(|index| &generated_ugc::UGC_ZONE_CATALOG[index])
+        .map(|index| &ugc::zone_catalog()[index])
 }
 
 /// Looks up a WMO office entry by ICAO code.

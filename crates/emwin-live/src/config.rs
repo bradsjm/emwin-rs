@@ -5,21 +5,12 @@
 
 use crate::error::{LiveError, LiveResult};
 use crate::shared::parse_servers_or_default;
-use crate::types::ReceiverKind;
 use emwin_protocol::qbt_receiver::{QbtDecodeConfig, QbtReceiverConfig};
 use emwin_protocol::wxwire_receiver::WxWireReceiverConfig;
 use std::path::PathBuf;
 
-#[derive(Debug)]
-/// Receiver-specific configuration produced from CLI live-mode arguments.
-pub(crate) enum LiveReceiverConfig {
-    Qbt(QbtReceiverConfig),
-    WxWire(WxWireReceiverConfig),
-}
-
 /// Normalized inputs used to build a live receiver configuration.
 pub(crate) struct LiveConfigRequest {
-    pub receiver: ReceiverKind,
     pub username: Option<String>,
     pub password: Option<String>,
     pub raw_servers: Vec<String>,
@@ -30,19 +21,9 @@ pub(crate) struct LiveConfigRequest {
     pub password_context: &'static str,
 }
 
-/// Builds the concrete receiver configuration requested by the CLI.
-pub(crate) fn build_live_receiver_config(
+pub(crate) fn build_qbt_receiver_config(
     request: LiveConfigRequest,
-) -> LiveResult<LiveReceiverConfig> {
-    match request.receiver {
-        ReceiverKind::Qbt => build_qbt_receiver_config(request).map(LiveReceiverConfig::Qbt),
-        ReceiverKind::Wxwire => {
-            build_wxwire_receiver_config(request).map(LiveReceiverConfig::WxWire)
-        }
-    }
-}
-
-fn build_qbt_receiver_config(request: LiveConfigRequest) -> LiveResult<QbtReceiverConfig> {
+) -> LiveResult<QbtReceiverConfig> {
     let LiveConfigRequest {
         username,
         password,
@@ -84,7 +65,9 @@ fn build_qbt_receiver_config(request: LiveConfigRequest) -> LiveResult<QbtReceiv
     })
 }
 
-fn build_wxwire_receiver_config(request: LiveConfigRequest) -> LiveResult<WxWireReceiverConfig> {
+pub(crate) fn build_wxwire_receiver_config(
+    request: LiveConfigRequest,
+) -> LiveResult<WxWireReceiverConfig> {
     let LiveConfigRequest {
         username,
         password,
@@ -125,12 +108,10 @@ fn build_wxwire_receiver_config(request: LiveConfigRequest) -> LiveResult<WxWire
 
 #[cfg(test)]
 mod tests {
-    use super::{LiveConfigRequest, LiveReceiverConfig, build_live_receiver_config};
-    use crate::types::ReceiverKind;
+    use super::{LiveConfigRequest, build_qbt_receiver_config};
 
     fn qbt_request() -> LiveConfigRequest {
         LiveConfigRequest {
-            receiver: ReceiverKind::Qbt,
             username: Some("user@example.com".to_string()),
             password: None,
             raw_servers: Vec::new(),
@@ -148,7 +129,7 @@ mod tests {
         request.raw_servers = vec!["127.0.0.1:2211".to_string()];
         request.server_list_path = Some("/tmp/emwin-servers.json".to_string());
 
-        match build_live_receiver_config(request) {
+        match build_qbt_receiver_config(request) {
             Ok(_) => panic!("config should reject combo"),
             Err(err) => assert!(
                 err.to_string().contains("--server-list-path"),
@@ -162,11 +143,7 @@ mod tests {
         let mut request = qbt_request();
         request.raw_servers = vec!["example.com:2211".to_string()];
 
-        let LiveReceiverConfig::Qbt(config) =
-            build_live_receiver_config(request).expect("config should build")
-        else {
-            panic!("expected qbt config");
-        };
+        let config = build_qbt_receiver_config(request).expect("config should build");
 
         assert!(!config.follow_server_list_updates);
         assert!(config.server_list_path.is_none());
@@ -178,10 +155,7 @@ mod tests {
         let mut request = qbt_request();
         request.server_list_path = Some("/tmp/emwin-servers.json".to_string());
 
-        let config = build_live_receiver_config(request).expect("request must succeed");
-        let LiveReceiverConfig::Qbt(config) = config else {
-            panic!("expected qbt config");
-        };
+        let config = build_qbt_receiver_config(request).expect("request must succeed");
 
         assert!(config.follow_server_list_updates);
         assert!(config.server_list_path.is_some());
