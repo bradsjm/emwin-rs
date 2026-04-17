@@ -1,9 +1,8 @@
 use super::super::candidate::{MalformedFamilyCandidate, UnsupportedWmoCandidate};
-use super::{
-    EnrichmentBase, assemble_optional_body, build_enrichment, container_from_filename,
-    detected_container, office_for_headers, wmo_office_entry,
-};
+use super::super::normalize::detected_container;
+use super::base::{EnrichmentBase, assemble_optional_body, build_enrichment, office_for_headers};
 use crate::data::NonTextProductMeta;
+use crate::data::{container_from_filename, wmo_office_entry};
 use crate::{ParserError, ProductEnrichment, ProductEnrichmentSource, ProductParseIssue};
 
 /// Assembles a recognized supported family that could not produce a structured artifact.

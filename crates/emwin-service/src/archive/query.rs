@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use strum::{Display, IntoStaticStr};
+use utoipa::ToSchema;
 
 /// Flat archive filter input accepted by adapters before type-specific query building.
 #[derive(Debug, Clone, Default)]
@@ -186,6 +187,7 @@ pub struct ProductCursor {
     Deserialize,
     Display,
     IntoStaticStr,
+    ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]

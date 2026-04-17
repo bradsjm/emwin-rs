@@ -118,6 +118,9 @@ enum Commands {
         /// Idle poll interval in seconds.
         #[arg(long, env = "EMWIN_ALERT_IDLE_POLL_SECS", default_value_t = 2)]
         idle_poll_secs: u64,
+        /// Worker stats log interval in seconds (0 to disable).
+        #[arg(long, env = "EMWIN_ALERT_STATS_INTERVAL_SECS", default_value_t = 30)]
+        alert_stats_interval_secs: u64,
         /// Source-event claim lease in seconds.
         #[arg(
             long,
@@ -262,6 +265,7 @@ async fn main() -> crate::error::CliResult<()> {
             source_batch_size,
             delivery_batch_size,
             idle_poll_secs,
+            alert_stats_interval_secs,
             source_claim_lease_secs,
             delivery_claim_lease_secs,
             http_timeout_secs,
@@ -279,6 +283,7 @@ async fn main() -> crate::error::CliResult<()> {
                     source_batch_size,
                     delivery_batch_size,
                     idle_poll_interval: std::time::Duration::from_secs(idle_poll_secs.max(1)),
+                    stats_log_interval: std::time::Duration::from_secs(alert_stats_interval_secs),
                     source_claim_lease: std::time::Duration::from_secs(source_claim_lease_secs),
                     delivery_claim_lease: std::time::Duration::from_secs(delivery_claim_lease_secs),
                     http_timeout: std::time::Duration::from_secs(http_timeout_secs),
@@ -606,6 +611,7 @@ mod tests {
             source_claim_lease_secs,
             delivery_claim_lease_secs,
             http_timeout_secs,
+            alert_stats_interval_secs,
             alert_max_delivery_attempts,
             ..
         } = alert_worker.command
@@ -615,6 +621,7 @@ mod tests {
         assert_eq!(source_claim_lease_secs, 60);
         assert_eq!(delivery_claim_lease_secs, 120);
         assert_eq!(http_timeout_secs, 15);
+        assert_eq!(alert_stats_interval_secs, 30);
         assert_eq!(alert_max_delivery_attempts, 4);
     }
 
@@ -714,5 +721,26 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn alert_worker_allows_zero_stats_interval() {
+        let cli = Cli::try_parse_from([
+            "emwin",
+            "alert-worker",
+            "--database-url",
+            "postgres://localhost/emwin",
+            "--alert-stats-interval-secs",
+            "0",
+        ])
+        .expect("zero stats interval should parse");
+        let Commands::AlertWorker {
+            alert_stats_interval_secs,
+            ..
+        } = cli.command
+        else {
+            panic!("expected alert-worker command");
+        };
+        assert_eq!(alert_stats_interval_secs, 0);
     }
 }

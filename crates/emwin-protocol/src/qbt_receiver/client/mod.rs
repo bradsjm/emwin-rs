@@ -16,7 +16,9 @@ pub mod watchdog;
 use crate::qbt_receiver::config::QbtReceiverConfig;
 use crate::qbt_receiver::error::{QbtReceiverError, QbtReceiverResult};
 use crate::qbt_receiver::protocol::model::QbtFrameEvent;
-use crate::runtime_support::{BackpressureTracker, ReceiverEventStream, ReceiverRuntime};
+use crate::runtime_support::{
+    BackpressureTracker, ReceiverEventStream, ReceiverRuntime, lock_unpoisoned,
+};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, watch};
@@ -211,10 +213,7 @@ impl QbtReceiver {
     }
 
     pub fn telemetry_snapshot(&self) -> QbtReceiverTelemetrySnapshot {
-        self.telemetry
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        lock_unpoisoned(&self.telemetry).clone()
     }
 }
 

@@ -3,7 +3,7 @@ use super::{
     TransportFuture, WxWireReceiverConfig, WxWireReceiverError, WxWireReceiverEvent,
     WxWireReceiverEventHandler, WxWireReceiverResult, WxWireReceiverTelemetrySnapshot,
 };
-use crate::runtime_support::try_send_with_backpressure_warning;
+use crate::runtime_support::{lock_unpoisoned, try_send_with_backpressure_warning};
 use crate::wxwire_receiver::codec::{WxWireDecoder, WxWireFrameDecoder};
 use crate::wxwire_receiver::config::WXWIRE_PRIMARY_HOST;
 use crate::wxwire_receiver::model::{WxWireReceiverFrameEvent, WxWireReceiverWarning};
@@ -363,6 +363,6 @@ fn update_telemetry_sink(
     sink: &Arc<Mutex<WxWireReceiverTelemetrySnapshot>>,
     telemetry: &RuntimeTelemetry,
 ) {
-    let mut guard = sink.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = lock_unpoisoned(sink);
     *guard = telemetry.snapshot.clone();
 }

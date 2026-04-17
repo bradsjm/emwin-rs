@@ -4,19 +4,26 @@ use super::urls::{
 };
 use crate::server_support::file_download_url;
 use emwin_service::{
-    AggregateCompleteness, ArchivedFeature, ArchivedIssue, ArchivedProductDetail,
-    ArchivedProductSummary, CellAggregateBucket, CompletedFileMetadata, FacetAggregateBucket,
-    IncidentChange, IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary,
-    LiveTelemetry, PaginatedResponse, PersistenceStats, TimeseriesAggregateBucket,
+    ArchivedFeature, ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary,
+    CellAggregateBucket, CompletedFileMetadata, FacetAggregateBucket, IncidentChange,
+    IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary, LiveTelemetry,
+    PersistenceStats, TimeseriesAggregateBucket,
 };
-use serde::ser::{SerializeMap, SerializeStruct};
+use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
+use utoipa::ToSchema;
 
 /// Downloadable file payload advertised by the HTTP API.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct CompletedFilePayload {
-    #[serde(flatten)]
+    #[serde(skip)]
+    #[allow(dead_code)]
     pub(crate) metadata: CompletedFileMetadata,
+    pub(crate) filename: String,
+    pub(crate) size: usize,
+    pub(crate) timestamp_utc: u64,
+    #[schema(value_type = Object)]
+    pub(crate) product: serde_json::Value,
     pub(crate) download_url: String,
 }
 
@@ -24,6 +31,11 @@ impl CompletedFilePayload {
     pub(crate) fn from_metadata(metadata: CompletedFileMetadata) -> Self {
         let download_url = file_download_url(&metadata.filename);
         Self {
+            filename: metadata.filename.clone(),
+            size: metadata.size,
+            timestamp_utc: metadata.timestamp_utc,
+            product: serde_json::to_value(&metadata.product_detail)
+                .expect("product detail should serialize"),
             metadata,
             download_url,
         }
@@ -31,39 +43,35 @@ impl CompletedFilePayload {
 }
 
 /// Lightweight file payload advertised in the SSE event stream.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct CompletedFileEventPayload {
+    #[serde(skip)]
     pub(crate) metadata: CompletedFileMetadata,
+    pub(crate) filename: String,
+    pub(crate) size: usize,
+    pub(crate) timestamp_utc: u64,
+    #[schema(value_type = Object)]
+    pub(crate) product: serde_json::Value,
     pub(crate) download_url: String,
 }
 
 impl CompletedFileEventPayload {
     pub(crate) fn from_metadata(metadata: CompletedFileMetadata) -> Self {
         Self {
+            filename: metadata.filename.clone(),
+            size: metadata.size,
+            timestamp_utc: metadata.timestamp_utc,
+            product: serde_json::to_value(&metadata.product_summary)
+                .expect("product summary should serialize"),
             download_url: file_download_url(&metadata.filename),
             metadata,
         }
     }
 }
 
-impl Serialize for CompletedFileEventPayload {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("CompletedFileEventPayload", 5)?;
-        state.serialize_field("filename", &self.metadata.filename)?;
-        state.serialize_field("size", &self.metadata.size)?;
-        state.serialize_field("timestamp_utc", &self.metadata.timestamp_utc)?;
-        state.serialize_field("product", &self.metadata.product_summary)?;
-        state.serialize_field("download_url", &self.download_url)?;
-        state.end()
-    }
-}
-
 pub(crate) type TelemetryPayload = LiveTelemetry;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct ArchiveStatus {
     pub(crate) configured: bool,
     pub(crate) healthy: bool,
@@ -179,15 +187,26 @@ impl Serialize for MetricsPayload {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct FilesResponse {
     pub(crate) files: Vec<CompletedFilePayload>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct IncidentSummaryPayload {
-    #[serde(flatten)]
-    pub(crate) incident: IncidentSummary,
+    pub(crate) office: String,
+    pub(crate) phenomena: String,
+    pub(crate) significance: String,
+    pub(crate) etn: i64,
+    pub(crate) current_status: String,
+    pub(crate) latest_vtec_action: String,
+    pub(crate) issued_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) start_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) end_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) last_updated_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) first_product_id: i64,
+    pub(crate) latest_product_id: i64,
+    pub(crate) latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
     pub(crate) detail_url: String,
     pub(crate) products_url: String,
     pub(crate) latest_product_url: String,
@@ -199,7 +218,19 @@ impl IncidentSummaryPayload {
         let products_url = incident_products_url(&incident);
         let latest_product_url = archive_product_url(incident.latest_product_id);
         Self {
-            incident,
+            office: incident.office,
+            phenomena: incident.phenomena,
+            significance: incident.significance,
+            etn: incident.etn,
+            current_status: incident.current_status,
+            latest_vtec_action: incident.latest_vtec_action,
+            issued_at: incident.issued_at,
+            start_utc: incident.start_utc,
+            end_utc: incident.end_utc,
+            last_updated_at: incident.last_updated_at,
+            first_product_id: incident.first_product_id,
+            latest_product_id: incident.latest_product_id,
+            latest_product_timestamp_utc: incident.latest_product_timestamp_utc,
             detail_url,
             products_url,
             latest_product_url,
@@ -207,10 +238,21 @@ impl IncidentSummaryPayload {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct IncidentDetailPayload {
-    #[serde(flatten)]
-    pub(crate) incident: IncidentDetail,
+    pub(crate) office: String,
+    pub(crate) phenomena: String,
+    pub(crate) significance: String,
+    pub(crate) etn: i64,
+    pub(crate) current_status: String,
+    pub(crate) latest_vtec_action: String,
+    pub(crate) issued_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) start_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) end_utc: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) last_updated_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) first_product_id: i64,
+    pub(crate) latest_product_id: i64,
+    pub(crate) latest_product_timestamp_utc: chrono::DateTime<chrono::Utc>,
     pub(crate) products_url: String,
     pub(crate) first_product_url: String,
     pub(crate) latest_product_url: String,
@@ -222,7 +264,19 @@ impl IncidentDetailPayload {
         let first_product_url = archive_product_url(incident.first_product_id);
         let latest_product_url = archive_product_url(incident.latest_product_id);
         Self {
-            incident,
+            office: incident.office,
+            phenomena: incident.phenomena,
+            significance: incident.significance,
+            etn: incident.etn,
+            current_status: incident.current_status,
+            latest_vtec_action: incident.latest_vtec_action,
+            issued_at: incident.issued_at,
+            start_utc: incident.start_utc,
+            end_utc: incident.end_utc,
+            last_updated_at: incident.last_updated_at,
+            first_product_id: incident.first_product_id,
+            latest_product_id: incident.latest_product_id,
+            latest_product_timestamp_utc: incident.latest_product_timestamp_utc,
             products_url,
             first_product_url,
             latest_product_url,
@@ -230,10 +284,49 @@ impl IncidentDetailPayload {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveProductSummaryPayload {
-    #[serde(flatten)]
-    pub(crate) product: ArchivedProductSummary,
+    pub(crate) product_id: i64,
+    pub(crate) filename: String,
+    pub(crate) source_timestamp_utc: i64,
+    pub(crate) ingested_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) source_receiver: String,
+    pub(crate) source_message_id: Option<String>,
+    pub(crate) size_bytes: i64,
+    pub(crate) has_metadata_sidecar: bool,
+    pub(crate) source: String,
+    pub(crate) family: Option<String>,
+    pub(crate) artifact_kind: Option<String>,
+    pub(crate) title: Option<String>,
+    pub(crate) container: String,
+    pub(crate) pil: Option<String>,
+    pub(crate) wmo_prefix: Option<String>,
+    pub(crate) bbb_kind: Option<String>,
+    pub(crate) office_code: Option<String>,
+    pub(crate) office_city: Option<String>,
+    pub(crate) office_state: Option<String>,
+    pub(crate) header_kind: Option<String>,
+    pub(crate) ttaaii: Option<String>,
+    pub(crate) cccc: Option<String>,
+    pub(crate) ddhhmm: Option<String>,
+    pub(crate) bbb: Option<String>,
+    pub(crate) afos: Option<String>,
+    pub(crate) has_body: bool,
+    pub(crate) has_artifact: bool,
+    pub(crate) has_issues: bool,
+    pub(crate) has_vtec: bool,
+    pub(crate) has_ugc: bool,
+    pub(crate) has_hvtec: bool,
+    pub(crate) has_latlon: bool,
+    pub(crate) has_time_mot_loc: bool,
+    pub(crate) has_wind_hail: bool,
+    pub(crate) vtec_count: i32,
+    pub(crate) ugc_count: i32,
+    pub(crate) hvtec_count: i32,
+    pub(crate) latlon_count: i32,
+    pub(crate) time_mot_loc_count: i32,
+    pub(crate) wind_hail_count: i32,
+    pub(crate) issue_count: i32,
     pub(crate) detail_url: String,
     pub(crate) raw_url: String,
 }
@@ -243,31 +336,85 @@ impl ArchiveProductSummaryPayload {
         let detail_url = archive_product_url(product.product_id);
         let raw_url = archive_product_raw_url(product.product_id);
         Self {
-            product,
+            product_id: product.product_id,
+            filename: product.filename,
+            source_timestamp_utc: product.source_timestamp_utc,
+            ingested_at: product.ingested_at,
+            source_receiver: product.source_receiver,
+            source_message_id: product.source_message_id,
+            size_bytes: product.size_bytes,
+            has_metadata_sidecar: product.has_metadata_sidecar,
+            source: product.source,
+            family: product.family,
+            artifact_kind: product.artifact_kind,
+            title: product.title,
+            container: product.container,
+            pil: product.pil,
+            wmo_prefix: product.wmo_prefix,
+            bbb_kind: product.bbb_kind,
+            office_code: product.office_code,
+            office_city: product.office_city,
+            office_state: product.office_state,
+            header_kind: product.header_kind,
+            ttaaii: product.ttaaii,
+            cccc: product.cccc,
+            ddhhmm: product.ddhhmm,
+            bbb: product.bbb,
+            afos: product.afos,
+            has_body: product.has_body,
+            has_artifact: product.has_artifact,
+            has_issues: product.has_issues,
+            has_vtec: product.has_vtec,
+            has_ugc: product.has_ugc,
+            has_hvtec: product.has_hvtec,
+            has_latlon: product.has_latlon,
+            has_time_mot_loc: product.has_time_mot_loc,
+            has_wind_hail: product.has_wind_hail,
+            vtec_count: product.vtec_count,
+            ugc_count: product.ugc_count,
+            hvtec_count: product.hvtec_count,
+            latlon_count: product.latlon_count,
+            time_mot_loc_count: product.time_mot_loc_count,
+            wind_hail_count: product.wind_hail_count,
+            issue_count: product.issue_count,
             detail_url,
             raw_url,
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveProductDetailPayload {
     #[serde(flatten)]
-    pub(crate) product: ArchivedProductDetail,
+    pub(crate) summary: ArchiveProductSummaryPayload,
+    pub(crate) payload_location: Option<String>,
+    pub(crate) metadata_location: Option<String>,
+    #[schema(value_type = Object)]
+    pub(crate) product_json: serde_json::Value,
     pub(crate) raw_url: String,
 }
 
 impl ArchiveProductDetailPayload {
     pub(crate) fn from_product(product: ArchivedProductDetail) -> Self {
         let raw_url = archive_product_raw_url(product.summary.product_id);
-        Self { product, raw_url }
+        Self {
+            summary: ArchiveProductSummaryPayload::from_product(product.summary),
+            payload_location: product.payload_location,
+            metadata_location: product.metadata_location,
+            product_json: product.product_json,
+            raw_url,
+        }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveIssuePayload {
-    #[serde(flatten)]
-    pub(crate) issue: ArchivedIssue,
+    pub(crate) id: i64,
+    pub(crate) product_id: i64,
+    pub(crate) kind: String,
+    pub(crate) code: String,
+    pub(crate) message: String,
+    pub(crate) line: Option<String>,
     pub(crate) detail_url: String,
     pub(crate) product_url: String,
 }
@@ -277,17 +424,28 @@ impl ArchiveIssuePayload {
         let detail_url = archive_issue_url(issue.id);
         let product_url = archive_product_url(issue.product_id);
         Self {
-            issue,
+            id: issue.id,
+            product_id: issue.product_id,
+            kind: issue.kind,
+            code: issue.code,
+            message: issue.message,
+            line: issue.line,
             detail_url,
             product_url,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub(crate) struct ArchivedFeaturePayload {
-    #[serde(flatten)]
-    pub(crate) feature: ArchivedFeature,
+    pub(crate) feature_id: String,
+    pub(crate) feature_kind: emwin_service::FeatureKind,
+    pub(crate) product_id: i64,
+    pub(crate) source_timestamp_utc: i64,
+    #[schema(value_type = Object)]
+    pub(crate) geometry: serde_json::Value,
+    #[schema(value_type = Object)]
+    pub(crate) properties: serde_json::Value,
     pub(crate) product_url: String,
     pub(crate) product_raw_url: String,
 }
@@ -297,28 +455,30 @@ impl ArchivedFeaturePayload {
         let product_url = archive_product_url(feature.product_id);
         let product_raw_url = archive_product_raw_url(feature.product_id);
         Self {
-            feature,
+            feature_id: feature.feature_id,
+            feature_kind: feature.feature_kind,
+            product_id: feature.product_id,
+            source_timestamp_utc: feature.source_timestamp_utc,
+            geometry: feature.geometry,
+            properties: feature.properties,
             product_url,
             product_raw_url,
         }
     }
 
     pub(crate) fn into_geojson_feature(self) -> GeoJsonFeature {
-        let mut properties = match self.feature.properties {
+        let mut properties = match self.properties {
             serde_json::Value::Object(map) => map,
             _ => serde_json::Map::new(),
         };
         properties.insert(
             "feature_kind".to_string(),
-            serde_json::json!(self.feature.feature_kind),
+            serde_json::json!(self.feature_kind),
         );
-        properties.insert(
-            "product_id".to_string(),
-            serde_json::json!(self.feature.product_id),
-        );
+        properties.insert("product_id".to_string(), serde_json::json!(self.product_id));
         properties.insert(
             "source_timestamp_utc".to_string(),
-            serde_json::json!(self.feature.source_timestamp_utc),
+            serde_json::json!(self.source_timestamp_utc),
         );
         properties.insert(
             "product_url".to_string(),
@@ -330,37 +490,40 @@ impl ArchivedFeaturePayload {
         );
 
         GeoJsonFeature::new(
-            self.feature.feature_id,
-            self.feature.geometry,
+            self.feature_id,
+            self.geometry,
             serde_json::Value::Object(properties),
         )
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct IncidentsResponse {
-    #[serde(flatten)]
-    pub(crate) page: PaginatedResponse<IncidentSummaryPayload>,
+    pub(crate) items: Vec<IncidentSummaryPayload>,
+    pub(crate) next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ProductsResponse {
-    #[serde(flatten)]
-    pub(crate) page: PaginatedResponse<ArchiveProductSummaryPayload>,
+    pub(crate) items: Vec<ArchiveProductSummaryPayload>,
+    pub(crate) next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct FeaturesResponse {
-    #[serde(flatten)]
-    pub(crate) page: PaginatedResponse<ArchivedFeaturePayload>,
+    pub(crate) items: Vec<ArchivedFeaturePayload>,
+    pub(crate) next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct GeoJsonFeature {
     pub(crate) id: String,
     #[serde(rename = "type")]
+    #[schema(rename = "type")]
     pub(crate) kind: &'static str,
+    #[schema(value_type = Object)]
     pub(crate) geometry: serde_json::Value,
+    #[schema(value_type = Object)]
     pub(crate) properties: serde_json::Value,
 }
 
@@ -379,69 +542,73 @@ impl GeoJsonFeature {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct FeatureCollectionResponse {
     #[serde(rename = "type")]
+    #[schema(rename = "type")]
     pub(crate) kind: &'static str,
     pub(crate) features: Vec<GeoJsonFeature>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct FacetAggregateResponse {
     pub(crate) dimension: String,
-    #[serde(flatten)]
-    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) partial: bool,
+    pub(crate) approximate: bool,
+    pub(crate) reason: Option<String>,
     pub(crate) items: Vec<FacetAggregateBucket>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct TimeseriesAggregateResponse {
     pub(crate) measure: String,
     pub(crate) bucket: String,
     pub(crate) start: chrono::DateTime<chrono::Utc>,
     pub(crate) end: chrono::DateTime<chrono::Utc>,
-    #[serde(flatten)]
-    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) partial: bool,
+    pub(crate) approximate: bool,
+    pub(crate) reason: Option<String>,
     pub(crate) items: Vec<TimeseriesAggregateBucket>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct CellAggregateResponse {
     pub(crate) measure: String,
     pub(crate) precision: u8,
-    #[serde(flatten)]
-    pub(crate) completeness: AggregateCompleteness,
+    pub(crate) partial: bool,
+    pub(crate) approximate: bool,
+    pub(crate) reason: Option<String>,
     pub(crate) items: Vec<CellAggregateBucket>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct IncidentProductsResponse {
-    #[serde(flatten)]
-    pub(crate) page: PaginatedResponse<ArchiveProductSummaryPayload>,
+    pub(crate) items: Vec<ArchiveProductSummaryPayload>,
+    pub(crate) next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct IncidentResponse {
     pub(crate) incident: IncidentDetailPayload,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveProductResponse {
     pub(crate) product: ArchiveProductDetailPayload,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveIssuesResponse {
-    #[serde(flatten)]
-    pub(crate) page: PaginatedResponse<ArchiveIssuePayload>,
+    pub(crate) items: Vec<ArchiveIssuePayload>,
+    pub(crate) next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ArchiveIssueResponse {
     pub(crate) issue: ArchiveIssuePayload,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct HealthResponse {
     pub(crate) status: &'static str,
     pub(crate) archive: ArchiveStatus,

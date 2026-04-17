@@ -8,107 +8,96 @@ use super::{
 };
 use sqlx::{Postgres, QueryBuilder};
 
+macro_rules! text_filter {
+    ($builder:expr, $query:expr, $field:ident, $column:literal, $normalize:expr) => {
+        append_text_set_filter($builder, $column, $query.$field.as_deref(), $normalize);
+    };
+}
+
+macro_rules! bool_filter {
+    ($builder:expr, $query:expr, $field:ident, $column:literal) => {
+        append_bool_filter($builder, $column, $query.$field);
+    };
+}
+
 pub(super) fn append_product_filters(
     builder: &mut QueryBuilder<'_, Postgres>,
     query: &ProductListQuery,
 ) -> PersistResult<()> {
     append_like_filter(builder, "products.filename", query.filename.as_deref());
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        source_receiver,
         "products.source_receiver",
-        query.source_receiver.as_deref(),
-        normalize_lower,
+        normalize_lower
     );
-    append_text_set_filter(
+    text_filter!(builder, query, source, "products.source", normalize_lower);
+    text_filter!(builder, query, pil, "products.pil", normalize_upper);
+    text_filter!(builder, query, family, "products.family", normalize_lower);
+    text_filter!(
         builder,
-        "products.source",
-        query.source.as_deref(),
-        normalize_lower,
-    );
-    append_text_set_filter(
-        builder,
-        "products.pil",
-        query.pil.as_deref(),
-        normalize_upper,
-    );
-    append_text_set_filter(
-        builder,
-        "products.family",
-        query.family.as_deref(),
-        normalize_lower,
-    );
-    append_text_set_filter(
-        builder,
+        query,
+        artifact_kind,
         "products.artifact_kind",
-        query.artifact_kind.as_deref(),
-        normalize_lower,
+        normalize_lower
     );
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        container,
         "products.container",
-        query.container.as_deref(),
-        normalize_lower,
+        normalize_lower
     );
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        wmo_prefix,
         "products.wmo_prefix",
-        query.wmo_prefix.as_deref(),
-        normalize_upper,
+        normalize_upper
     );
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        office,
         "products.office_code",
-        query.office.as_deref(),
-        normalize_upper,
+        normalize_upper
     );
     append_case_insensitive_text_set_filter(
         builder,
         "products.office_city",
         query.office_city.as_deref(),
     );
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        office_state,
         "products.office_state",
-        query.office_state.as_deref(),
-        normalize_upper,
+        normalize_upper
     );
-    append_text_set_filter(
+    text_filter!(
         builder,
+        query,
+        bbb_kind,
         "products.bbb_kind",
-        query.bbb_kind.as_deref(),
-        normalize_lower,
+        normalize_lower
     );
-    append_text_set_filter(
+    text_filter!(builder, query, cccc, "products.cccc", normalize_upper);
+    text_filter!(builder, query, ttaaii, "products.ttaaii", normalize_upper);
+    text_filter!(builder, query, afos, "products.afos", normalize_upper);
+    text_filter!(builder, query, bbb, "products.bbb", normalize_upper);
+    bool_filter!(builder, query, has_issues, "products.has_issues");
+    bool_filter!(builder, query, has_vtec, "products.has_vtec");
+    bool_filter!(builder, query, has_ugc, "products.has_ugc");
+    bool_filter!(builder, query, has_hvtec, "products.has_hvtec");
+    bool_filter!(builder, query, has_latlon, "products.has_latlon");
+    bool_filter!(
         builder,
-        "products.cccc",
-        query.cccc.as_deref(),
-        normalize_upper,
+        query,
+        has_time_mot_loc,
+        "products.has_time_mot_loc"
     );
-    append_text_set_filter(
-        builder,
-        "products.ttaaii",
-        query.ttaaii.as_deref(),
-        normalize_upper,
-    );
-    append_text_set_filter(
-        builder,
-        "products.afos",
-        query.afos.as_deref(),
-        normalize_upper,
-    );
-    append_text_set_filter(
-        builder,
-        "products.bbb",
-        query.bbb.as_deref(),
-        normalize_upper,
-    );
-    append_bool_filter(builder, "products.has_issues", query.has_issues);
-    append_bool_filter(builder, "products.has_vtec", query.has_vtec);
-    append_bool_filter(builder, "products.has_ugc", query.has_ugc);
-    append_bool_filter(builder, "products.has_hvtec", query.has_hvtec);
-    append_bool_filter(builder, "products.has_latlon", query.has_latlon);
-    append_bool_filter(builder, "products.has_time_mot_loc", query.has_time_mot_loc);
-    append_bool_filter(builder, "products.has_wind_hail", query.has_wind_hail);
+    bool_filter!(builder, query, has_wind_hail, "products.has_wind_hail");
 
     if let Some(min_size) = query.min_size {
         builder

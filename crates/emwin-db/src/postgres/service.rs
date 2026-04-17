@@ -4,12 +4,11 @@ use crate::writer::BoxFuture;
 use emwin_service::{
     ArchiveQueryService, ArchivedFeature, ArchivedIssue, ArchivedIssueListQuery, ArchivedPayload,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateQuery, CellAggregateResult,
-    FacetAggregateQuery, FacetAggregateResult, FeatureListQuery, IncidentChangeStream,
-    IncidentDetail, IncidentKey, IncidentListQuery, IncidentProductsQuery, IncidentSummary,
-    PaginatedResponse, ProductListQuery, ServiceError, ServiceResult, TimeseriesAggregateQuery,
+    FacetAggregateQuery, FacetAggregateResult, FeatureListQuery, IncidentDetail, IncidentKey,
+    IncidentListQuery, IncidentProductsQuery, IncidentSummary, PaginatedResponse,
+    ProductListQuery, ServiceError, ServiceResult, TimeseriesAggregateQuery,
     TimeseriesAggregateResult,
 };
-use tokio::sync::broadcast;
 
 fn map_service_error(err: PersistError) -> ServiceError {
     match err {
@@ -152,13 +151,5 @@ impl ArchiveQueryService for PostgresMetadataSink {
                 .await
                 .map_err(map_service_error)
         })
-    }
-}
-
-impl IncidentChangeStream for PostgresMetadataSink {
-    fn subscribe_incident_changes(
-        &self,
-    ) -> Option<broadcast::Receiver<emwin_service::IncidentBroadcastEvent>> {
-        None
     }
 }

@@ -14,6 +14,7 @@ use sha2::Sha256;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::watch;
+use tokio::time::Instant;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -22,6 +23,7 @@ pub struct AlertWorkerConfig {
     pub source_batch_size: i64,
     pub delivery_batch_size: i64,
     pub idle_poll_interval: Duration,
+    pub stats_log_interval: Duration,
     pub source_claim_lease: Duration,
     pub delivery_claim_lease: Duration,
     pub http_timeout: Duration,
@@ -52,6 +54,11 @@ pub struct AlertWorkerStats {
     pub source_claim_lost_total: AtomicU64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AlertWorkerStatsSnapshot {
+    pub source_claim_lost_total: u64,
+}
+
 #[derive(Debug)]
 enum DeliveryFailure {
     Retryable {
@@ -70,11 +77,20 @@ impl Default for AlertWorkerConfig {
             source_batch_size: 32,
             delivery_batch_size: 32,
             idle_poll_interval: Duration::from_secs(2),
+            stats_log_interval: Duration::from_secs(30),
             source_claim_lease: Duration::from_secs(300),
             delivery_claim_lease: Duration::from_secs(300),
             http_timeout: Duration::from_secs(30),
             max_delivery_attempts: 4,
             apprise_api_url: None,
+        }
+    }
+}
+
+impl AlertWorkerStats {
+    pub fn snapshot(&self) -> AlertWorkerStatsSnapshot {
+        AlertWorkerStatsSnapshot {
+            source_claim_lost_total: self.source_claim_lost_total.load(Ordering::Relaxed),
         }
     }
 }
@@ -105,6 +121,7 @@ pub async fn run_worker(
 
     let client = build_client(config.http_timeout)?;
     let stats = AlertWorkerStats::default();
+    let mut last_stats_log_at = Instant::now();
 
     loop {
         tokio::select! {
@@ -113,12 +130,29 @@ pub async fn run_worker(
                 if let Err(err) = result {
                     tracing::warn!(error = %err, "alert worker iteration failed");
                 }
-                tokio::time::sleep(config.idle_poll_interval).await;
+                maybe_log_stats(&stats, config.stats_log_interval, &mut last_stats_log_at);
+                tokio::select! {
+                    _ = shutdown_rx.changed() => break,
+                    _ = tokio::time::sleep(config.idle_poll_interval) => {}
+                }
             }
         }
     }
 
     Ok(())
+}
+
+fn maybe_log_stats(stats: &AlertWorkerStats, interval: Duration, last_logged_at: &mut Instant) {
+    if interval.is_zero() || last_logged_at.elapsed() < interval {
+        return;
+    }
+
+    let snapshot = stats.snapshot();
+    tracing::info!(
+        source_claim_lost_total = snapshot.source_claim_lost_total,
+        "alert worker stats snapshot"
+    );
+    *last_logged_at = Instant::now();
 }
 
 pub async fn send_test_notification(

@@ -1,9 +1,9 @@
 use super::payloads::{IncidentEventPayload, TelemetryPayload};
 use emwin_db::PostgresMetadataSink;
 use emwin_service::{
-    CompletedFileMetadata, IncidentBroadcastEvent as ServiceIncidentBroadcastEvent,
-    IncidentChangeStream, LiveBroadcastEvent, LiveEventService, LiveStatsSnapshot, RetainedFile,
-    RetainedFileService,
+    ArchiveQueryService, CompletedFileMetadata,
+    IncidentBroadcastEvent as ServiceIncidentBroadcastEvent, LiveBroadcastEvent, LiveStatsSnapshot,
+    RetainedFile,
 };
 use serde::Serialize;
 use std::net::SocketAddr;
@@ -17,10 +17,8 @@ pub(crate) struct IncidentBroadcastEvent {
     pub(crate) payload: IncidentEventPayload,
 }
 
-pub(crate) type SharedLiveService = Arc<dyn LiveEventService>;
-pub(crate) type SharedRetainedFileService = Arc<dyn RetainedFileService>;
-pub(crate) type SharedArchiveQueryService = Arc<dyn emwin_service::ArchiveQueryService>;
-pub(crate) type SharedIncidentChangeStream = Arc<dyn IncidentChangeStream>;
+pub(crate) type SharedLiveRuntime = Arc<emwin_live::LiveRuntime>;
+pub(crate) type SharedArchiveQueryService = Arc<dyn ArchiveQueryService>;
 pub(crate) type SharedAlertStore = Arc<PostgresMetadataSink>;
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,28 +30,59 @@ pub struct ApiArchiveStatus {
     pub(crate) last_error: Option<String>,
 }
 
-pub(crate) trait ArchiveStatusService: Send + Sync {
-    fn archive_status_snapshot(&self) -> ApiArchiveStatus;
-}
-
-pub(crate) type SharedArchiveStatusService = Arc<dyn ArchiveStatusService>;
-
 #[derive(Clone)]
 pub struct ApiServices {
-    pub(crate) live: SharedLiveService,
-    pub(crate) retained_files: SharedRetainedFileService,
+    pub(crate) runtime: SharedLiveRuntime,
     pub(crate) archive: SharedArchiveQueryService,
-    pub(crate) incident_stream: SharedIncidentChangeStream,
-    pub(crate) archive_status: SharedArchiveStatusService,
     pub(crate) alert_store: Option<SharedAlertStore>,
 }
 
-struct LiveRuntimeArchiveStatusService {
-    runtime: Arc<emwin_live::LiveRuntime>,
-}
+impl ApiServices {
+    pub fn from_live_runtime(runtime: emwin_live::LiveRuntime) -> Self {
+        let alert_store = runtime.alert_store();
+        let archive = runtime.archive_query_service();
+        let shared = Arc::new(runtime);
+        Self {
+            runtime: shared,
+            archive: archive.unwrap_or_else(|| Arc::new(NotConfiguredArchiveService)),
+            alert_store: alert_store.map(Arc::new),
+        }
+    }
 
-impl ArchiveStatusService for LiveRuntimeArchiveStatusService {
-    fn archive_status_snapshot(&self) -> ApiArchiveStatus {
+    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<LiveBroadcastEvent> {
+        self.runtime.subscribe_events()
+    }
+
+    pub(crate) fn telemetry_snapshot(&self) -> TelemetryPayload {
+        self.runtime.telemetry_snapshot()
+    }
+
+    pub(crate) fn stats_snapshot(&self) -> LiveStatsSnapshot {
+        self.runtime.stats_snapshot()
+    }
+
+    pub(crate) async fn shutdown(&self) -> emwin_service::ServiceResult<()> {
+        self.runtime
+            .shutdown()
+            .await
+            .map_err(|err| emwin_service::ServiceError::Runtime(err.to_string()))
+    }
+
+    pub(crate) fn list_retained_files(&self) -> Vec<CompletedFileMetadata> {
+        self.runtime.list_retained_files()
+    }
+
+    pub(crate) fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
+        self.runtime.get_retained_file(filename)
+    }
+
+    pub(crate) fn subscribe_incident_changes(
+        &self,
+    ) -> Option<broadcast::Receiver<ServiceIncidentBroadcastEvent>> {
+        self.runtime.subscribe_incident_changes()
+    }
+
+    pub(crate) fn archive_status_snapshot(&self) -> ApiArchiveStatus {
         let configured = self.runtime.archive_configured();
         let last_error = self.runtime.archive_last_error();
         ApiArchiveStatus {
@@ -63,56 +92,6 @@ impl ArchiveStatusService for LiveRuntimeArchiveStatusService {
             pool_timeouts_total: self.runtime.archive_pool_timeouts_total(),
             last_error,
         }
-    }
-}
-
-impl ApiServices {
-    pub fn from_live_runtime(runtime: emwin_live::LiveRuntime) -> Self {
-        let alert_store = runtime.alert_store();
-        let archive = runtime.archive_query_service();
-        let shared = Arc::new(runtime);
-        Self {
-            live: shared.clone(),
-            retained_files: shared.clone(),
-            archive: archive.unwrap_or_else(|| Arc::new(NotConfiguredArchiveService)),
-            incident_stream: shared.clone(),
-            archive_status: Arc::new(LiveRuntimeArchiveStatusService { runtime: shared }),
-            alert_store: alert_store.map(Arc::new),
-        }
-    }
-
-    pub(crate) fn subscribe_events(&self) -> broadcast::Receiver<LiveBroadcastEvent> {
-        self.live.subscribe_events()
-    }
-
-    pub(crate) fn telemetry_snapshot(&self) -> TelemetryPayload {
-        self.live.telemetry_snapshot()
-    }
-
-    pub(crate) fn stats_snapshot(&self) -> LiveStatsSnapshot {
-        self.live.stats_snapshot()
-    }
-
-    pub(crate) async fn shutdown(&self) -> emwin_service::ServiceResult<()> {
-        self.live.shutdown().await
-    }
-
-    pub(crate) fn list_retained_files(&self) -> Vec<CompletedFileMetadata> {
-        self.retained_files.list_retained_files()
-    }
-
-    pub(crate) fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
-        self.retained_files.get_retained_file(filename)
-    }
-
-    pub(crate) fn subscribe_incident_changes(
-        &self,
-    ) -> Option<broadcast::Receiver<ServiceIncidentBroadcastEvent>> {
-        self.incident_stream.subscribe_incident_changes()
-    }
-
-    pub(crate) fn archive_status_snapshot(&self) -> ApiArchiveStatus {
-        self.archive_status.archive_status_snapshot()
     }
 
     pub(crate) fn alert_store(&self) -> Option<&PostgresMetadataSink> {

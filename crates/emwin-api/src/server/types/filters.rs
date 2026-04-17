@@ -81,27 +81,27 @@ impl IncidentEventFilter {
             return false;
         }
         if let Some(offices) = &self.offices
-            && !offices.contains(event.incident.incident.office.as_str())
+            && !offices.contains(event.incident.office.as_str())
         {
             return false;
         }
         if let Some(phenomena) = &self.phenomena
-            && !phenomena.contains(event.incident.incident.phenomena.as_str())
+            && !phenomena.contains(event.incident.phenomena.as_str())
         {
             return false;
         }
         if let Some(significance) = &self.significance
-            && !significance.contains(event.incident.incident.significance.as_str())
+            && !significance.contains(event.incident.significance.as_str())
         {
             return false;
         }
         if let Some(statuses) = &self.statuses
-            && !statuses.contains(event.incident.incident.current_status.as_str())
+            && !statuses.contains(event.incident.current_status.as_str())
         {
             return false;
         }
         if let Some(etns) = &self.etns
-            && !etns.contains(&event.incident.incident.etn)
+            && !etns.contains(&event.incident.etn)
         {
             return false;
         }

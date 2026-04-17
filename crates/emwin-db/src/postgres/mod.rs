@@ -9,6 +9,7 @@
 //! - `prepare`: write-side normalization and projection shaping
 
 pub(super) use crate::error::{PersistError, PersistResult};
+use crate::sync::lock_unpoisoned;
 use crate::writer::StorageBlobReader;
 pub(super) use emwin_service::{
     IncidentChange, IncidentChangeAction, IncidentChangeTrigger, IncidentCursor, IncidentKey,
@@ -99,10 +100,7 @@ impl PostgresMetadataSink {
 
     /// Exposes the initialized pool for integration tests and diagnostics.
     pub fn pool(&self) -> PgPool {
-        let guard = self
-            .pool
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = lock_unpoisoned(&self.pool);
         guard
             .as_ref()
             .cloned()
@@ -120,10 +118,7 @@ impl PostgresMetadataSink {
 
     pub(crate) async fn ensure_pool(&self) -> crate::error::PersistResult<PgPool> {
         {
-            let guard = self
-                .pool
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let guard = lock_unpoisoned(&self.pool);
             if let Some(pool) = guard.as_ref() {
                 return Ok(pool.clone());
             }
@@ -132,10 +127,7 @@ impl PostgresMetadataSink {
         let _init_guard = self.pool_init.lock().await;
 
         {
-            let guard = self
-                .pool
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let guard = lock_unpoisoned(&self.pool);
             if let Some(pool) = guard.as_ref() {
                 return Ok(pool.clone());
             }
@@ -143,10 +135,7 @@ impl PostgresMetadataSink {
 
         let pool: PgPool = connection::connect_pool(&self.config).await?;
 
-        let mut guard = self
-            .pool
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = lock_unpoisoned(&self.pool);
         if let Some(existing) = guard.as_ref() {
             return Ok(existing.clone());
         }

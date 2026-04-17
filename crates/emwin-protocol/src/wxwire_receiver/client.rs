@@ -1,4 +1,6 @@
-use crate::runtime_support::{BackpressureTracker, ReceiverEventStream, ReceiverRuntime};
+use crate::runtime_support::{
+    BackpressureTracker, ReceiverEventStream, ReceiverRuntime, lock_unpoisoned,
+};
 use crate::wxwire_receiver::config::WxWireReceiverConfig;
 use crate::wxwire_receiver::error::{
     WxWireLifecycleError, WxWireReceiverError, WxWireReceiverResult,
@@ -192,10 +194,7 @@ impl WxWireReceiver {
 
     /// Returns a snapshot of current telemetry counters.
     pub fn telemetry_snapshot(&self) -> WxWireReceiverTelemetrySnapshot {
-        self.telemetry
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        lock_unpoisoned(&self.telemetry).clone()
     }
 
     fn submit_raw_stanza_internal(&self, stanza: String) -> WxWireReceiverResult<()> {

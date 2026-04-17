@@ -5,6 +5,7 @@ use super::{
     PersistenceProducer, PersistenceStats,
 };
 use crate::error::{PersistError, PersistResult};
+use crate::sync::lock_unpoisoned;
 use crate::writer::StoredBlob;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -49,20 +50,12 @@ where
         .await
         {
             Ok(request_key) => {
-                let mut guard = producer
-                    .shared
-                    .state
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut guard = lock_unpoisoned(&producer.shared.state);
                 guard.stats.persisted_total = guard.stats.persisted_total.saturating_add(1);
                 info!(request_key = %request_key, "save complete");
             }
             Err((request_key, context, err)) => {
-                let mut guard = producer
-                    .shared
-                    .state
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut guard = lock_unpoisoned(&producer.shared.state);
                 guard.stats.failed_total = guard.stats.failed_total.saturating_add(1);
                 warn!(
                     request_key = %request_key,
@@ -90,20 +83,12 @@ where
 }
 
 fn pop_request<M>(producer: &PersistenceProducer<M>) -> Option<PersistRequest<M>> {
-    let mut guard = producer
-        .shared
-        .state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = lock_unpoisoned(&producer.shared.state);
     guard.pending.pop_front()
 }
 
 fn is_closed<M>(producer: &PersistenceProducer<M>) -> bool {
-    let guard = producer
-        .shared
-        .state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let guard = lock_unpoisoned(&producer.shared.state);
     guard.closed && guard.pending.is_empty()
 }
 
@@ -220,10 +205,6 @@ where
 }
 
 fn should_abort_retry<M>(producer: &PersistenceProducer<M>) -> bool {
-    let guard = producer
-        .shared
-        .state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let guard = lock_unpoisoned(&producer.shared.state);
     guard.closed
 }

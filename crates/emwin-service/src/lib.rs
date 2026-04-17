@@ -18,9 +18,9 @@ pub use archive::{
     ArchivedProductSummary, CellAggregateBucket, CellAggregateQuery, CellAggregateResult,
     CellMeasure, FacetAggregateBucket, FacetAggregateQuery, FacetAggregateResult, FacetDimension,
     FeatureCursor, FeatureKind, FeatureListQuery, IncidentChange, IncidentChangeAction,
-    IncidentChangeStream, IncidentChangeTrigger, IncidentCleanupResult, IncidentCursor,
-    IncidentDetail, IncidentKey, IncidentListQuery, IncidentProductsCursor, IncidentProductsQuery,
-    IncidentSummary, PaginatedResponse, ProductCursor, ProductListQuery, TimeseriesAggregateBucket,
+    IncidentChangeTrigger, IncidentCleanupResult, IncidentCursor, IncidentDetail, IncidentKey,
+    IncidentListQuery, IncidentProductsCursor, IncidentProductsQuery, IncidentSummary,
+    PaginatedResponse, ProductCursor, ProductListQuery, TimeseriesAggregateBucket,
     TimeseriesAggregateQuery, TimeseriesAggregateResult, TimeseriesBucket, TimeseriesMeasure,
     build_cell_aggregate_query, build_facet_aggregate_query, build_feature_list_query,
     build_timeseries_aggregate_query, parse_archive_bool,
@@ -28,7 +28,7 @@ pub use archive::{
 pub use error::{ServiceError, ServiceResult};
 pub use filter::{FileEventFilter, FileFilterInput, FileFilterInputError};
 pub use live::{
-    IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveEventService, LiveStatsSnapshot,
-    LiveTelemetry, PersistenceStats, ReceiverFrame, RetainedFile, RetainedFileService, SourceKind,
+    IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveStatsSnapshot, LiveTelemetry,
+    PersistenceStats, ReceiverFrame, RetainedFile, SourceKind,
 };
 pub use metadata::CompletedFileMetadata;

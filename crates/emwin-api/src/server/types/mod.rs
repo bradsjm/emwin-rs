@@ -26,9 +26,9 @@ pub(crate) use payloads::{
     ArchiveProductResponse, ArchiveProductSummaryPayload, ArchiveStatus, ArchivedFeaturePayload,
     CellAggregateResponse, CompletedFileEventPayload, CompletedFilePayload, EventKind,
     FacetAggregateResponse, FeatureCollectionResponse, FeaturesResponse, FilesResponse,
-    HealthResponse, IncidentDetailPayload, IncidentEventPayload, IncidentProductsResponse,
-    IncidentResponse, IncidentSummaryPayload, IncidentsResponse, MetricsPayload, ProductsResponse,
-    TimeseriesAggregateResponse,
+    GeoJsonFeature, HealthResponse, IncidentDetailPayload, IncidentEventPayload,
+    IncidentProductsResponse, IncidentResponse, IncidentSummaryPayload, IncidentsResponse,
+    MetricsPayload, ProductsResponse, TimeseriesAggregateResponse,
 };
 pub(crate) use query::{
     ArchiveFilterParams, ArchiveIssuesQuery, CellAggregateHttpQuery, EventsQuery,

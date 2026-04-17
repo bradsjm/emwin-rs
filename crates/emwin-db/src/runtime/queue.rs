@@ -1,4 +1,5 @@
 use super::{EnqueueResult, PersistRequest, PersistenceProducer, PersistenceStats};
+use crate::sync::lock_unpoisoned;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
@@ -42,11 +43,7 @@ impl<M> Clone for PersistenceProducer<M> {
 impl<M> PersistenceProducer<M> {
     /// Attempts to enqueue a request without blocking the caller on backend I/O.
     pub fn enqueue(&self, request: PersistRequest<M>) -> EnqueueResult {
-        let mut guard = self
-            .shared
-            .state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = lock_unpoisoned(&self.shared.state);
         if guard.closed {
             return EnqueueResult {
                 accepted: false,
@@ -78,11 +75,7 @@ impl<M> PersistenceProducer<M> {
 
     /// Returns a point-in-time snapshot of queue depth and cumulative outcomes.
     pub fn stats_snapshot(&self) -> PersistenceStats {
-        let guard = self
-            .shared
-            .state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = lock_unpoisoned(&self.shared.state);
         PersistenceStats {
             queue_len: guard.pending.len(),
             queue_capacity: self.shared.capacity,
@@ -91,11 +84,7 @@ impl<M> PersistenceProducer<M> {
     }
 
     pub(super) fn close(&self) -> usize {
-        let mut guard = self
-            .shared
-            .state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = lock_unpoisoned(&self.shared.state);
         if guard.closed {
             return 0;
         }

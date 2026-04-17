@@ -30,7 +30,7 @@ use std::sync::Arc;
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List archived products.", body = crate::server::openapi::ProductsResponseSchema),
+        (status = 200, description = "List archived products.", body = ProductsResponse),
         (status = 400, description = "Product filter query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -52,14 +52,12 @@ pub(super) async fn products_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(ProductsResponse {
-        page: emwin_service::PaginatedResponse {
-            items: page
-                .items
-                .into_iter()
-                .map(ArchiveProductSummaryPayload::from_product)
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
+        items: page
+            .items
+            .into_iter()
+            .map(ArchiveProductSummaryPayload::from_product)
+            .collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -71,7 +69,7 @@ pub(super) async fn products_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List archived spatial features.", body = crate::server::openapi::FeaturesResponseSchema),
+        (status = 200, description = "List archived spatial features.", body = FeaturesResponse),
         (status = 400, description = "Feature query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -100,14 +98,12 @@ pub(super) async fn features_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(FeaturesResponse {
-        page: emwin_service::PaginatedResponse {
-            items: page
-                .items
-                .into_iter()
-                .map(ArchivedFeaturePayload::from_feature)
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
+        items: page
+            .items
+            .into_iter()
+            .map(ArchivedFeaturePayload::from_feature)
+            .collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -119,7 +115,7 @@ pub(super) async fn features_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "FeatureCollection view of archived spatial features.", body = crate::server::openapi::FeatureCollectionSchema),
+        (status = 200, description = "FeatureCollection view of archived spatial features.", body = FeatureCollectionResponse),
         (status = 400, description = "Feature query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -166,7 +162,7 @@ pub(super) async fn features_geojson_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Facet aggregation over archived products.", body = crate::server::openapi::FacetAggregateResponseSchema),
+        (status = 200, description = "Facet aggregation over archived products.", body = FacetAggregateResponse),
         (status = 400, description = "Aggregate query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -194,7 +190,9 @@ pub(super) async fn facet_aggregate_handler(
 
     Ok(Json(FacetAggregateResponse {
         dimension: aggregate_query.dimension.as_str().to_string(),
-        completeness: items.completeness,
+        partial: items.completeness.partial,
+        approximate: items.completeness.approximate,
+        reason: items.completeness.reason,
         items: items.items,
     }))
 }
@@ -207,7 +205,7 @@ pub(super) async fn facet_aggregate_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Timeseries aggregation over archived products.", body = crate::server::openapi::TimeseriesAggregateResponseSchema),
+        (status = 200, description = "Timeseries aggregation over archived products.", body = TimeseriesAggregateResponse),
         (status = 400, description = "Aggregate query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -240,7 +238,9 @@ pub(super) async fn timeseries_aggregate_handler(
         bucket: aggregate_query.bucket.as_str().to_string(),
         start: aggregate_query.start,
         end: aggregate_query.end,
-        completeness: items.completeness,
+        partial: items.completeness.partial,
+        approximate: items.completeness.approximate,
+        reason: items.completeness.reason,
         items: items.items,
     }))
 }
@@ -254,7 +254,7 @@ pub(super) async fn timeseries_aggregate_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Cell aggregation over archived products.", body = crate::server::openapi::CellAggregateResponseSchema),
+        (status = 200, description = "Cell aggregation over archived products.", body = CellAggregateResponse),
         (status = 400, description = "Aggregate query validation failed.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -284,7 +284,9 @@ pub(super) async fn cell_aggregate_handler(
     Ok(Json(CellAggregateResponse {
         measure: aggregate_query.measure.as_str().to_string(),
         precision: aggregate_query.precision,
-        completeness: items.completeness,
+        partial: items.completeness.partial,
+        approximate: items.completeness.approximate,
+        reason: items.completeness.reason,
         items: items.items,
     }))
 }
@@ -297,7 +299,7 @@ pub(super) async fn cell_aggregate_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List live incident projection rows.", body = crate::server::openapi::IncidentsResponseSchema),
+        (status = 200, description = "List live incident projection rows.", body = IncidentsResponse),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
 )]
@@ -323,14 +325,12 @@ pub(super) async fn incidents_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(IncidentsResponse {
-        page: emwin_service::PaginatedResponse {
-            items: page
-                .items
-                .into_iter()
-                .map(IncidentSummaryPayload::from_incident)
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
+        items: page
+            .items
+            .into_iter()
+            .map(IncidentSummaryPayload::from_incident)
+            .collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -347,7 +347,7 @@ pub(super) async fn incidents_handler(
     ),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Fetch one live incident projection row.", body = crate::server::openapi::IncidentResponseSchema),
+        (status = 200, description = "Fetch one live incident projection row.", body = IncidentResponse),
         (status = 404, description = "Incident was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -383,7 +383,7 @@ pub(super) async fn incident_handler(
     ),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List archived products linked to one incident.", body = crate::server::openapi::IncidentProductsResponseSchema),
+        (status = 200, description = "List archived products linked to one incident.", body = IncidentProductsResponse),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
 )]
@@ -406,14 +406,12 @@ pub(super) async fn incident_products_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(IncidentProductsResponse {
-        page: emwin_service::PaginatedResponse {
-            items: page
-                .items
-                .into_iter()
-                .map(ArchiveProductSummaryPayload::from_product)
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
+        items: page
+            .items
+            .into_iter()
+            .map(ArchiveProductSummaryPayload::from_product)
+            .collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -425,7 +423,7 @@ pub(super) async fn incident_products_handler(
     params(("product_id" = i64, Path, description = "Archived product id")),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Fetch one archived product detail record.", body = crate::server::openapi::ArchiveProductResponseSchema),
+        (status = 200, description = "Fetch one archived product detail record.", body = ArchiveProductResponse),
         (status = 404, description = "Archived product was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
@@ -457,7 +455,7 @@ pub(super) async fn archive_product_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List archived issue rows.", body = crate::server::openapi::ArchiveIssuesResponseSchema),
+        (status = 200, description = "List archived issue rows.", body = ArchiveIssuesResponse),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )
 )]
@@ -478,14 +476,12 @@ pub(super) async fn archive_issues_handler(
         .map_err(map_archive_error)?;
 
     Ok(Json(ArchiveIssuesResponse {
-        page: emwin_service::PaginatedResponse {
-            items: page
-                .items
-                .into_iter()
-                .map(ArchiveIssuePayload::from_issue)
-                .collect(),
-            next_cursor: page.next_cursor,
-        },
+        items: page
+            .items
+            .into_iter()
+            .map(ArchiveIssuePayload::from_issue)
+            .collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -497,7 +493,7 @@ pub(super) async fn archive_issues_handler(
     params(("issue_id" = i64, Path, description = "Archived issue id")),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Fetch one archived issue row.", body = crate::server::openapi::ArchiveIssueResponseSchema),
+        (status = 200, description = "Fetch one archived issue row.", body = ArchiveIssueResponse),
         (status = 404, description = "Archived issue was not found.", body = String),
         (status = 503, description = "Archive metadata persistence is not configured.", body = String)
     )

@@ -13,11 +13,10 @@ use crate::types::{
 use emwin_service::{
     ArchiveQueryService, ArchivedFeature, ArchivedIssue, ArchivedIssueListQuery, ArchivedPayload,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateQuery, CellAggregateResult,
-    FacetAggregateQuery, FacetAggregateResult, FeatureListQuery, IncidentChangeStream,
-    IncidentDetail, IncidentKey, IncidentListQuery, IncidentProductsQuery, IncidentSummary,
-    LiveEventService, PaginatedResponse, PersistenceStats, ProductListQuery, RetainedFile,
-    RetainedFileService, ServiceError, ServiceResult, SourceKind, TimeseriesAggregateQuery,
-    TimeseriesAggregateResult,
+    FacetAggregateQuery, FacetAggregateResult, FeatureListQuery, IncidentDetail, IncidentKey,
+    IncidentListQuery, IncidentProductsQuery, IncidentSummary, PaginatedResponse, PersistenceStats,
+    ProductListQuery, RetainedFile, ServiceError, ServiceResult, SourceKind,
+    TimeseriesAggregateQuery, TimeseriesAggregateResult,
 };
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -125,10 +124,7 @@ impl LiveRuntime {
                 Ok(_) => {}
                 Err(err) => {
                     {
-                        let mut guard = state
-                            .archive_last_error
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        let mut guard = lock_unpoisoned(&state.archive_last_error);
                         *guard = Some(err.to_string());
                     }
                     tracing::warn!(
@@ -233,31 +229,18 @@ impl LiveRuntime {
     }
 
     pub fn telemetry_snapshot(&self) -> LiveTelemetry {
-        self.inner
-            .state
-            .telemetry
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        lock_unpoisoned(&self.inner.state.telemetry).clone()
     }
 
     pub fn stats_snapshot(&self) -> LiveStatsSnapshot {
         let state = &self.inner.state;
-        let upstream_endpoint = state
-            .upstream_endpoint
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone();
+        let upstream_endpoint = lock_unpoisoned(&state.upstream_endpoint).clone();
 
         LiveStatsSnapshot {
             uptime_secs: state.started_at.elapsed().as_secs(),
             data_blocks_total: state.data_blocks_total.load(Ordering::Relaxed),
             active_servers: state.active_servers.load(Ordering::Relaxed),
-            retained_files: state
-                .retained_files
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .len(),
+            retained_files: lock_unpoisoned(&state.retained_files).len(),
             upstream_endpoint,
             persistence: state
                 .persistence
@@ -275,12 +258,7 @@ impl LiveRuntime {
     }
 
     pub fn archive_last_error(&self) -> Option<String> {
-        self.inner
-            .state
-            .archive_last_error
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        lock_unpoisoned(&self.inner.state.archive_last_error).clone()
     }
 
     pub fn archive_configured(&self) -> bool {
@@ -306,21 +284,11 @@ impl LiveRuntime {
     }
 
     pub fn list_retained_files(&self) -> Vec<emwin_service::CompletedFileMetadata> {
-        self.inner
-            .state
-            .retained_files
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .list()
+        lock_unpoisoned(&self.inner.state.retained_files).list()
     }
 
     pub fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
-        self.inner
-            .state
-            .retained_files
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(filename)
+        lock_unpoisoned(&self.inner.state.retained_files).get(filename)
     }
 
     pub async fn shutdown(&self) -> LiveResult<()> {
@@ -453,10 +421,7 @@ fn record_archive_result<T>(
 ) -> ServiceResult<T> {
     match result {
         Ok(value) => {
-            let mut guard = state
-                .archive_last_error
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.archive_last_error);
             *guard = None;
             Ok(value)
         }
@@ -468,10 +433,7 @@ fn record_archive_result<T>(
                     .archive_pool_timeouts_total
                     .fetch_add(1, Ordering::Relaxed);
             }
-            let mut guard = state
-                .archive_last_error
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.archive_last_error);
             *guard = Some(message);
             Err(map_service_error(err))
         }
@@ -482,46 +444,6 @@ fn record_archive_result<T>(
 struct TrackedArchiveQueryService {
     state: Arc<AppState>,
     archive: emwin_db::PostgresMetadataSink,
-}
-
-impl LiveEventService for LiveRuntime {
-    fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<LiveBroadcastEvent> {
-        LiveRuntime::subscribe_events(self)
-    }
-
-    fn telemetry_snapshot(&self) -> LiveTelemetry {
-        LiveRuntime::telemetry_snapshot(self)
-    }
-
-    fn stats_snapshot(&self) -> LiveStatsSnapshot {
-        LiveRuntime::stats_snapshot(self)
-    }
-
-    fn shutdown(&self) -> emwin_service::archive::BoxFuture<'_, ServiceResult<()>> {
-        Box::pin(async move {
-            LiveRuntime::shutdown(self)
-                .await
-                .map_err(|err| ServiceError::Runtime(err.to_string()))
-        })
-    }
-}
-
-impl RetainedFileService for LiveRuntime {
-    fn list_retained_files(&self) -> Vec<emwin_service::CompletedFileMetadata> {
-        LiveRuntime::list_retained_files(self)
-    }
-
-    fn get_retained_file(&self, filename: &str) -> Option<RetainedFile> {
-        LiveRuntime::get_retained_file(self, filename)
-    }
-}
-
-impl IncidentChangeStream for LiveRuntime {
-    fn subscribe_incident_changes(
-        &self,
-    ) -> Option<tokio::sync::broadcast::Receiver<IncidentBroadcastEvent>> {
-        LiveRuntime::subscribe_incident_changes(self)
-    }
 }
 
 impl ArchiveQueryService for TrackedArchiveQueryService {

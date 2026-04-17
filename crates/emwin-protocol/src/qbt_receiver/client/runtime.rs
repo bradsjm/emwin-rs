@@ -9,7 +9,7 @@ use super::{
 use crate::qbt_receiver::protocol::auth::{REAUTH_INTERVAL_SECS, build_logon_message, xor_ff};
 use crate::qbt_receiver::protocol::codec::{QbtFrameDecoder, QbtProtocolDecoder};
 use crate::qbt_receiver::protocol::model::{QbtAuthMessage, QbtFrameEvent, QbtProtocolWarning};
-use crate::runtime_support::try_send_with_backpressure_warning;
+use crate::runtime_support::{lock_unpoisoned, try_send_with_backpressure_warning};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
@@ -447,9 +447,7 @@ pub(super) fn update_telemetry_sink(
     telemetry_sink: &Arc<Mutex<QbtReceiverTelemetrySnapshot>>,
     telemetry: &RuntimeTelemetry,
 ) {
-    let mut guard = telemetry_sink
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = lock_unpoisoned(telemetry_sink);
     *guard = telemetry.snapshot.clone();
 }
 

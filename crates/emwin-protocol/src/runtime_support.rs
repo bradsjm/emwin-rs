@@ -5,6 +5,7 @@
 
 use futures::{Stream, stream};
 use std::pin::Pin;
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, watch};
@@ -19,6 +20,12 @@ const STOP_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 /// This is a pinned boxed stream that yields results of events or errors.
 pub(crate) type ReceiverEventStream<TEvent, TError> =
     Pin<Box<dyn Stream<Item = Result<TEvent, TError>> + Send + 'static>>;
+
+pub(crate) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// Runtime state management for receiver implementations.
 ///

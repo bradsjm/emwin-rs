@@ -11,6 +11,7 @@ use std::sync::{Mutex, RwLock};
 
 use super::QbtRelayConfig;
 use crate::qbt_receiver::protocol::server_list_wire::build_server_list_wire;
+use crate::runtime_support::lock_unpoisoned;
 
 /// Relay metrics tracked via atomic counters.
 #[derive(Default)]
@@ -175,10 +176,7 @@ impl QbtRelayState {
 
     /// Captures a snapshot of current metrics.
     pub fn metrics_snapshot(&self) -> QbtRelayMetricsSnapshot {
-        let users = self
-            .clients
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        let users = lock_unpoisoned(&self.clients)
             .values()
             .cloned()
             .collect::<Vec<_>>();
@@ -254,10 +252,7 @@ impl QbtRelayState {
         self.metrics
             .bytes_attempted_total
             .fetch_add(bytes, Ordering::Relaxed);
-        let mut window = self
-            .quality_window
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut window = lock_unpoisoned(&self.quality_window);
         window.add_attempted(bytes);
     }
 
@@ -265,10 +260,7 @@ impl QbtRelayState {
         self.metrics
             .bytes_forwarded_total
             .fetch_add(bytes, Ordering::Relaxed);
-        let mut window = self
-            .quality_window
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut window = lock_unpoisoned(&self.quality_window);
         window.add_forwarded(bytes);
     }
 

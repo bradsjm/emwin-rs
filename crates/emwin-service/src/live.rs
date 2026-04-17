@@ -1,28 +1,31 @@
-use crate::archive::{BoxFuture, IncidentChange};
-use crate::error::ServiceResult;
+use crate::archive::IncidentChange;
 use crate::metadata::CompletedFileMetadata;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::SystemTime;
-use tokio::sync::broadcast;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceKind {
     Qbt,
     WxWire {
         message_id: String,
         subject: String,
+        #[schema(value_type = String, format = DateTime)]
         delay_stamp_utc: Option<SystemTime>,
     },
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReceiverFrame {
+    #[schema(example = "qbt")]
     pub receiver: String,
+    #[schema(example = "server_list")]
     pub event_name: String,
+    #[schema(value_type = Object)]
     pub payload: Value,
 }
 
@@ -45,11 +48,13 @@ pub struct IncidentBroadcastEvent {
     pub change: IncidentChange,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "receiver", rename_all = "snake_case")]
 pub enum LiveTelemetry {
     Unavailable,
+    #[schema(value_type = Object)]
     Qbt(Value),
+    #[schema(value_type = Object)]
     WxWire(Value),
 }
 
@@ -63,7 +68,7 @@ pub enum LiveEventKind {
     Error { message: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct PersistenceStats {
     pub queue_len: usize,
     pub queue_capacity: usize,
@@ -73,7 +78,7 @@ pub struct PersistenceStats {
     pub failed_total: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LiveStatsSnapshot {
     pub uptime_secs: u64,
     pub data_blocks_total: u64,
@@ -81,16 +86,4 @@ pub struct LiveStatsSnapshot {
     pub retained_files: usize,
     pub upstream_endpoint: Option<String>,
     pub persistence: Option<PersistenceStats>,
-}
-
-pub trait LiveEventService: Send + Sync {
-    fn subscribe_events(&self) -> broadcast::Receiver<LiveBroadcastEvent>;
-    fn telemetry_snapshot(&self) -> LiveTelemetry;
-    fn stats_snapshot(&self) -> LiveStatsSnapshot;
-    fn shutdown(&self) -> BoxFuture<'_, ServiceResult<()>>;
-}
-
-pub trait RetainedFileService: Send + Sync {
-    fn list_retained_files(&self) -> Vec<CompletedFileMetadata>;
-    fn get_retained_file(&self, filename: &str) -> Option<RetainedFile>;
 }

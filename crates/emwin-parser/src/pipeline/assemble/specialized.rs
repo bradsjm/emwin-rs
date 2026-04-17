@@ -4,11 +4,11 @@ use super::super::candidate::{
     PirepCandidate, SawCandidate, SelCandidate, SigmetCandidate, SpcOutlookCandidate, TafCandidate,
     TextGenericCandidate, WwpCandidate,
 };
-use super::{
+use super::base::{
     EnrichmentBase, SpecializedAssemblyInput, assemble_optional_body,
-    assemble_specialized_enrichment, build_enrichment, container_from_filename, office_for_headers,
-    wmo_office_entry,
+    assemble_specialized_enrichment, build_enrichment, office_for_headers,
 };
+use crate::data::{container_from_filename, wmo_office_entry};
 use crate::{ProductArtifact, ProductEnrichment, ProductEnrichmentSource};
 
 /// Assembles a generic AFOS text product and runs body enrichment.

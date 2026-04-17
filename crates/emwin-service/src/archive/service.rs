@@ -10,7 +10,6 @@ use super::query::{
 use crate::error::ServiceResult;
 use std::future::Future;
 use std::pin::Pin;
-use tokio::sync::broadcast;
 
 /// Boxed future type used by service traits to avoid forcing async-trait.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -66,11 +65,4 @@ pub trait ArchiveQueryService: Send + Sync {
         &self,
         query: CellAggregateQuery,
     ) -> BoxFuture<'_, ServiceResult<CellAggregateResult>>;
-}
-
-/// Optional incident-change stream exposed by archive implementations with projection updates.
-pub trait IncidentChangeStream: Send + Sync {
-    fn subscribe_incident_changes(
-        &self,
-    ) -> Option<broadcast::Receiver<crate::live::IncidentBroadcastEvent>>;
 }

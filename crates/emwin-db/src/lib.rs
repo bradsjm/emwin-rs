@@ -55,6 +55,7 @@ mod error;
 mod metadata;
 mod postgres;
 mod runtime;
+mod sync;
 mod writer;
 
 pub use error::{PersistError, PersistResult};

@@ -15,7 +15,7 @@ use std::sync::atomic::Ordering;
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "List retained completed files.", body = crate::server::openapi::FilesResponseSchema)
+        (status = 200, description = "List retained completed files.", body = FilesResponse)
     )
 )]
 pub(super) async fn files_handler(State(state): State<Arc<AppState>>) -> Json<FilesResponse> {
@@ -62,7 +62,7 @@ pub(super) async fn file_download_handler(
     security(("bearer_auth" = [])),
     responses(
         (status = 401, description = "Missing or invalid bearer token.", body = String),
-        (status = 200, description = "Live server health summary.", body = crate::server::openapi::HealthResponseSchema)
+        (status = 200, description = "Live server health summary.", body = HealthResponse)
     )
 )]
 pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {

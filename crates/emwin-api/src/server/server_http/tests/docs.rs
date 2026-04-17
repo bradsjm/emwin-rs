@@ -163,18 +163,15 @@ async fn openapi_json_omits_bearer_security_when_auth_disabled() {
     assert!(body_json["components"]["securitySchemes"]["bearer_auth"].is_null());
     assert!(body_json["paths"]["/v1/health"]["get"]["security"].is_null());
     assert!(
-        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]
-            ["completeness"]
+        body_json["components"]["schemas"]["FacetAggregateResponse"]["properties"]["completeness"]
             .is_null()
     );
     assert_eq!(
-        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]["partial"]
-            ["type"],
+        body_json["components"]["schemas"]["FacetAggregateResponse"]["properties"]["partial"]["type"],
         "boolean"
     );
     assert_eq!(
-        body_json["components"]["schemas"]["FacetAggregateResponseSchema"]["properties"]["approximate"]
-            ["type"],
+        body_json["components"]["schemas"]["FacetAggregateResponse"]["properties"]["approximate"]["type"],
         "boolean"
     );
 }

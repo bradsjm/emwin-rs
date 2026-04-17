@@ -1,6 +1,7 @@
 use super::query;
 use super::{PostgresMetadataSink, connection};
 use crate::error::{PersistError, PersistResult};
+use crate::sync::lock_unpoisoned;
 use emwin_service::{
     ArchivedFeature, ArchivedIssue, ArchivedIssueListQuery, ArchivedPayload, ArchivedProductDetail,
     ArchivedProductSummary, CellAggregateQuery, CellAggregateResult, FacetAggregateQuery,
@@ -293,10 +294,7 @@ impl PostgresMetadataSink {
         if err.should_reset_postgres_pool() {
             let connect_target = connection::connection_target(&self.config)
                 .unwrap_or_else(|_| "postgres target unavailable".to_string());
-            let mut guard = self
-                .pool
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&self.pool);
             if guard.is_some() {
                 info!(
                     target = %connect_target,

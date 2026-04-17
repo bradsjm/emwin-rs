@@ -4,6 +4,7 @@
 //! successful read and the current streak of exceptions. That keeps the client loop simple and
 //! makes reconnection policy easy to test in isolation.
 
+use crate::runtime_support::lock_unpoisoned;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::time::{Duration, Instant};
@@ -51,10 +52,7 @@ impl Watchdog {
             return true;
         }
 
-        let last = self
-            .last_data
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let last = lock_unpoisoned(&self.last_data);
         now.duration_since(*last) > self.timeout
     }
 }
@@ -62,10 +60,7 @@ impl Watchdog {
 impl HealthObserver for Watchdog {
     fn on_data_received(&self) {
         self.exception_count.store(0, Ordering::Relaxed);
-        let mut last = self
-            .last_data
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut last = lock_unpoisoned(&self.last_data);
         *last = Instant::now();
     }
 

@@ -23,4 +23,4 @@ pub use query::{
     build_cell_aggregate_query, build_facet_aggregate_query, build_feature_list_query,
     build_timeseries_aggregate_query, decode_optional_cursor, encode_cursor, parse_archive_bool,
 };
-pub use service::{ArchiveQueryService, BoxFuture, IncidentChangeStream};
+pub use service::{ArchiveQueryService, BoxFuture};

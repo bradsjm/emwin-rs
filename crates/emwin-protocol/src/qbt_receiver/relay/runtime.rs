@@ -10,6 +10,7 @@ use super::{QbtRelayConfig, QbtRelayError, QbtRelayResult};
 use crate::qbt_receiver::client::connection::connect_with_timeout;
 use crate::qbt_receiver::protocol::auth::{REAUTH_INTERVAL_SECS, build_logon_message, xor_ff};
 use crate::qbt_receiver::protocol::server_list_wire::QbtServerListWireScanner;
+use crate::runtime_support::lock_unpoisoned;
 use bytes::Bytes;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -385,7 +386,7 @@ async fn run_client_session(
                             last_auth = Instant::now();
                             is_authenticated = true;
                             let now_secs = unix_time_secs();
-                            let mut clients = state.clients.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                            let mut clients = lock_unpoisoned(&state.clients);
                             clients.insert(client_id, super::state::QbtRelayClientMeta {
                                 email: email.clone(),
                                 peer: peer.to_string(),
@@ -467,10 +468,7 @@ async fn run_client_session(
     drop(writer_tx);
     let _ = writer_task.await;
 
-    let mut clients = state
-        .clients
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut clients = lock_unpoisoned(&state.clients);
     clients.remove(&client_id);
     state
         .metrics
@@ -530,7 +528,7 @@ async fn run_quality_monitor(
             _ = shutdown_rx.changed() => return,
             _ = interval.tick() => {
                 let ratio = {
-                    let mut window = state.quality_window.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let mut window = lock_unpoisoned(&state.quality_window);
                     window.rotate();
                     window.ratio()
                 };

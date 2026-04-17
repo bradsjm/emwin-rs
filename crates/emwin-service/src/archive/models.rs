@@ -1,16 +1,17 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 /// Stable paginated response envelope used by archive query APIs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct PaginatedResponse<T> {
     pub items: Vec<T>,
     pub next_cursor: Option<String>,
 }
 
 /// Change action emitted when the incident projection mutates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum IncidentChangeAction {
     Created,
@@ -18,7 +19,7 @@ pub enum IncidentChangeAction {
 }
 
 /// Source that triggered an incident change notification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum IncidentChangeTrigger {
     Persist,
@@ -32,7 +33,7 @@ pub struct IncidentCleanupResult {
 }
 
 /// Incident change event delivered to subscribers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct IncidentChange {
     pub action: IncidentChangeAction,
     pub trigger: IncidentChangeTrigger,
@@ -40,7 +41,7 @@ pub struct IncidentChange {
 }
 
 /// Summary row for one active or historical incident.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct IncidentSummary {
     pub office: String,
     pub phenomena: String,
@@ -60,7 +61,7 @@ pub struct IncidentSummary {
 pub type IncidentDetail = IncidentSummary;
 
 /// Archive summary row for one persisted product.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ArchivedProductSummary {
     pub product_id: i64,
     pub filename: String,
@@ -106,12 +107,13 @@ pub struct ArchivedProductSummary {
 }
 
 /// Archive detail row for one persisted product.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ArchivedProductDetail {
     #[serde(flatten)]
     pub summary: ArchivedProductSummary,
     pub payload_location: Option<String>,
     pub metadata_location: Option<String>,
+    #[schema(value_type = Object)]
     pub product_json: Value,
 }
 
@@ -123,7 +125,7 @@ pub struct ArchivedPayload {
 }
 
 /// Persisted parse/QC issue record.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ArchivedIssue {
     pub id: i64,
     pub product_id: i64,
@@ -134,7 +136,7 @@ pub struct ArchivedIssue {
 }
 
 /// Archive spatial feature record.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct ArchivedFeature {
     pub feature_id: String,
     pub feature_kind: super::query::FeatureKind,
@@ -145,14 +147,14 @@ pub struct ArchivedFeature {
 }
 
 /// One bucket in a facet aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct FacetAggregateBucket {
     pub value: String,
     pub count: i64,
 }
 
 /// One bucket in a timeseries aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct TimeseriesAggregateBucket {
     pub bucket_start: DateTime<Utc>,
     pub bucket_end: DateTime<Utc>,
@@ -160,14 +162,14 @@ pub struct TimeseriesAggregateBucket {
 }
 
 /// One bucket in a cell aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct CellAggregateBucket {
     pub cell: String,
     pub count: i64,
 }
 
 /// Aggregate completeness metadata shared across aggregate endpoints.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct AggregateCompleteness {
     pub partial: bool,
     pub approximate: bool,
@@ -185,21 +187,21 @@ impl AggregateCompleteness {
 }
 
 /// Facet aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct FacetAggregateResult {
     pub completeness: AggregateCompleteness,
     pub items: Vec<FacetAggregateBucket>,
 }
 
 /// Timeseries aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct TimeseriesAggregateResult {
     pub completeness: AggregateCompleteness,
     pub items: Vec<TimeseriesAggregateBucket>,
 }
 
 /// Cell aggregate response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct CellAggregateResult {
     pub completeness: AggregateCompleteness,
     pub items: Vec<CellAggregateBucket>,

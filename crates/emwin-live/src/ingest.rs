@@ -2,6 +2,7 @@ use crate::archive_postprocess::post_process_archive;
 use crate::error::LiveResult;
 use crate::events::{publish, publish_incident_change};
 use crate::persistence::{FilePersistenceProducer, enqueue_completed_product};
+use crate::shared::lock_unpoisoned;
 use crate::types::{AppState, LiveEventKind, LiveTelemetry};
 use emwin_db::PostgresMetadataSink;
 use emwin_protocol::ingest::{
@@ -108,10 +109,7 @@ fn handle_ingest_event(
 ) -> LiveResult<()> {
     match item {
         Ok(IngestEvent::Connected { endpoint }) => {
-            let mut guard = state
-                .upstream_endpoint
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.upstream_endpoint);
             *guard = Some(endpoint.clone());
             if !state.quiet {
                 tracing::info!("upstream connected endpoint={endpoint}");
@@ -119,10 +117,7 @@ fn handle_ingest_event(
             publish(state, LiveEventKind::Connected { endpoint });
         }
         Ok(IngestEvent::Disconnected) => {
-            let mut guard = state
-                .upstream_endpoint
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.upstream_endpoint);
             *guard = None;
             if !state.quiet {
                 tracing::info!("upstream disconnected");
@@ -142,10 +137,7 @@ fn handle_ingest_event(
                 }
                 _ => LiveTelemetry::Unavailable,
             };
-            let mut guard = state
-                .telemetry
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = lock_unpoisoned(&state.telemetry);
             *guard = telemetry.clone();
             publish(state, LiveEventKind::Telemetry(telemetry));
         }
@@ -174,10 +166,7 @@ fn handle_ingest_event(
                 .map(|duration| duration.as_secs())
                 .unwrap_or(0);
             let retained_meta = {
-                let mut guard = state
-                    .retained_files
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut guard = lock_unpoisoned(&state.retained_files);
                 guard.insert(
                     delivered.filename.clone(),
                     delivered.data.clone(),
