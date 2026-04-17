@@ -16,7 +16,7 @@ The current backend does not yet provide every frontend-shaped convenience surfa
 
 ## Confirmed Current Backend Surface
 
-The current `emwin-cli server` API exposes a product-first, resource-first `/v1/*` namespace:
+The current `emwin-cli server` API exposes a resource-first `/v1/*` namespace:
 
 - `GET /`
   - Swagger UI
@@ -30,6 +30,28 @@ The current `emwin-cli server` API exposes a product-first, resource-first `/v1/
   - incremental SSE stream of persisted incident projection changes
   - event name is `incident_change`
   - incident actions are `created` and `updated`
+- `GET|POST /v1/alerting/contact-points`
+  - alert contact-point list and create operations
+- `GET|PATCH|DELETE /v1/alerting/contact-points/{id}`
+  - alert contact-point detail, update, and delete operations
+- `POST /v1/alerting/contact-points/{id}/test`
+  - contact-point test delivery
+- `GET|POST /v1/alerting/rules`
+  - alert rule list and create operations
+- `POST /v1/alerting/rules/simulate`
+  - ad hoc alert rule simulation
+- `GET|PATCH|DELETE /v1/alerting/rules/{id}`
+  - alert rule detail, update, and delete operations
+- `POST /v1/alerting/rules/{id}/simulate`
+  - persisted alert rule simulation
+- `GET /v1/alerting/rules/{id}/events`
+  - alert rule event audit list
+- `GET /v1/alerting/deliveries`
+  - alert delivery audit list
+- `GET|POST /v1/alerting/silences`
+  - alert silence list and create operations
+- `DELETE /v1/alerting/silences/{id}`
+  - alert silence deletion
 - `GET /v1/incidents`
   - paginated incident list from the persisted incident projection
 - `GET /v1/incidents/{office}/{phenomena}/{significance}/{etn}`
@@ -65,7 +87,7 @@ The current `emwin-cli server` API exposes a product-first, resource-first `/v1/
 - `GET /v1/metrics`
   - JSON telemetry snapshot
 
-Completed work from [`PLAN.md`](/Users/jonathan/Code/emwin-rs/docs/PLAN.md) that is now shipped:
+Already shipped backend work:
 
 - product-first resource API
 - archive product list/search
@@ -75,6 +97,7 @@ Completed work from [`PLAN.md`](/Users/jonathan/Code/emwin-rs/docs/PLAN.md) that
 - resource/stream naming cleanup
 - shared archive filter grammar reused across product, feature, and aggregate archive reads
 - `query` command parity for archive product, feature, and aggregate reads
+- alerting control-plane, simulation, and audit endpoints under `/v1/alerting/*`
 
 ## Confirmed Current Data Model and Semantics
 
@@ -279,6 +302,7 @@ Recommended frontend usage:
 - use `/v1/incidents/{...}/products` for incident timeline drill-down
 - use `/v1/products/{product_id}` for lazy product detail fetches
 - use `/v1/issues` and `/v1/issues/{issue_id}` for parse and QC inspection
+- after the recommended expansion below is implemented, use `/v1/situation/*` for frontend-shaped overview, map, and hotspot read models
 
 Stream contract constraints:
 
@@ -300,6 +324,7 @@ Rendering constraints:
 Server configuration constraints:
 
 - `--persist-database-url` is required for `/v1/incidents`, `/v1/incidents/{...}`, `/v1/incidents/{...}/products`, `/v1/products`, `/v1/products/{product_id}`, `/v1/products/{product_id}/raw`, `/v1/issues`, `/v1/issues/{issue_id}`, `/v1/features`, `/v1/features/geojson`, `/v1/aggregates/*`, and `/v1/streams/incidents`
+- `/v1/alerting/*` also requires `--persist-database-url`; contact-point test delivery requires `--alerting-apprise-api-url` or `EMWIN_APPRISE_API_URL`
 - bearer auth remains optional but should be enabled in deployed environments
 - when `--openapi-auth-token` is configured, `Authorization: Bearer <token>` applies to all `/v1/*` routes
 - `GET /`, `GET /openapi.json`, and Swagger UI assets remain public
@@ -308,19 +333,93 @@ Server configuration constraints:
 
 ## Remaining Backend Gaps
 
-- frontend-specific derived map layer endpoint: not present
-- precomputed hotspot summary endpoint: not present
-- precomputed trend summary endpoint: not present
+- derived situation layer endpoint: not present
+- hotspot situation endpoint: not present
+- rolling situation summary endpoint: not present
 - durable replay or event-log semantics for SSE: not present
 - richer cell measures such as issue or incident counts: not present
 
 Additional detail on those gaps:
 
-- There is no dedicated frontend-shaped derived layer endpoint for opinionated map layers such as active warning polygons, watch polygons, or LSR-only bundles.
+- There is no dedicated derived situation layer endpoint for opinionated map layers such as active warning polygons, watch polygons, or LSR-only bundles.
 - There is no dedicated hotspot endpoint with frontend-specific combined measures such as active incidents, updated incidents, warning counts, and threshold exceedance counts in one response.
-- There is no dedicated trend summary endpoint with precomposed national or regional summaries.
+- There is no dedicated rolling summary endpoint with precomposed national or regional overview counts.
 - The aggregate API is generic but intentionally limited to the supported measures and dimensions listed above.
 - The backend currently answers aggregates directly from query-time reads rather than from durable rollups or replayable event-log infrastructure.
+
+## Recommended Backend Expansion Plan
+
+The recommended expansion is a new `/v1/situation/*` namespace for derived operational situation read models.
+These endpoints are not implemented yet.
+They should be HTTP-only for the first cut; do not add `emwin-cli query` parity until the wire contracts stabilize.
+
+Recommended endpoints:
+
+- `GET /v1/situation/layers/{layer}`
+  - derived map layer read model
+  - supported `layer` values: `warnings`, `watches`, `lsr`, `mcd`, `ero`, `spc_outlook`
+  - returns a GeoJSON-compatible `FeatureCollection`
+  - includes top-level `layer` and `generated_at` fields as GeoJSON foreign members
+  - puts product links, incident identity, counts, titles, office, family, and source timestamps in feature `properties`
+  - accepts `active_at`, `start`, `end`, bbox, and `limit` query parameters
+- `GET /v1/situation/hotspots`
+  - derived hotspot read model over geohash cell polygons
+  - returns a GeoJSON-compatible `FeatureCollection`
+  - requires a complete bbox (`min_lat`, `max_lat`, `min_lon`, `max_lon`)
+  - supports `precision`, `end`, `window_minutes`, and `limit` query parameters
+  - includes `active_incident_count`, `updated_incident_count`, `warning_product_count`, `lsr_count`, and `severe_threshold_count` in each feature's `properties`
+- `GET /v1/situation/summary`
+  - rolling operational summary read model
+  - returns JSON, not GeoJSON
+  - supports `end`, `window_minutes`, `office`, `state`, bbox, and `top_n` query parameters
+  - includes active incident count, new incident count, updated incident count, active watch count, LSR count, severe threshold count, active incidents by phenomena, top offices, and top states
+
+Recommended implementation constraints:
+
+- Add dedicated `SituationLayerQuery`, `SituationHotspotsQuery`, and `SituationSummaryQuery` service contracts in `emwin-service`.
+- Add matching Postgres query implementations in `emwin-db`; do not stretch the generic aggregate endpoints or `CellMeasure`.
+- Add a dedicated `server_http::situation` module and OpenAPI `situation` tag in `emwin-api`.
+- Keep the endpoints archive-read-only and do not touch the live product or incident SSE pipelines.
+- Return `503` when archive metadata persistence is not configured.
+- Return `400` for invalid layer values, invalid datetime windows, incomplete or inverted bboxes, and out-of-range precision or limits.
+- Return successful empty results when there is no qualifying persisted geometry; do not synthesize fallback geometry from raw product JSON.
+
+Recommended layer semantics:
+
+- `warnings`: active incidents with `significance = W`, using polygon features from each incident's `latest_product_id` only
+- `watches`: active incidents with `significance = A`, using polygon features from each incident's `latest_product_id` only
+- `lsr`: `family = lsr_bulletin`, using `search_point` features only
+- `mcd`: `family = mcd_bulletin`, using polygon features only
+- `ero`: `family = ero_bulletin`, using polygon features only
+- `spc_outlook`: `family = spc_outlook_bulletin`, using polygon features only
+
+Recommended defaults:
+
+- `/v1/situation/layers/{layer}`:
+  - `active_at = now` for `warnings` and `watches`
+  - `end = now`
+  - `start = end - 6h` for `lsr` and `mcd`
+  - `start = end - 24h` for `ero` and `spc_outlook`
+  - `limit = 1000`, maximum `2000`
+- `/v1/situation/hotspots`:
+  - `precision = 4`, allowed range `2..=6`
+  - `window_minutes = 60`
+  - `limit = 50`, maximum `200`
+- `/v1/situation/summary`:
+  - `end = now`
+  - `window_minutes = 60`
+  - `top_n = 5`, maximum `10`
+- Severe threshold counts use fixed thresholds of wind `>= 70 mph` or hail `>= 2.0 in`.
+
+Recommended test coverage:
+
+- OpenAPI lists all three `/v1/situation/*` endpoints and the `situation` tag.
+- Auth behavior matches existing `/v1/*` routes.
+- Archive-unconfigured state returns `503`.
+- Invalid layer, malformed datetime window, incomplete bbox, inverted bbox, bad precision, and bad limits return `400`.
+- Layer tests verify one incident-derived polygon item per active warning/watch incident and product-family-backed feature selection for LSR, MCD, ERO, and SPC outlook layers.
+- Hotspot tests verify the five count fields and deterministic ordering.
+- Summary tests verify rolling-window counts and grouped top lists.
 
 ## Non-Functional Requirements
 
