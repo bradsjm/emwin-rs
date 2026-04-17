@@ -97,54 +97,11 @@ impl RetainedFiles {
     }
 }
 
-pub(crate) fn wildcard_match(pattern: &str, text: &str) -> bool {
-    let p = pattern.to_ascii_lowercase();
-    let t = text.to_ascii_lowercase();
-
-    let p_bytes = p.as_bytes();
-    let t_bytes = t.as_bytes();
-    let mut pi = 0usize;
-    let mut ti = 0usize;
-    let mut star_idx = None;
-    let mut match_idx = 0usize;
-
-    while ti < t_bytes.len() {
-        if pi < p_bytes.len() && p_bytes[pi] == t_bytes[ti] {
-            pi += 1;
-            ti += 1;
-        } else if pi < p_bytes.len() && p_bytes[pi] == b'*' {
-            star_idx = Some(pi);
-            match_idx = ti;
-            pi += 1;
-        } else if let Some(star_pos) = star_idx {
-            pi = star_pos + 1;
-            match_idx += 1;
-            ti = match_idx;
-        } else {
-            return false;
-        }
-    }
-
-    while pi < p_bytes.len() && p_bytes[pi] == b'*' {
-        pi += 1;
-    }
-
-    pi == p_bytes.len()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{RetainedFiles, wildcard_match};
+    use super::RetainedFiles;
     use emwin_protocol::ingest::ProductOrigin;
     use std::time::{Duration, SystemTime};
-
-    #[test]
-    fn wildcard_patterns_match_case_insensitive() {
-        assert!(wildcard_match("*.TXT", "warn123.txt"));
-        assert!(wildcard_match("WARN*", "warn123.txt"));
-        assert!(wildcard_match("*orecast*", "FORecast_report.txt"));
-        assert!(!wildcard_match("*.ZIP", "warn123.txt"));
-    }
 
     #[test]
     fn retained_files_evict_by_capacity_and_ttl() {

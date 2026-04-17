@@ -24,6 +24,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
 use tracing::info;
 
+mod alerting;
 mod archive;
 mod connection;
 mod prepare;
@@ -37,6 +38,7 @@ static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 const INCIDENT_CHANGE_CHANNEL_CAPACITY: usize = 1024;
 pub const DEFAULT_MAX_DB_CONNECTIONS: u32 = 10;
+pub use alerting::AlertContactPointRecord;
 
 /// Connection settings for the Postgres/PostGIS metadata sink.
 #[derive(Debug, Clone)]

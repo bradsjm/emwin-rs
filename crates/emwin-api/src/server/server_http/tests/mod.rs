@@ -29,6 +29,7 @@ fn build_state(
         next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
         openapi_auth_token: token,
+        alerting_apprise_api_url: None,
         quiet: true,
     })
 }

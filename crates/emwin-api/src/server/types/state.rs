@@ -1,4 +1,5 @@
 use super::payloads::{EventKind, IncidentEventPayload, TelemetryPayload};
+use emwin_db::PostgresMetadataSink;
 use emwin_service::{
     CompletedFileMetadata, IncidentBroadcastEvent as ServiceIncidentBroadcastEvent,
     IncidentChangeStream, LiveBroadcastEvent, LiveEventService, LiveStatsSnapshot, RetainedFile,
@@ -27,6 +28,7 @@ pub(crate) type SharedLiveService = Arc<dyn LiveEventService>;
 pub(crate) type SharedRetainedFileService = Arc<dyn RetainedFileService>;
 pub(crate) type SharedArchiveQueryService = Arc<dyn emwin_service::ArchiveQueryService>;
 pub(crate) type SharedIncidentChangeStream = Arc<dyn IncidentChangeStream>;
+pub(crate) type SharedAlertStore = Arc<PostgresMetadataSink>;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiArchiveStatus {
@@ -50,6 +52,7 @@ pub struct ApiServices {
     pub(crate) archive: SharedArchiveQueryService,
     pub(crate) incident_stream: SharedIncidentChangeStream,
     pub(crate) archive_status: SharedArchiveStatusService,
+    pub(crate) alert_store: Option<SharedAlertStore>,
 }
 
 struct LiveRuntimeArchiveStatusService {
@@ -72,6 +75,7 @@ impl ArchiveStatusService for LiveRuntimeArchiveStatusService {
 
 impl ApiServices {
     pub fn from_live_runtime(runtime: emwin_live::LiveRuntime) -> Self {
+        let alert_store = runtime.alert_store();
         let shared = Arc::new(runtime);
         Self {
             live: shared.clone(),
@@ -79,6 +83,7 @@ impl ApiServices {
             archive: shared.clone(),
             incident_stream: shared.clone(),
             archive_status: Arc::new(LiveRuntimeArchiveStatusService { runtime: shared }),
+            alert_store: alert_store.map(Arc::new),
         }
     }
 
@@ -115,6 +120,10 @@ impl ApiServices {
     pub(crate) fn archive_status_snapshot(&self) -> ApiArchiveStatus {
         self.archive_status.archive_status_snapshot()
     }
+
+    pub(crate) fn alert_store(&self) -> Option<&PostgresMetadataSink> {
+        self.alert_store.as_deref()
+    }
 }
 
 pub(crate) struct AppState {
@@ -127,6 +136,7 @@ pub(crate) struct AppState {
     pub(crate) next_event_id: AtomicU64,
     pub(crate) next_incident_event_id: AtomicU64,
     pub(crate) openapi_auth_token: Option<String>,
+    pub(crate) alerting_apprise_api_url: Option<String>,
     pub(crate) quiet: bool,
 }
 
@@ -143,6 +153,7 @@ pub struct HttpServerOptions {
     pub stats_interval_secs: u64,
     pub quiet: bool,
     pub openapi_auth_token: Option<String>,
+    pub alerting_apprise_api_url: Option<String>,
 }
 
 impl Drop for ClientGuard {

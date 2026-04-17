@@ -3,12 +3,21 @@
 //! Keeping these types in one place helps the HTTP layer, ingest loop, and retention code agree
 //! on stable payload shapes without circular dependencies.
 
+mod alerting;
 mod filters;
 mod payloads;
 mod query;
 mod state;
 mod urls;
 
+pub(crate) use alerting::{
+    AlertContactPointInputPayload, AlertContactPointPayload, AlertContactPointsResponse,
+    AlertDeliveriesResponse, AlertDeliveryAttemptPayload, AlertEventPayload,
+    AlertRuleEventsResponse, AlertRuleInputPayload, AlertRulePayload,
+    AlertRuleSimulationRequestPayload, AlertRuleSimulationWindowPayload, AlertRuleTargetPayload,
+    AlertRulesResponse, AlertSilenceInputPayload, AlertSilencePayload, AlertSilencesResponse,
+    AlertSimulationResultPayload, AlertSimulationSamplePayload, AlertTestResponse,
+};
 pub(crate) use filters::{EventFilter, IncidentEventFilter};
 #[cfg(test)]
 pub(crate) use payloads::TelemetryPayload;

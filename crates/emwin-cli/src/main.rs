@@ -97,6 +97,59 @@ enum Commands {
         /// Optional Bearer token required for versioned HTTP and SSE API routes.
         #[arg(long, env = "EMWIN_OPENAPI_AUTH_TOKEN")]
         openapi_auth_token: Option<String>,
+        /// Optional Apprise API base URL used by alerting contact-point test sends.
+        #[arg(long, env = "EMWIN_APPRISE_API_URL")]
+        alerting_apprise_api_url: Option<String>,
+    },
+    /// Run the alert worker against Postgres-backed alerting state.
+    AlertWorker {
+        /// Postgres metadata sink URL used for alerting state.
+        #[arg(long, env = "EMWIN_PERSIST_DATABASE_URL")]
+        database_url: String,
+        /// Optional Apprise API base URL, for example `http://127.0.0.1:8000`.
+        #[arg(long, env = "EMWIN_APPRISE_API_URL")]
+        apprise_api_url: Option<String>,
+        /// Maximum number of source events claimed per poll.
+        #[arg(long, env = "EMWIN_ALERT_SOURCE_BATCH_SIZE", default_value_t = 32)]
+        source_batch_size: i64,
+        /// Maximum number of delivery attempts claimed per poll.
+        #[arg(long, env = "EMWIN_ALERT_DELIVERY_BATCH_SIZE", default_value_t = 32)]
+        delivery_batch_size: i64,
+        /// Idle poll interval in seconds.
+        #[arg(long, env = "EMWIN_ALERT_IDLE_POLL_SECS", default_value_t = 2)]
+        idle_poll_secs: u64,
+        /// Source-event claim lease in seconds.
+        #[arg(
+            long,
+            env = "EMWIN_ALERT_SOURCE_CLAIM_LEASE_SECS",
+            default_value_t = 300,
+            value_parser = clap::value_parser!(u64).range(1..)
+        )]
+        source_claim_lease_secs: u64,
+        /// Delivery-attempt claim lease in seconds.
+        #[arg(
+            long,
+            env = "EMWIN_ALERT_DELIVERY_CLAIM_LEASE_SECS",
+            default_value_t = 300,
+            value_parser = clap::value_parser!(u64).range(1..)
+        )]
+        delivery_claim_lease_secs: u64,
+        /// Default outbound HTTP request timeout in seconds.
+        #[arg(
+            long,
+            env = "EMWIN_ALERT_HTTP_TIMEOUT_SECS",
+            default_value_t = 30,
+            value_parser = clap::value_parser!(u64).range(1..)
+        )]
+        http_timeout_secs: u64,
+        /// Maximum Postgres connections used by the worker.
+        #[arg(
+            long,
+            env = "EMWIN_MAX_DB_CONNECTIONS",
+            default_value_t = emwin_db::DEFAULT_MAX_DB_CONNECTIONS,
+            value_parser = clap::value_parser!(u32).range(1..)
+        )]
+        max_db_connections: u32,
     },
     /// Run low-latency EMWIN passthrough relay.
     Relay {
@@ -110,6 +163,7 @@ impl Commands {
         match self {
             Self::Query { .. } => "query",
             Self::Server { .. } => "server",
+            Self::AlertWorker { .. } => "alert-worker",
             Self::Relay { .. } => "relay",
         }
     }
@@ -162,6 +216,7 @@ async fn main() -> crate::error::CliResult<()> {
             persist_database_url,
             max_db_connections,
             openapi_auth_token,
+            alerting_apprise_api_url,
         } => {
             let live = emwin_live::LiveRuntime::start(emwin_live::LiveOptions {
                 username,
@@ -186,11 +241,58 @@ async fn main() -> crate::error::CliResult<()> {
                 stats_interval_secs,
                 quiet,
                 openapi_auth_token,
+                alerting_apprise_api_url,
             };
             let services = emwin_api::ApiServices::from_live_runtime(live);
             emwin_api::serve(options, services)
                 .await
                 .map_err(Into::into)
+        }
+        Commands::AlertWorker {
+            database_url,
+            apprise_api_url,
+            source_batch_size,
+            delivery_batch_size,
+            idle_poll_secs,
+            source_claim_lease_secs,
+            delivery_claim_lease_secs,
+            http_timeout_secs,
+            max_db_connections,
+        } => {
+            let mut config = emwin_db::PostgresConfig::new(database_url);
+            config.application_name = "emwin-alert-worker".to_string();
+            config.max_connections = max_db_connections;
+            let sink = emwin_db::PostgresMetadataSink::connect(config).await?;
+            let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+            let mut worker = tokio::spawn(emwin_alert::run_worker(
+                sink,
+                emwin_alert::AlertWorkerConfig {
+                    source_batch_size,
+                    delivery_batch_size,
+                    idle_poll_interval: std::time::Duration::from_secs(idle_poll_secs.max(1)),
+                    source_claim_lease: std::time::Duration::from_secs(source_claim_lease_secs),
+                    delivery_claim_lease: std::time::Duration::from_secs(delivery_claim_lease_secs),
+                    http_timeout: std::time::Duration::from_secs(http_timeout_secs),
+                    apprise_api_url,
+                },
+                shutdown_rx,
+            ));
+            tokio::select! {
+                result = &mut worker => match result {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(err)) => Err(crate::error::CliError::Runtime(err.to_string())),
+                    Err(err) => Err(crate::error::CliError::Runtime(err.to_string())),
+                },
+                signal = tokio::signal::ctrl_c() => {
+                    signal?;
+                    let _ = shutdown_tx.send(true);
+                    match worker.await {
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(err)) => Err(crate::error::CliError::Runtime(err.to_string())),
+                        Err(err) => Err(crate::error::CliError::Runtime(err.to_string())),
+                    }
+                }
+            }
         }
         Commands::Relay { options } => relay::runtime::run(options).await,
     }
@@ -476,6 +578,32 @@ mod tests {
         let relay = Cli::try_parse_from(["emwin", "relay", "--username", "test@example.com"])
             .expect("relay args should parse");
         assert!(matches!(relay.command, Commands::Relay { .. }));
+
+        let alert_worker = Cli::try_parse_from([
+            "emwin",
+            "alert-worker",
+            "--database-url",
+            "postgres://localhost/emwin",
+            "--source-claim-lease-secs",
+            "60",
+            "--delivery-claim-lease-secs",
+            "120",
+            "--http-timeout-secs",
+            "15",
+        ])
+        .expect("alert worker args should parse");
+        let Commands::AlertWorker {
+            source_claim_lease_secs,
+            delivery_claim_lease_secs,
+            http_timeout_secs,
+            ..
+        } = alert_worker.command
+        else {
+            panic!("expected alert-worker command");
+        };
+        assert_eq!(source_claim_lease_secs, 60);
+        assert_eq!(delivery_claim_lease_secs, 120);
+        assert_eq!(http_timeout_secs, 15);
     }
 
     #[test]
@@ -552,5 +680,26 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn alert_worker_rejects_zero_lease_and_timeout_values() {
+        for arg in [
+            "--source-claim-lease-secs",
+            "--delivery-claim-lease-secs",
+            "--http-timeout-secs",
+        ] {
+            assert!(
+                Cli::try_parse_from([
+                    "emwin",
+                    "alert-worker",
+                    "--database-url",
+                    "postgres://localhost/emwin",
+                    arg,
+                    "0",
+                ])
+                .is_err()
+            );
+        }
     }
 }

@@ -19,6 +19,7 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
         stats_interval_secs,
         quiet,
         openapi_auth_token,
+        alerting_apprise_api_url,
     } = options;
 
     if openapi_auth_token
@@ -44,6 +45,7 @@ pub async fn serve(options: HttpServerOptions, services: ApiServices) -> ApiResu
         next_event_id: AtomicU64::new(1),
         next_incident_event_id: AtomicU64::new(1),
         openapi_auth_token,
+        alerting_apprise_api_url,
         quiet,
     });
 

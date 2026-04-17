@@ -2,6 +2,10 @@ mod common;
 
 use chrono::{DateTime, Utc};
 use common::*;
+use emwin_service::{
+    AlertDeliveryStatus, AlertMatchCriteria, AlertRuleTarget, AlertTemplate, AlertTriggerPolicy,
+    FileFilterInput,
+};
 use sqlx::Row;
 
 #[tokio::test]
@@ -209,4 +213,233 @@ async fn postgres_sink_persists_object_store_blob_locations() {
     );
 
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
+}
+
+#[tokio::test]
+async fn alert_source_event_claims_are_recoverable_after_lease_expiry() {
+    let Some(sink) = connect_test_sink().await else {
+        return;
+    };
+    cleanup_alerting_rows(&sink, "source-lease").await;
+
+    let stale_id = insert_alert_source_event(
+        &sink,
+        "source-lease-stale",
+        Some(Utc::now() - chrono::Duration::minutes(10)),
+    )
+    .await;
+    let fresh_id = insert_alert_source_event(&sink, "source-lease-fresh", Some(Utc::now())).await;
+
+    let claimed = sink
+        .claim_pending_alert_source_events(10, chrono::Duration::minutes(5))
+        .await
+        .expect("source events should be claimable");
+    let claimed_ids = claimed.iter().map(|event| event.id).collect::<Vec<_>>();
+    assert!(claimed_ids.contains(&stale_id));
+    assert!(!claimed_ids.contains(&fresh_id));
+
+    let claimed_stale = claimed
+        .into_iter()
+        .find(|event| event.id == stale_id)
+        .expect("stale source event should have been claimed");
+    let claimed_at = claimed_stale
+        .claimed_at
+        .expect("claimed source event should include claim token");
+    assert!(
+        sink.mark_alert_source_event_processed(stale_id, claimed_at)
+            .await
+            .expect("source event finalization should succeed")
+    );
+
+    let stale_token_id = insert_alert_source_event(&sink, "source-lease-token", None).await;
+    let claimed_token_event = sink
+        .claim_pending_alert_source_events(10, chrono::Duration::minutes(5))
+        .await
+        .expect("source event should be claimable")
+        .into_iter()
+        .find(|event| event.id == stale_token_id)
+        .expect("token source event should be claimed");
+    let stale_claimed_at = claimed_token_event
+        .claimed_at
+        .expect("claimed source event should include claim token");
+    sqlx::query("UPDATE alerting.source_events SET claimed_at = now() WHERE id = $1")
+        .bind(stale_token_id)
+        .execute(&sink.pool())
+        .await
+        .expect("claim token update should succeed");
+    assert!(
+        !sink
+            .mark_alert_source_event_processed(stale_token_id, stale_claimed_at)
+            .await
+            .expect("stale source event finalization should be ignored")
+    );
+
+    cleanup_alerting_rows(&sink, "source-lease").await;
+}
+
+#[tokio::test]
+async fn delivery_claims_use_in_progress_leases_and_claim_tokens() {
+    let Some(sink) = connect_test_sink().await else {
+        return;
+    };
+    cleanup_alerting_rows(&sink, "delivery-lease").await;
+
+    let attempt_id = insert_alert_delivery_attempt(&sink, "delivery-lease").await;
+
+    let first_claim = sink
+        .claim_due_delivery_attempts(10, chrono::Duration::minutes(5))
+        .await
+        .expect("delivery attempt should be claimable");
+    assert_eq!(first_claim.len(), 1);
+    assert_eq!(first_claim[0].id, attempt_id);
+    assert_eq!(first_claim[0].status, AlertDeliveryStatus::InProgress);
+    let first_claimed_at = first_claim[0]
+        .claimed_at
+        .expect("claimed delivery should include claim token");
+
+    let second_claim = sink
+        .claim_due_delivery_attempts(10, chrono::Duration::minutes(5))
+        .await
+        .expect("fresh in-progress delivery should not be claimable");
+    assert!(second_claim.is_empty());
+
+    sqlx::query(
+        "UPDATE alerting.delivery_attempts
+         SET claimed_at = now() - interval '10 minutes'
+         WHERE id = $1",
+    )
+    .bind(attempt_id)
+    .execute(&sink.pool())
+    .await
+    .expect("delivery lease aging should succeed");
+
+    let reclaimed = sink
+        .claim_due_delivery_attempts(10, chrono::Duration::minutes(5))
+        .await
+        .expect("stale in-progress delivery should be reclaimable");
+    assert_eq!(reclaimed.len(), 1);
+    let second_claimed_at = reclaimed[0]
+        .claimed_at
+        .expect("reclaimed delivery should include claim token");
+    assert_ne!(first_claimed_at, second_claimed_at);
+
+    assert!(
+        !sink
+            .mark_delivery_attempt_delivered(attempt_id, first_claimed_at, 1, Some(204), Some("ok"))
+            .await
+            .expect("stale delivery finalization should be ignored")
+    );
+    assert!(
+        sink.mark_delivery_attempt_retry(
+            attempt_id,
+            second_claimed_at,
+            1,
+            Utc::now() + chrono::Duration::minutes(1),
+            Some(503),
+            Some("retry"),
+        )
+        .await
+        .expect("current delivery finalization should succeed")
+    );
+
+    let row =
+        sqlx::query("SELECT status, claimed_at FROM alerting.delivery_attempts WHERE id = $1")
+            .bind(attempt_id)
+            .fetch_one(&sink.pool())
+            .await
+            .expect("delivery attempt should exist");
+    assert_eq!(row.get::<String, _>("status"), "retry_pending");
+    assert!(row.get::<Option<DateTime<Utc>>, _>("claimed_at").is_none());
+
+    cleanup_alerting_rows(&sink, "delivery-lease").await;
+}
+
+async fn cleanup_alerting_rows(sink: &emwin_db::PostgresMetadataSink, prefix: &str) {
+    sqlx::query("DELETE FROM alerting.contact_points WHERE name LIKE $1")
+        .bind(format!("{prefix}%"))
+        .execute(&sink.pool())
+        .await
+        .expect("contact point cleanup should succeed");
+    sqlx::query("DELETE FROM alerting.source_events WHERE source_id LIKE $1")
+        .bind(format!("{prefix}%"))
+        .execute(&sink.pool())
+        .await
+        .expect("source event cleanup should succeed");
+}
+
+async fn insert_alert_source_event(
+    sink: &emwin_db::PostgresMetadataSink,
+    source_id: &str,
+    claimed_at: Option<DateTime<Utc>>,
+) -> i64 {
+    sqlx::query(
+        "INSERT INTO alerting.source_events (
+            source_kind, source_id, payload_json, source_timestamp, claimed_at
+         ) VALUES ('incident_change', $1, $2, now(), $3)
+         RETURNING id",
+    )
+    .bind(source_id)
+    .bind(serde_json::json!({ "test": true }))
+    .bind(claimed_at)
+    .fetch_one(&sink.pool())
+    .await
+    .expect("source event insert should succeed")
+    .get("id")
+}
+
+async fn insert_alert_delivery_attempt(sink: &emwin_db::PostgresMetadataSink, prefix: &str) -> i64 {
+    let source_event_id = insert_alert_source_event(sink, &format!("{prefix}-source"), None).await;
+    let contact_point = sink
+        .create_alert_contact_point(emwin_service::AlertContactPointInput {
+            name: format!("{prefix}-contact"),
+            enabled: true,
+            config: emwin_service::AlertContactPointConfig::Webhook {
+                url: "http://127.0.0.1/hook".to_string(),
+                authorization_header: None,
+                signing_secret: None,
+                timeout_secs: None,
+            },
+        })
+        .await
+        .expect("contact point should be created");
+    let rule = sink
+        .create_alert_rule(emwin_service::AlertRuleInput {
+            name: format!("{prefix}-rule"),
+            enabled: true,
+            criteria: AlertMatchCriteria::ProductAvailable(Box::<FileFilterInput>::default()),
+            trigger_policy: AlertTriggerPolicy {
+                cooldown_secs: 0,
+                severity: None,
+            },
+            template: AlertTemplate {
+                title: "test".to_string(),
+                body: "test".to_string(),
+            },
+            targets: vec![AlertRuleTarget {
+                contact_point_id: contact_point.id,
+                position: 0,
+            }],
+        })
+        .await
+        .expect("rule should be created");
+    let event = sink
+        .insert_alert_event_with_attempts(
+            &rule,
+            source_event_id,
+            &format!("{prefix}-delivery-key"),
+            "test",
+            "test",
+            serde_json::json!({ "test": true }),
+        )
+        .await
+        .expect("alert event should be inserted")
+        .expect("alert event should be new");
+
+    sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM alerting.delivery_attempts WHERE alert_event_id = $1",
+    )
+    .bind(event.id)
+    .fetch_one(&sink.pool())
+    .await
+    .expect("delivery attempt should exist")
 }

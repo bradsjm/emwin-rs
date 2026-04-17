@@ -10,6 +10,7 @@ homepage.workspace = true
 
 [dependencies]
 emwin-api = { path = "../emwin-api" }
+emwin-alert = { path = "../emwin-alert" }
 emwin-live = { path = "../emwin-live" }
 emwin-protocol = { path = "../emwin-protocol", default-features = false, features = ["qbt", "wxwire", "telemetry-serde"] }
 emwin-db = { path = "../emwin-db" }

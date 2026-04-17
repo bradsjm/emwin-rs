@@ -59,7 +59,9 @@ mod writer;
 
 pub use error::{PersistError, PersistResult};
 pub use metadata::{CompletedFileMetadata, build_completed_file_metadata};
-pub use postgres::{DEFAULT_MAX_DB_CONNECTIONS, PostgresConfig, PostgresMetadataSink};
+pub use postgres::{
+    AlertContactPointRecord, DEFAULT_MAX_DB_CONNECTIONS, PostgresConfig, PostgresMetadataSink,
+};
 pub use runtime::{
     EnqueueResult, MetadataSink, NoopMetadataSink, PersistRequest, PersistedRequest,
     PersistenceConfig, PersistenceProducer, PersistenceRuntime, PersistenceStats,

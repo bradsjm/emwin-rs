@@ -1,5 +1,6 @@
 use super::super::types::{AppState, ArchiveFilterParams, ArchiveStatus};
 use axum::http::StatusCode;
+use emwin_db::{PersistError, PostgresMetadataSink};
 use emwin_service::ServiceError;
 use std::sync::Arc;
 
@@ -39,6 +40,17 @@ pub(super) fn archive_service(
     Ok(state.services.archive.as_ref())
 }
 
+pub(super) fn alert_store(
+    state: &Arc<AppState>,
+) -> Result<&PostgresMetadataSink, (StatusCode, String)> {
+    state.services.alert_store().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "alerting requires Postgres-backed archive persistence".to_string(),
+        )
+    })
+}
+
 pub(super) fn normalize_incident_key(
     office: String,
     phenomena: String,
@@ -60,6 +72,18 @@ pub(super) fn map_archive_error(err: ServiceError) -> (StatusCode, String) {
         }
         ServiceError::NotConfigured(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
         ServiceError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+            (StatusCode::NOT_FOUND, io.to_string())
+        }
+        other => (StatusCode::BAD_GATEWAY, other.to_string()),
+    }
+}
+
+pub(super) fn map_alert_error(err: PersistError) -> (StatusCode, String) {
+    match err {
+        PersistError::InvalidRequest(message) | PersistError::InvalidConfig(message) => {
+            (StatusCode::BAD_REQUEST, message)
+        }
+        PersistError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
             (StatusCode::NOT_FOUND, io.to_string())
         }
         other => (StatusCode::BAD_GATEWAY, other.to_string()),

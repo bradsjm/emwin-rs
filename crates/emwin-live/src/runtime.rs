@@ -274,6 +274,10 @@ impl LiveRuntime {
         self.inner.state.archive.is_some()
     }
 
+    pub fn alert_store(&self) -> Option<emwin_db::PostgresMetadataSink> {
+        self.inner.state.archive.clone()
+    }
+
     pub fn archive_errors_total(&self) -> u64 {
         self.inner
             .state

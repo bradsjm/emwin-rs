@@ -1,9 +1,18 @@
+pub mod alerting;
 pub mod archive;
 mod archive_filter_fields;
 pub mod error;
+pub mod filter;
 pub mod live;
 pub mod metadata;
 
+pub use alerting::{
+    AlertContactPoint, AlertContactPointConfig, AlertContactPointConfigView,
+    AlertContactPointInput, AlertContactPointKind, AlertDeliveryAttempt, AlertDeliveryStatus,
+    AlertEvent, AlertMatchCriteria, AlertRule, AlertRuleInput, AlertRuleTarget, AlertSilence,
+    AlertSilenceInput, AlertSimulationRequest, AlertSimulationResult, AlertSimulationSample,
+    AlertSourceEvent, AlertSourceKind, AlertTemplate, AlertTriggerPolicy, IncidentFilterInput,
+};
 pub use archive::{
     AggregateCompleteness, ArchiveFilterInput, ArchiveQueryService, ArchivedFeature, ArchivedIssue,
     ArchivedIssueCursor, ArchivedIssueListQuery, ArchivedPayload, ArchivedProductDetail,
@@ -18,6 +27,7 @@ pub use archive::{
     build_timeseries_aggregate_query, parse_archive_bool,
 };
 pub use error::{ServiceError, ServiceResult};
+pub use filter::{FileEventFilter, FileFilterInput, FileFilterInputError};
 pub use live::{
     IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveEventService, LiveStatsSnapshot,
     LiveTelemetry, PersistenceStats, ReceiverFrame, RetainedFile, RetainedFileService, SourceKind,

@@ -19,6 +19,13 @@ impl MetadataSink<CompletedFileMetadata> for PostgresMetadataSink {
                 let product_id = write::upsert_product(&mut tx, &prepared).await?;
                 let incident_changes =
                     write::replace_children(&mut tx, product_id, &prepared).await?;
+                write::insert_product_source_event(&mut tx, product_id, &request.metadata).await?;
+                write::insert_incident_source_events(
+                    &mut tx,
+                    &incident_changes,
+                    IncidentChangeTrigger::Persist,
+                )
+                .await?;
                 tx.commit().await?;
                 query::load_incident_changes(
                     &pool,

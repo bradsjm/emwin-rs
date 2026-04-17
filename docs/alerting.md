@@ -1,8 +1,24 @@
 # Alerting System Design
 
+## Implementation Status
+
+Backend V1 is now implemented in the workspace:
+
+- `crates/emwin-alert` provides the worker runtime, templating, webhook delivery, Apprise delivery, and retry handling
+- `crates/emwin-db` owns the `alerting` schema, durable source events, rule/contact-point/silence storage, simulation, and delivery-attempt state
+- `crates/emwin-api` exposes `/v1/alerting/*` CRUD, simulation, audit, and contact-point test endpoints
+- `crates/emwin-cli` exposes `alert-worker` and server-side `--alerting-apprise-api-url`
+
+Current V1 limits:
+
+- rule phases are `fire` only
+- incident simulation is live-forward only from retained `alerting.source_events`
+- contact-point test sends for Apprise require the server process to know the Apprise API base URL
+- MCP and a UI remain out of scope
+
 ## Purpose
 
-This document defines the proposed alerting subsystem for `emwin-rs`.
+This document defines the alerting subsystem for `emwin-rs`.
 
 The goal is to let operators define weather-driven alert rules that trigger notifications to external endpoints when incoming EMWIN-derived product or incident data matches configured criteria.
 
@@ -149,6 +165,9 @@ Recommended production topology:
 - Postgres
 
 The alert worker may be horizontally scaled if queue-claiming is implemented correctly.
+Source events and delivery attempts use lease-based claims, so crashed workers do not permanently strand rows.
+Delivery attempts move through `in_progress` while a worker owns them and become claimable again only after the delivery lease expires.
+Outbound webhook and Apprise calls use a default HTTP timeout; webhook contact points may override it with `timeout_secs`.
 
 If MCP is added, it should not run inside the alert worker.
 It belongs on the control plane, not the delivery plane.
@@ -168,7 +187,7 @@ The alert worker consumes these rows.
 
 ### 2. Rule Evaluation
 
-The worker selects unprocessed source events, loads enabled rules for the matching source kind, and evaluates them against the normalized event payload.
+The worker selects unprocessed source events whose claim lease is available, loads enabled rules for the matching source kind, and evaluates them against the normalized event payload.
 
 ### 3. Silence and Dedupe
 
@@ -185,6 +204,9 @@ Each surviving match becomes one logical alert event with:
 - a dedupe key
 - rendered payload snapshot
 - severity and labels
+
+Product alert delivery keys are stable for the product source identity.
+Incident alert delivery keys include the durable source event id so repeated updates for the same incident/action are not discarded by the delivery-key uniqueness constraint after cooldown expires.
 
 ### 5. Delivery Attempt Creation
 
@@ -605,6 +627,7 @@ The alerting API belongs under `/v1/alerting`.
 
 - `GET /v1/alerting/rules`
 - `POST /v1/alerting/rules`
+- `POST /v1/alerting/rules/simulate`
 - `GET /v1/alerting/rules/{id}`
 - `PATCH /v1/alerting/rules/{id}`
 - `DELETE /v1/alerting/rules/{id}`
@@ -620,6 +643,13 @@ The alerting API belongs under `/v1/alerting`.
 - `GET /v1/alerting/silences`
 - `POST /v1/alerting/silences`
 - `DELETE /v1/alerting/silences/{id}`
+
+Operational notes:
+
+- `/v1/alerting/*` is available only when the server is running with Postgres-backed archive persistence
+- `POST /v1/alerting/contact-points/{id}/test` uses direct webhook delivery or Apprise delivery from the API process
+- Apprise test sends require `--alerting-apprise-api-url` or `EMWIN_APPRISE_API_URL` on `emwin-cli server`
+- persisted simulation rejects incident windows earlier than the first retained `incident_change` source event
 
 ## MCP Control Plane
 

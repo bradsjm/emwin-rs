@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/emwin-api",
+    "crates/emwin-alert",
     "crates/emwin-live",
     "crates/emwin-protocol",
     "crates/emwin-cli",
@@ -37,11 +38,18 @@ minidom = "0.18"
 object_store = { version = "0.13.2", features = ["aws", "http"] }
 quick-xml = { version = "0.39", features = ["serialize"] }
 regex = "1"
+reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
+reqwest-middleware = { version = "0.5.1", default-features = false, features = ["json", "rustls"] }
+reqwest-retry = "0.9.1"
 rustls-native-certs = "0.8"
+secrecy = "0.10.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
+sha2 = "0.10.9"
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls", "macros", "migrate", "chrono", "json"] }
+minijinja = "2.19.0"
+hmac = "0.12.1"
 thiserror = "2"
 time = { version = "0.3.47", features = ["parsing", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
@@ -56,6 +64,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 url = "2"
+wiremock = "0.6.5"
 winnow = "0.7"
 xmpp-parsers = "0.22"
 zip = { version = "8", default-features = false, features = ["deflate"] }

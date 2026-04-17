@@ -1,5 +1,4 @@
-use emwin_live::FileFilterInput;
-use emwin_service::ArchiveFilterInput;
+use emwin_service::{ArchiveFilterInput, FileFilterInput};
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
@@ -231,11 +230,11 @@ macro_rules! build_file_filter_input_from_events_query {
     };
 }
 
-emwin_live::emwin_file_filter_fields!(define_events_query);
+emwin_service::emwin_file_filter_fields!(define_events_query);
 
 impl From<EventsQuery> for FileFilterInput {
     fn from(query: EventsQuery) -> Self {
-        emwin_live::emwin_file_filter_fields!(build_file_filter_input_from_events_query, query)
+        emwin_service::emwin_file_filter_fields!(build_file_filter_input_from_events_query, query)
     }
 }
 

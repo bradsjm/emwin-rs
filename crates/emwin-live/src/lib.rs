@@ -15,7 +15,6 @@ mod default_servers;
 mod error;
 mod events;
 mod file_pipeline;
-pub mod filter;
 mod ingest;
 mod persistence;
 mod retained;
@@ -24,10 +23,9 @@ mod shared;
 mod types;
 
 pub use emwin_service::{
-    IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveStatsSnapshot, LiveTelemetry,
-    RetainedFile, SourceKind,
+    FileEventFilter, FileFilterInput, FileFilterInputError, IncidentBroadcastEvent,
+    LiveBroadcastEvent, LiveEventKind, LiveStatsSnapshot, LiveTelemetry, RetainedFile, SourceKind,
 };
 pub use error::{LiveError, LiveResult};
-pub use filter::{FileEventFilter, FileFilterInput, FileFilterInputError};
 pub use runtime::LiveRuntime;
 pub use types::{LiveOptions, ReceiverKind};

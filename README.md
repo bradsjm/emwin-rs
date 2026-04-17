@@ -160,6 +160,7 @@ Useful server flags:
 - `--max-retained-files 1000` (in-memory completed-file capacity)
 - `--max-db-connections 10` (Postgres pool size for archive reads and persistence writes)
 - `--openapi-auth-token "secret-token"` (require `Authorization: Bearer <token>` on `/v1/*`)
+- `--alerting-apprise-api-url "http://127.0.0.1:8000"` (used by `POST /v1/alerting/contact-points/{id}/test` for Apprise targets)
 - `--cors-origin "*"` or `--cors-origin "https://your-ui.example"` (cross-origin browser clients can send `Authorization` when bearer auth is enabled)
 
 Server endpoints:
@@ -181,6 +182,9 @@ Server endpoints:
 - `GET /v1/issues/{issue_id}` - archived issue detail
 - `GET /v1/streams/products?event=product_available&lat=41.42&lon=-96.17&distance_miles=5` - SSE product stream with parsed metadata and spatial filters
 - `GET /v1/streams/incidents?action=created,updated&office=KOAX&phenomena=FF&significance=W&etn=2001&status=active` - SSE stream of persisted incident projection changes with incident-native filters
+- `GET|POST /v1/alerting/contact-points`, `GET|PATCH|DELETE /v1/alerting/contact-points/{id}`, `POST /v1/alerting/contact-points/{id}/test` - contact-point CRUD and test delivery
+- `GET|POST /v1/alerting/rules`, `GET|PATCH|DELETE /v1/alerting/rules/{id}`, `POST /v1/alerting/rules/simulate`, `POST /v1/alerting/rules/{id}/simulate`, `GET /v1/alerting/rules/{id}/events` - rule CRUD, simulation, and audit
+- `GET /v1/alerting/deliveries`, `GET|POST /v1/alerting/silences`, `DELETE /v1/alerting/silences/{id}` - delivery audit and silence management
 - `GET /v1/files` - retained completed-file payloads using the same shape as `product_available` events, including parsed `product` metadata and `download_url`
 - `GET /v1/files/{*filename}` - retained file download (URL-encoded path segment)
 - `GET /v1/health` - server health summary
@@ -195,8 +199,11 @@ Authentication notes:
 Archive/incident notes:
 
 - `/v1/incidents`, `/v1/products/*`, and `/v1/issues/*` require `--persist-database-url`; they return `503` when Postgres-backed archive metadata is not configured.
+- `/v1/alerting/*` also requires `--persist-database-url`; the control plane is backed by the same Postgres deployment.
 - `/v1/incidents` exposes the mutable incident projection from the `incidents` table; `/v1/products/*` exposes persisted product records and raw payload retrieval.
 - `/v1/products`, `/v1/features`, and `/v1/aggregates/*` share the archive filter grammar, including `artifact_kind`.
+- Incident alert simulations only use retained `alerting.source_events`; requests earlier than the first retained incident source event are rejected instead of fabricating history.
+- `POST /v1/alerting/contact-points/{id}/test` can send Apprise tests only when `--alerting-apprise-api-url` or `EMWIN_APPRISE_API_URL` is configured on the server process.
 - Archive resource endpoints accept flat query parameters such as `office=MKX`, `lat=41.42`, and `source_timestamp_after=1775586000`; nested forms such as `filters.office=...` and `filters[office]=...` are rejected with `400`.
 - `/v1/streams/incidents` also requires `--persist-database-url`; it emits `incident_change` SSE frames only after incident projection writes or cleanup updates succeed in Postgres.
 - `/v1/streams/products` and `/v1/streams/incidents` are incremental streams, not durable replay logs.
@@ -261,7 +268,15 @@ Environment and `.env` support:
 
 - `.env` from the current working directory is loaded before CLI parsing.
 - CLI args override process env; process env overrides `.env`.
-- Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_OPENAPI_AUTH_TOKEN`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
+- Useful variables include `EMWIN_RECEIVER`, `EMWIN_USERNAME`, `EMWIN_PASSWORD`, `EMWIN_SERVER`, `EMWIN_SERVER_LIST_PATH`, `EMWIN_OUTPUT_DIR`, `EMWIN_PERSIST_DATABASE_URL`, `EMWIN_OPENAPI_AUTH_TOKEN`, `EMWIN_APPRISE_API_URL`, `EMWIN_ALERT_SOURCE_BATCH_SIZE`, `EMWIN_ALERT_DELIVERY_BATCH_SIZE`, `EMWIN_ALERT_IDLE_POLL_SECS`, `EMWIN_ALERT_SOURCE_CLAIM_LEASE_SECS`, `EMWIN_ALERT_DELIVERY_CLAIM_LEASE_SECS`, `EMWIN_ALERT_HTTP_TIMEOUT_SECS`, `EMWIN_MAX_EVENTS`, `EMWIN_IDLE_TIMEOUT_SECS`, `EMWIN_BIND`, `EMWIN_CORS_ORIGIN`, `EMWIN_MAX_CLIENTS`, `EMWIN_STATS_INTERVAL_SECS`, `EMWIN_FILE_RETENTION_SECS`, `EMWIN_MAX_RETAINED_FILES`, `EMWIN_QUIET`, `EMWIN_TEXT_PREVIEW_CHARS`, and `EMWIN_POST_PROCESS_ARCHIVES`.
+
+Alert worker mode:
+
+```bash
+cargo run -p emwin-cli -- alert-worker --database-url postgres://localhost/emwin
+cargo run -p emwin-cli -- alert-worker --database-url postgres://localhost/emwin --apprise-api-url http://127.0.0.1:8000
+cargo run -p emwin-cli -- alert-worker --database-url postgres://localhost/emwin --source-claim-lease-secs 300 --delivery-claim-lease-secs 300 --http-timeout-secs 30
+```
 - `EMWIN_MAX_DB_CONNECTIONS` overrides the default Postgres pool size used by `server` when archive persistence is enabled.
 - `query` uses `EMWIN_DATABASE_URL` for direct archive reads from Postgres-backed metadata.
 - When `EMWIN_OUTPUT_DIR` uses an object-store URL such as `s3://bucket/prefix` or `https://example.com/path`, `emwin-db` builds the backend through `object_store` using environment variables for that scheme. S3-compatible targets still use the AWS environment variables shown above. The target must already exist; automatic bucket/container creation is no longer attempted.

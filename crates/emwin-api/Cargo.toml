@@ -9,6 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+emwin-alert = { path = "../emwin-alert" }
+emwin-db = { path = "../emwin-db" }
 emwin-live = { path = "../emwin-live" }
 emwin-service = { path = "../emwin-service" }
 chrono.workspace = true
@@ -30,7 +32,6 @@ utoipa-swagger-ui.workspace = true
 workspace = true
 
 [dev-dependencies]
-emwin-db = { path = "../emwin-db" }
 sqlx.workspace = true
 tempfile = "3"
 tower.workspace = true

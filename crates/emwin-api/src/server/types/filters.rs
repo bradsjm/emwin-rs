@@ -1,7 +1,7 @@
 use super::payloads::{EventKind, IncidentEventPayload};
 use super::query::{EventsQuery, IncidentEventsQuery};
-use emwin_live::{FileEventFilter, FileFilterInput};
 use emwin_service::IncidentChangeAction;
+use emwin_service::{FileEventFilter, FileFilterInput};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

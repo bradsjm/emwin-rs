@@ -2,6 +2,7 @@
 //!
 //! Router wiring stays here; feature handlers live in focused submodules.
 
+pub(super) mod alerting;
 pub(super) mod archive;
 mod auth;
 pub(super) mod operational;
@@ -48,6 +49,54 @@ pub(super) fn build_router(state: Arc<AppState>, cors: tower_http::cors::CorsLay
         )
         .route("/streams/incidents", get(streams::incident_events_handler))
         .route("/streams/products", get(streams::events_handler))
+        .route(
+            "/alerting/contact-points",
+            get(alerting::list_contact_points_handler).post(alerting::create_contact_point_handler),
+        )
+        .route(
+            "/alerting/contact-points/{id}",
+            get(alerting::get_contact_point_handler)
+                .patch(alerting::update_contact_point_handler)
+                .delete(alerting::delete_contact_point_handler),
+        )
+        .route(
+            "/alerting/contact-points/{id}/test",
+            axum::routing::post(alerting::test_contact_point_handler),
+        )
+        .route(
+            "/alerting/rules",
+            get(alerting::list_rules_handler).post(alerting::create_rule_handler),
+        )
+        .route(
+            "/alerting/rules/simulate",
+            axum::routing::post(alerting::simulate_rule_handler),
+        )
+        .route(
+            "/alerting/rules/{id}",
+            get(alerting::get_rule_handler)
+                .patch(alerting::update_rule_handler)
+                .delete(alerting::delete_rule_handler),
+        )
+        .route(
+            "/alerting/rules/{id}/simulate",
+            axum::routing::post(alerting::simulate_persisted_rule_handler),
+        )
+        .route(
+            "/alerting/rules/{id}/events",
+            get(alerting::list_rule_events_handler),
+        )
+        .route(
+            "/alerting/deliveries",
+            get(alerting::list_deliveries_handler),
+        )
+        .route(
+            "/alerting/silences",
+            get(alerting::list_silences_handler).post(alerting::create_silence_handler),
+        )
+        .route(
+            "/alerting/silences/{id}",
+            axum::routing::delete(alerting::delete_silence_handler),
+        )
         .route("/files", get(operational::files_handler))
         .route(
             "/files/{*filename}",
