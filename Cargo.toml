@@ -71,6 +71,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+missing_docs = "warn"
 
 [profile.dist]
 inherits = "release"
