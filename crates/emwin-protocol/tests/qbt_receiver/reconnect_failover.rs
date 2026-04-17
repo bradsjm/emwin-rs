@@ -5,13 +5,13 @@ use emwin_protocol::qbt_receiver::{
     QbtDecodeConfig, QbtReceiver, QbtReceiverClient, QbtReceiverConfig, QbtReceiverError,
     QbtReceiverEvent, calculate_qbt_checksum,
 };
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
-use tokio::time::{Duration, Instant};
+use tokio::time::{Duration, advance};
 
 fn encoded_valid_data_frame() -> Vec<u8> {
     let body = [b'R'; 1024];
@@ -20,7 +20,7 @@ fn encoded_valid_data_frame() -> Vec<u8> {
     build_frame(header, &body)
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn watchdog_timeout_reconnects_without_termination() {
     let listener_a = TcpListener::bind("127.0.0.1:0")
         .await
@@ -103,28 +103,20 @@ async fn watchdog_timeout_reconnects_without_termination() {
     client.start().expect("client should start");
     let mut events = client.events().expect("events should be available");
 
-    let deadline = Instant::now() + Duration::from_secs(8);
     let mut connected_events = 0u32;
     let mut watchdog_timeout_errors = 0u32;
 
-    while Instant::now() < deadline {
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+        drain_receiver_events(
+            &mut events,
+            &mut connected_events,
+            &mut watchdog_timeout_errors,
+        );
         if connected_events >= 2 && watchdog_timeout_errors >= 1 {
             break;
         }
-
-        match tokio::time::timeout(Duration::from_millis(300), events.next()).await {
-            Ok(Some(Ok(QbtReceiverEvent::Connected(_)))) => {
-                connected_events = connected_events.saturating_add(1);
-            }
-            Ok(Some(Err(QbtReceiverError::Lifecycle(message))))
-                if message == "watchdog timeout" =>
-            {
-                watchdog_timeout_errors = watchdog_timeout_errors.saturating_add(1);
-            }
-            Ok(Some(_)) => {}
-            Ok(None) => break,
-            Err(_) => {}
-        }
+        advance(Duration::from_secs(1)).await;
     }
 
     shutdown_tx
@@ -149,7 +141,7 @@ async fn watchdog_timeout_reconnects_without_termination() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn failed_endpoint_rotates_to_next_server_without_waiting_for_full_delay() {
     let failed_listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -198,19 +190,15 @@ async fn failed_endpoint_rotates_to_next_server_without_waiting_for_full_delay()
 
     client.start().expect("client should start");
     let mut events = client.events().expect("events should be available");
-    let started = Instant::now();
     let mut connected_endpoint = None;
 
-    while started.elapsed() < Duration::from_secs(3) {
-        match tokio::time::timeout(Duration::from_millis(300), events.next()).await {
-            Ok(Some(Ok(QbtReceiverEvent::Connected(endpoint)))) => {
-                connected_endpoint = Some(endpoint);
-                break;
-            }
-            Ok(Some(_)) => {}
-            Ok(None) => break,
-            Err(_) => {}
+    for _ in 0..30 {
+        tokio::task::yield_now().await;
+        if let Some(endpoint) = drain_connected_endpoint(&mut events) {
+            connected_endpoint = Some(endpoint);
+            break;
         }
+        advance(Duration::from_millis(100)).await;
     }
 
     drop(events);
@@ -219,8 +207,39 @@ async fn failed_endpoint_rotates_to_next_server_without_waiting_for_full_delay()
     let expected = format!("127.0.0.1:{}", address_ok.port());
 
     assert_eq!(connected_endpoint.as_deref(), Some(expected.as_str()),);
-    assert!(
-        started.elapsed() < Duration::from_secs(3),
-        "rotation to the next endpoint should happen before the full reconnect delay"
-    );
+}
+
+fn drain_receiver_events(
+    events: &mut (impl futures::Stream<Item = Result<QbtReceiverEvent, QbtReceiverError>> + Unpin),
+    connected_events: &mut u32,
+    watchdog_timeout_errors: &mut u32,
+) {
+    loop {
+        match events.next().now_or_never() {
+            Some(Some(Ok(QbtReceiverEvent::Connected(_)))) => {
+                *connected_events = connected_events.saturating_add(1);
+            }
+            Some(Some(Err(QbtReceiverError::Lifecycle(message))))
+                if message == "watchdog timeout" =>
+            {
+                *watchdog_timeout_errors = watchdog_timeout_errors.saturating_add(1);
+            }
+            Some(Some(_)) => {}
+            Some(None) | None => break,
+        }
+    }
+}
+
+fn drain_connected_endpoint(
+    events: &mut (impl futures::Stream<Item = Result<QbtReceiverEvent, QbtReceiverError>> + Unpin),
+) -> Option<String> {
+    loop {
+        match events.next().now_or_never() {
+            Some(Some(Ok(QbtReceiverEvent::Connected(endpoint)))) => {
+                return Some(endpoint);
+            }
+            Some(Some(_)) => {}
+            Some(None) | None => return None,
+        }
+    }
 }

@@ -9,13 +9,9 @@ async fn archived_issue_queries_return_list_and_detail() {
         return;
     };
 
-    let metadata = sample_metadata();
-    let incident_key = TestIncidentKey {
-        office: "KOAX",
-        phenomena: "FF",
-        significance: "W",
-        etn: 1,
-    };
+    let sample = sample_case();
+    let metadata = sample.metadata;
+    let incident_key = sample.incident_key;
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
     let product_id = persist_metadata(&sink, metadata.clone()).await;

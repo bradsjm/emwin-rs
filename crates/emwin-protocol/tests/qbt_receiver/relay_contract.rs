@@ -12,6 +12,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, watch};
 
+const IO_TIMEOUT: Duration = Duration::from_secs(1);
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
 struct UpstreamHarness {
     addr: SocketAddr,
     send_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -28,7 +31,7 @@ impl UpstreamHarness {
         let (ready_tx, ready_rx) = oneshot::channel();
 
         tokio::spawn(async move {
-            let accept = tokio::time::timeout(Duration::from_secs(8), listener.accept()).await;
+            let accept = tokio::time::timeout(IO_TIMEOUT, listener.accept()).await;
             let Ok(Ok((mut stream, _peer))) = accept else {
                 return;
             };
@@ -66,7 +69,7 @@ impl UpstreamHarness {
 
     async fn wait_ready(&mut self) {
         if let Some(ready_rx) = self.ready_rx.take() {
-            let _ = tokio::time::timeout(Duration::from_secs(8), ready_rx).await;
+            let _ = tokio::time::timeout(IO_TIMEOUT, ready_rx).await;
         }
     }
 }
@@ -82,7 +85,7 @@ impl RelayHarness {
     async fn start(
         upstream: SocketAddr,
         max_clients: usize,
-        auth_timeout_secs: u64,
+        auth_timeout: Duration,
         client_buffer_bytes: usize,
     ) -> Self {
         let relay_addr = free_addr().await;
@@ -91,10 +94,10 @@ impl RelayHarness {
             upstream_servers: vec![("127.0.0.1".to_string(), upstream.port())],
             bind_addr: relay_addr,
             max_clients,
-            auth_timeout: Duration::from_secs(auth_timeout_secs),
+            auth_timeout,
             client_buffer_bytes,
-            reconnect_delay: Duration::from_secs(1),
-            connect_timeout: Duration::from_secs(1),
+            reconnect_delay: Duration::from_millis(100),
+            connect_timeout: Duration::from_millis(100),
             quality_window_secs: 60,
             quality_pause_threshold: 0.95,
             metrics_log_interval: Duration::from_secs(30),
@@ -108,13 +111,13 @@ impl RelayHarness {
         let join =
             tokio::spawn(async move { run_qbt_relay(config, runtime_state, shutdown_rx).await });
 
-        wait_for_port(relay_addr, Duration::from_secs(8)).await;
+        wait_for_port(relay_addr, IO_TIMEOUT).await;
         let readiness_probe = TcpStream::connect(relay_addr)
             .await
             .expect("connect readiness probe");
-        wait_for_active_clients(Arc::clone(&state), 1, Duration::from_secs(5)).await;
+        wait_for_active_clients(Arc::clone(&state), 1, IO_TIMEOUT).await;
         drop(readiness_probe);
-        wait_for_active_clients(Arc::clone(&state), 0, Duration::from_secs(5)).await;
+        wait_for_active_clients(Arc::clone(&state), 0, IO_TIMEOUT).await;
 
         Self {
             addr: relay_addr,
@@ -134,7 +137,7 @@ impl RelayHarness {
 #[tokio::test]
 async fn disconnects_client_without_periodic_reauth() {
     let mut upstream = UpstreamHarness::start().await;
-    let relay = RelayHarness::start(upstream.addr, 10, 1, 65_536).await;
+    let relay = RelayHarness::start(upstream.addr, 10, Duration::from_millis(500), 65_536).await;
     upstream.wait_ready().await;
 
     let mut client = TcpStream::connect(relay.addr)
@@ -142,10 +145,8 @@ async fn disconnects_client_without_periodic_reauth() {
         .expect("connect relay client");
     send_auth(&mut client, "downstream@example.com").await;
 
-    tokio::time::sleep(Duration::from_secs(3)).await;
-
     let mut buf = [0_u8; 1];
-    let read = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf)).await;
+    let read = tokio::time::timeout(Duration::from_secs(2), client.read(&mut buf)).await;
     let n = read.expect("read timeout").expect("read failed");
     assert_eq!(n, 0, "client should be disconnected after reauth timeout");
 
@@ -155,14 +156,14 @@ async fn disconnects_client_without_periodic_reauth() {
 #[tokio::test]
 async fn over_capacity_client_gets_server_list_then_disconnects() {
     let mut upstream = UpstreamHarness::start().await;
-    let relay = RelayHarness::start(upstream.addr, 0, 720, 65_536).await;
+    let relay = RelayHarness::start(upstream.addr, 0, Duration::from_secs(1), 65_536).await;
     upstream.wait_ready().await;
 
     let mut first = TcpStream::connect(relay.addr)
         .await
         .expect("connect first client");
     send_auth(&mut first, "first@example.com").await;
-    wait_for_active_clients(Arc::clone(&relay.state), 1, Duration::from_secs(5)).await;
+    wait_for_active_clients(Arc::clone(&relay.state), 1, IO_TIMEOUT).await;
 
     let expected_server_list =
         build_server_list_wire(&[("127.0.0.1".to_string(), upstream.addr.port())]);
@@ -170,14 +171,14 @@ async fn over_capacity_client_gets_server_list_then_disconnects() {
         .await
         .expect("connect over-capacity client");
     let mut buf = vec![0_u8; 512];
-    let n = tokio::time::timeout(Duration::from_secs(5), second.read(&mut buf))
+    let n = tokio::time::timeout(IO_TIMEOUT, second.read(&mut buf))
         .await
         .expect("second client read timeout")
         .expect("second client read failed");
     assert!(n > 0, "second client should receive server list frame");
     assert_eq!(&buf[..n], &expected_server_list[..]);
 
-    let n2 = tokio::time::timeout(Duration::from_secs(5), second.read(&mut buf))
+    let n2 = tokio::time::timeout(IO_TIMEOUT, second.read(&mut buf))
         .await
         .expect("second disconnect read timeout")
         .expect("second disconnect read failed");
@@ -192,7 +193,7 @@ async fn over_capacity_client_gets_server_list_then_disconnects() {
 async fn slow_client_is_disconnected_when_buffer_budget_is_exceeded() {
     let mut upstream = UpstreamHarness::start().await;
     let send_tx = upstream.send_tx.clone();
-    let relay = RelayHarness::start(upstream.addr, 10, 720, 32).await;
+    let relay = RelayHarness::start(upstream.addr, 10, Duration::from_secs(1), 32).await;
     upstream.wait_ready().await;
 
     let mut client = TcpStream::connect(relay.addr)
@@ -205,10 +206,9 @@ async fn slow_client_is_disconnected_when_buffer_budget_is_exceeded() {
             .send(vec![0xAA; 128])
             .expect("send upstream payload to relay");
     }
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     let mut buf = [0_u8; 1];
-    let n = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf))
+    let n = tokio::time::timeout(IO_TIMEOUT, client.read(&mut buf))
         .await
         .expect("slow client disconnect timeout")
         .expect("slow client read failed");
@@ -220,7 +220,7 @@ async fn slow_client_is_disconnected_when_buffer_budget_is_exceeded() {
 #[tokio::test]
 async fn health_snapshot_reports_status_and_active_clients() {
     let mut upstream = UpstreamHarness::start().await;
-    let relay = RelayHarness::start(upstream.addr, 10, 720, 65_536).await;
+    let relay = RelayHarness::start(upstream.addr, 10, Duration::from_secs(1), 65_536).await;
     upstream.wait_ready().await;
 
     let initial = relay.state.health_snapshot();
@@ -233,13 +233,13 @@ async fn health_snapshot_reports_status_and_active_clients() {
         .expect("connect client for health test");
     send_auth(&mut client, "health@example.com").await;
 
-    wait_for_active_clients(Arc::clone(&relay.state), 1, Duration::from_secs(5)).await;
+    wait_for_active_clients(Arc::clone(&relay.state), 1, IO_TIMEOUT).await;
     let while_connected = relay.state.health_snapshot();
     assert_eq!(while_connected.status, "ok");
     assert_eq!(while_connected.downstream_active_clients, 1);
 
     drop(client);
-    wait_for_active_clients(Arc::clone(&relay.state), 0, Duration::from_secs(5)).await;
+    wait_for_active_clients(Arc::clone(&relay.state), 0, IO_TIMEOUT).await;
     let after_disconnect = relay.state.health_snapshot();
     assert_eq!(after_disconnect.status, "ok");
     assert_eq!(after_disconnect.downstream_active_clients, 0);
@@ -251,7 +251,7 @@ async fn health_snapshot_reports_status_and_active_clients() {
 async fn health_snapshot_reports_forwarding_paused_when_quality_drops() {
     let mut upstream = UpstreamHarness::start().await;
     let send_tx = upstream.send_tx.clone();
-    let relay = RelayHarness::start(upstream.addr, 10, 720, 16).await;
+    let relay = RelayHarness::start(upstream.addr, 10, Duration::from_secs(1), 16).await;
     upstream.wait_ready().await;
 
     let mut client = TcpStream::connect(relay.addr)
@@ -265,7 +265,7 @@ async fn health_snapshot_reports_forwarding_paused_when_quality_drops() {
             .expect("send upstream payload to relay");
     }
 
-    wait_for_forwarding_paused(Arc::clone(&relay.state), true, Duration::from_secs(5)).await;
+    wait_for_forwarding_paused(Arc::clone(&relay.state), true, IO_TIMEOUT).await;
     let paused = relay.state.health_snapshot();
     assert_eq!(paused.status, "ok");
     assert!(paused.forwarding_paused);
@@ -287,7 +287,7 @@ async fn wait_for_port(addr: SocketAddr, timeout: Duration) {
             return;
         }
         assert!(Instant::now() < deadline, "timed out waiting for {addr}");
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 
@@ -308,7 +308,7 @@ async fn wait_for_active_clients(state: Arc<QbtRelayState>, expected: u64, timeo
             Instant::now() < deadline,
             "timed out waiting for active clients {expected}, got {current}"
         );
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 
@@ -323,6 +323,6 @@ async fn wait_for_forwarding_paused(state: Arc<QbtRelayState>, expected: bool, t
             Instant::now() < deadline,
             "timed out waiting for forwarding_paused={expected}, got {current}"
         );
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }

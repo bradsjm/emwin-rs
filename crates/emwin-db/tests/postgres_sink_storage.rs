@@ -16,13 +16,9 @@ async fn archive_payload_reads_filesystem_backed_bytes() {
     std::fs::write(&payload_path, b"raw archive body").expect("payload write should succeed");
     std::fs::write(&sidecar_path, b"{}").expect("sidecar write should succeed");
 
-    let metadata = sample_metadata();
-    let incident_key = TestIncidentKey {
-        office: "KOAX",
-        phenomena: "FF",
-        significance: "W",
-        etn: 1,
-    };
+    let sample = sample_case();
+    let metadata = sample.metadata;
+    let incident_key = sample.incident_key;
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
     let product_id = persist_metadata_with_blobs(
@@ -83,13 +79,9 @@ async fn archive_payload_reads_file_url_backed_bytes() {
         .expect("sidecar write should succeed");
     assert!(payload_blob.location.starts_with("file://"));
 
-    let metadata = sample_metadata();
-    let incident_key = TestIncidentKey {
-        office: "KOAX",
-        phenomena: "FF",
-        significance: "W",
-        etn: 2,
-    };
+    let sample = sample_case();
+    let metadata = sample.metadata;
+    let incident_key = sample.incident_key;
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
     let product_id =

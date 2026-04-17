@@ -36,16 +36,14 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
         return;
     };
 
-    let metadata = sample_metadata();
-    let incident_key = TestIncidentKey {
-        office: "KOAX",
-        phenomena: "FF",
-        significance: "W",
-        etn: 1,
-    };
+    let sample = sample_case();
+    let metadata = sample.metadata;
+    let incident_key = sample.incident_key;
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
     let product_id = persist_metadata(&sink, metadata.clone()).await;
+    let (expected_payload_location, expected_metadata_location) =
+        sample_blob_locations(&metadata.filename);
 
     let row = sqlx::query(
         "SELECT id, source_receiver, source_message_id, ingested_at, payload_location, metadata_location, has_vtec, has_ugc, has_hvtec, has_latlon, has_time_mot_loc, has_wind_hail
@@ -63,13 +61,11 @@ async fn postgres_sink_bootstraps_and_persists_rows() {
     assert!(row.get::<DateTime<Utc>, _>("ingested_at") <= Utc::now());
     assert_eq!(
         row.get::<String, _>("payload_location"),
-        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
+        expected_payload_location
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),
-        Some(
-            "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON"
-        )
+        Some(expected_metadata_location.as_str())
     );
     assert!(row.get::<bool, _>("has_vtec"));
     assert!(row.get::<bool, _>("has_ugc"));
@@ -197,13 +193,9 @@ async fn postgres_sink_persists_object_store_blob_locations() {
         return;
     };
 
-    let metadata = sample_metadata();
-    let incident_key = TestIncidentKey {
-        office: "KOAX",
-        phenomena: "FF",
-        significance: "W",
-        etn: 1,
-    };
+    let sample = sample_case();
+    let metadata = sample.metadata;
+    let incident_key = sample.incident_key;
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;
 
     persist_metadata_with_blobs(
@@ -212,6 +204,8 @@ async fn postgres_sink_persists_object_store_blob_locations() {
         sample_object_store_blobs(&metadata.filename),
     )
     .await;
+    let (expected_payload_location, expected_metadata_location) =
+        sample_object_store_blob_locations(&metadata.filename);
 
     let row = sqlx::query(
         "SELECT payload_location, metadata_location
@@ -225,13 +219,11 @@ async fn postgres_sink_persists_object_store_blob_locations() {
 
     assert_eq!(
         row.get::<String, _>("payload_location"),
-        "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT"
+        expected_payload_location
     );
     assert_eq!(
         row.get::<Option<String>, _>("metadata_location").as_deref(),
-        Some(
-            "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON"
-        )
+        Some(expected_metadata_location.as_str())
     );
 
     cleanup_rows(&sink, &[&metadata.filename], &[incident_key]).await;

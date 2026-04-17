@@ -7,8 +7,13 @@ use emwin_db::{
 };
 use emwin_service::{IncidentChange, IncidentChangeAction, IncidentChangeTrigger, SourceKind};
 use sqlx::Row;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::OnceCell;
 use tokio::sync::broadcast;
 use tokio::time::{Duration, timeout};
+
+static NEXT_SAMPLE_ID: AtomicU64 = AtomicU64::new(1);
+static SHARED_SINK: OnceCell<Option<PostgresMetadataSink>> = OnceCell::const_new();
 
 #[derive(Clone, Copy)]
 pub(crate) struct TestIncidentKey {
@@ -29,80 +34,115 @@ pub(crate) struct IncidentRecord {
     pub(crate) latest_product_timestamp_utc: DateTime<Utc>,
 }
 
+pub(crate) struct SampleCase {
+    pub(crate) metadata: CompletedFileMetadata,
+    pub(crate) incident_key: TestIncidentKey,
+}
+
 pub(crate) fn test_database_url() -> Option<String> {
     std::env::var("EMWIN_PG_TEST_DATABASE_URL").ok()
 }
 
 pub(crate) async fn connect_test_sink() -> Option<PostgresMetadataSink> {
-    let database_url = test_database_url()?;
-    let mut config = PostgresConfig::new(database_url);
-    config.application_name = "emwin-db-test".to_string();
-    Some(
-        PostgresMetadataSink::connect(config)
-            .await
-            .expect("postgres sink should connect"),
+    SHARED_SINK
+        .get_or_init(|| async {
+            let database_url = test_database_url()?;
+            let mut config = PostgresConfig::new(database_url);
+            config.application_name = "emwin-db-test".to_string();
+            Some(
+                PostgresMetadataSink::connect(config)
+                    .await
+                    .expect("postgres sink should connect"),
+            )
+        })
+        .await
+        .clone()
+}
+
+pub(crate) fn sample_case() -> SampleCase {
+    let sample_id = NEXT_SAMPLE_ID.fetch_add(1, Ordering::Relaxed);
+    let filename = format!("FFWOAXNE-{sample_id}.TXT");
+    let etn = 10_000 + i64::try_from(sample_id).expect("sample id should fit in i64");
+    let bulletin = format!(
+        "000\nWUUS53 KOAX 051200\nFFWOAX\n\nFlash Flood Warning\nNational Weather Service Omaha/Valley NE\n1200 PM CST Wed Mar 5 2025\n\nNEC001>003-051300-\n/O.NEW.KOAX.FF.W.{etn:04}.250305T1200Z-250305T1800Z/\n/MSRM1.3.ER.250305T1200Z.250305T1800Z.250306T0000Z.NO/\n\nLAT...LON 4143 9613 4145 9610 4140 9608 4138 9612\nTIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608\nMAXHAILSIZE...1.00 IN\nMAXWINDGUST...60 MPH\n"
+    );
+    SampleCase {
+        metadata: build_completed_file_metadata(
+            &filename,
+            1_704_070_800,
+            SourceKind::Qbt,
+            bulletin.as_bytes(),
+        ),
+        incident_key: TestIncidentKey {
+            office: "KOAX",
+            phenomena: "FF",
+            significance: "W",
+            etn,
+        },
+    }
+}
+
+pub(crate) fn sample_blob_locations(filename: &str) -> (String, String) {
+    (
+        format!(
+            "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-{filename}"
+        ),
+        format!(
+            "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-{}",
+            sidecar_name(filename)
+        ),
     )
 }
 
-pub(crate) fn sample_metadata() -> CompletedFileMetadata {
-    build_completed_file_metadata(
-        "FFWOAXNE.TXT",
-        1_704_070_800,
-        SourceKind::Qbt,
-        br#"000
-WUUS53 KOAX 051200
-FFWOAX
-
-Flash Flood Warning
-National Weather Service Omaha/Valley NE
-1200 PM CST Wed Mar 5 2025
-
-NEC001>003-051300-
-/O.NEW.KOAX.FF.W.0001.250305T1200Z-250305T1800Z/
-/MSRM1.3.ER.250305T1200Z.250305T1800Z.250306T0000Z.NO/
-
-LAT...LON 4143 9613 4145 9610 4140 9608 4138 9612
-TIME...MOT...LOC 1200Z 300DEG 25KT 4143 9613 4140 9608
-MAXHAILSIZE...1.00 IN
-MAXWINDGUST...60 MPH
-"#,
+pub(crate) fn sample_object_store_blob_locations(filename: &str) -> (String, String) {
+    (
+        format!(
+            "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-{filename}"
+        ),
+        format!(
+            "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-{}",
+            sidecar_name(filename)
+        ),
     )
 }
 
-pub(crate) fn sample_blobs(_filename: &str) -> Vec<StoredBlob> {
-    let payload_location =
-        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
-    let sidecar_location =
-        "file:///tmp/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
+fn sidecar_name(filename: &str) -> String {
+    match filename.rsplit_once('.') {
+        Some((stem, _)) => format!("{stem}.JSON"),
+        None => format!("{filename}.JSON"),
+    }
+}
+
+pub(crate) fn sample_blobs(filename: &str) -> Vec<StoredBlob> {
+    let (payload_location, sidecar_location) = sample_blob_locations(filename);
     vec![
         StoredBlob {
             role: BlobRole::Payload,
-            location: payload_location.to_string(),
+            location: payload_location,
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
             role: BlobRole::MetadataSidecar,
-            location: sidecar_location.to_string(),
+            location: sidecar_location,
             size_bytes: 256,
             content_type: Some("application/json".to_string()),
         },
     ]
 }
 
-pub(crate) fn sample_object_store_blobs(_filename: &str) -> Vec<StoredBlob> {
-    let payload_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.TXT";
-    let sidecar_location = "s3://example-bucket/archive/qbt/2023/12/31/OAX/nws_text_product/20231231T230000Z-7824e38f-FFWOAXNE.JSON";
+pub(crate) fn sample_object_store_blobs(filename: &str) -> Vec<StoredBlob> {
+    let (payload_location, sidecar_location) = sample_object_store_blob_locations(filename);
     vec![
         StoredBlob {
             role: BlobRole::Payload,
-            location: payload_location.to_string(),
+            location: payload_location,
             size_bytes: 512,
             content_type: Some("application/octet-stream".to_string()),
         },
         StoredBlob {
             role: BlobRole::MetadataSidecar,
-            location: sidecar_location.to_string(),
+            location: sidecar_location,
             size_bytes: 256,
             content_type: Some("application/json".to_string()),
         },
@@ -268,7 +308,7 @@ pub(crate) async fn fetch_incident(
         first_product_id: row.get("first_product_id"),
         latest_product_id: row.get("latest_product_id"),
         latest_product_timestamp_utc: row.get("latest_product_timestamp_utc"),
-        })
+    })
 }
 
 pub(crate) async fn product_issue_id(sink: &PostgresMetadataSink, product_id: i64) -> i64 {
