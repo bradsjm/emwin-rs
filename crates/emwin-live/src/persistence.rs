@@ -4,16 +4,14 @@
 //! enqueue completed products without waiting for backend I/O.
 
 use crate::error::{LiveError, LiveResult};
-use crate::file_pipeline::build_persist_request;
 use emwin_db::{
-    BlobWriter, NoopMetadataSink, ObjectStoreBlobWriter, PersistRequest, PersistenceConfig,
-    PersistenceProducer, PersistenceRuntime, PostgresConfig, PostgresMetadataSink,
+    BlobWriter, NoopMetadataSink, ObjectStoreBlobWriter, PersistenceConfig, PersistenceProducer,
+    PersistenceRuntime, PostgresConfig, PostgresMetadataSink,
 };
 use emwin_service::{CompletedFileMetadata, IncidentCleanupResult, PersistenceStats};
 use object_store::parse_url_opts;
 use std::time::Duration;
 use tokio::sync::watch;
-use tracing::warn;
 use url::Url;
 
 pub(crate) type FilePersistenceRuntime = PersistenceRuntime<CompletedFileMetadata>;
@@ -88,26 +86,6 @@ fn parse_storage_target(raw: &str) -> LiveResult<StorageTarget> {
     Ok(StorageTarget(url))
 }
 
-pub(crate) fn enqueue_completed_product(
-    producer: &FilePersistenceProducer,
-    filename: &str,
-    data: &[u8],
-    metadata: CompletedFileMetadata,
-) -> LiveResult<bool> {
-    let request: PersistRequest<CompletedFileMetadata> =
-        build_persist_request(filename, data, metadata)?;
-    let result = producer.enqueue(request);
-    if let Some(evicted_oldest_key) = result.evicted_oldest_key {
-        warn!(
-            evicted_request = %evicted_oldest_key,
-            queued_request = %filename,
-            queue_len = result.queue_len,
-            "persistence queue evicted oldest request"
-        );
-    }
-    Ok(result.accepted)
-}
-
 pub(crate) async fn shutdown_runtime(
     runtime: FilePersistenceRuntime,
 ) -> LiveResult<PersistenceStats> {
@@ -121,6 +99,8 @@ pub(crate) async fn shutdown_runtime(
             evicted_total: stats.evicted_total,
             persisted_total: stats.persisted_total,
             failed_total: stats.failed_total,
+            retry_exhausted_total: stats.retry_exhausted_total,
+            stale_dropped_total: stats.stale_dropped_total,
         })
         .map_err(Into::into)
 }

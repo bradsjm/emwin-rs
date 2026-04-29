@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use crate::persistence::FilePersistenceProducer;
+use crate::product_processor::ProductProcessorProducer;
 use crate::retained::RetainedFiles;
 use emwin_db::PostgresMetadataSink;
 pub(crate) use emwin_service::{
@@ -41,6 +42,7 @@ pub(crate) struct AppState {
     pub(crate) incident_event_tx: broadcast::Sender<IncidentBroadcastEvent>,
     pub(crate) retained_files: Mutex<RetainedFiles>,
     pub(crate) telemetry: Mutex<LiveTelemetry>,
+    pub(crate) product_processor: ProductProcessorProducer,
     pub(crate) persistence: Option<FilePersistenceProducer>,
     pub(crate) archive: Option<PostgresMetadataSink>,
     pub(crate) next_event_id: AtomicU64,
@@ -58,6 +60,7 @@ pub(crate) struct AppState {
 impl AppState {
     pub(crate) fn new(
         persistence: Option<FilePersistenceProducer>,
+        product_processor: ProductProcessorProducer,
         archive: Option<PostgresMetadataSink>,
         quiet: bool,
         max_retained_files: usize,
@@ -71,6 +74,7 @@ impl AppState {
                 Duration::from_secs(file_retention_secs.max(1)),
             )),
             telemetry: Mutex::new(LiveTelemetry::Unavailable),
+            product_processor,
             persistence,
             archive,
             next_event_id: AtomicU64::new(1),

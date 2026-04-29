@@ -1,7 +1,6 @@
-use crate::archive_postprocess::post_process_archive;
 use crate::error::LiveResult;
 use crate::events::{publish, publish_incident_change};
-use crate::persistence::{FilePersistenceProducer, enqueue_completed_product};
+use crate::product_processor::ProductWorkItem;
 use crate::shared::lock_unpoisoned;
 use crate::types::{AppState, LiveEventKind, LiveTelemetry};
 use emwin_db::PostgresMetadataSink;
@@ -15,14 +14,11 @@ use emwin_service::ReceiverFrame;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::SystemTime;
 use tokio::sync::watch;
 
 pub(crate) async fn run_qbt_ingest_loop(
     config: QbtReceiverConfig,
     state: Arc<AppState>,
-    post_process_archives: bool,
-    persistence: Option<FilePersistenceProducer>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> LiveResult<()> {
     state
@@ -39,7 +35,7 @@ pub(crate) async fn run_qbt_ingest_loop(
                 let Some(item) = item else {
                     break;
                 };
-                handle_ingest_event(item, &state, post_process_archives, persistence.as_ref())?;
+                handle_ingest_event(item, &state)?;
             }
         }
     }
@@ -52,8 +48,6 @@ pub(crate) async fn run_qbt_ingest_loop(
 pub(crate) async fn run_wxwire_ingest_loop(
     config: WxWireReceiverConfig,
     state: Arc<AppState>,
-    post_process_archives: bool,
-    persistence: Option<FilePersistenceProducer>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> LiveResult<()> {
     let mut ingest = IngestReceiver::build(IngestConfig::WxWire(config))?;
@@ -67,7 +61,7 @@ pub(crate) async fn run_wxwire_ingest_loop(
                 let Some(item) = item else {
                     break;
                 };
-                handle_ingest_event(item, &state, post_process_archives, persistence.as_ref())?;
+                handle_ingest_event(item, &state)?;
             }
         }
     }
@@ -104,8 +98,6 @@ pub(crate) async fn run_incident_event_relay_loop(
 fn handle_ingest_event(
     item: Result<IngestEvent, IngestError>,
     state: &Arc<AppState>,
-    post_process_archives: bool,
-    persistence: Option<&FilePersistenceProducer>,
 ) -> LiveResult<()> {
     match item {
         Ok(IngestEvent::Connected { endpoint }) => {
@@ -146,56 +138,23 @@ fn handle_ingest_event(
                 state.data_blocks_total.fetch_add(1, Ordering::Relaxed);
             }
 
-            let delivered =
-                match post_process_archive(post_process_archives, &product.filename, &product.data)
-                {
-                    Ok(delivered) => delivered,
-                    Err(err) => {
-                        tracing::warn!(
-                            archive_filename = %product.filename,
-                            error = %err,
-                            "Corrupt Zip File Received"
-                        );
-                        return Ok(());
-                    }
-                };
-            let completed_at = SystemTime::now();
-            let timestamp_utc = product
-                .source_timestamp_utc
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|duration| duration.as_secs())
-                .unwrap_or(0);
-            let retained_meta = {
-                let mut guard = lock_unpoisoned(&state.retained_files);
-                guard.insert(
-                    delivered.filename.clone(),
-                    delivered.data.clone(),
-                    timestamp_utc,
-                    product.origin.clone(),
-                    completed_at,
-                )
-            };
-            if let Some(persistence) = persistence {
-                let queued = enqueue_completed_product(
-                    persistence,
-                    &delivered.filename,
-                    &delivered.data,
-                    retained_meta.clone(),
-                )?;
-                if !queued {
-                    tracing::warn!(filename = %delivered.filename, "persistence queue closed");
-                }
-            }
-            publish(
-                state,
-                LiveEventKind::ProductAvailable(Box::new(retained_meta)),
-            );
-            if !state.quiet {
-                tracing::info!(
-                    "file complete name={} bytes={}",
-                    delivered.filename,
-                    delivered.data.len()
+            let filename = product.filename.clone();
+            let result = state.product_processor.enqueue(ProductWorkItem::new(
+                product.filename,
+                product.data,
+                product.source_timestamp_utc,
+                product.origin,
+            ));
+            if let Some(evicted_oldest_filename) = result.evicted_oldest_filename {
+                tracing::warn!(
+                    evicted_filename = %evicted_oldest_filename,
+                    queued_filename = %filename,
+                    queue_len = result.queue_len,
+                    "product processing queue evicted oldest product"
                 );
+            }
+            if !result.accepted {
+                tracing::warn!(filename = %filename, "product processing queue closed");
             }
         }
         Ok(IngestEvent::Warning(warning)) => match warning {
@@ -262,18 +221,16 @@ fn normalized_server_count(servers: &[(String, u16)]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{handle_ingest_event, normalized_server_count};
-    use crate::persistence::FilePersistenceProducer;
-    use crate::types::{AppState, LiveEventKind};
+    use crate::product_processor::ProductProcessorProducer;
+    use crate::types::AppState;
     use bytes::Bytes;
     use emwin_protocol::ingest::IngestEvent;
     use emwin_protocol::qbt_receiver::QbtCompletedFile;
-    use std::io::Write;
     use std::sync::Arc;
     use std::time::{Duration, SystemTime};
-    use tempfile::tempdir;
 
     fn test_state() -> Arc<AppState> {
-        AppState::new(None, None, true, 16, 60)
+        AppState::new(None, ProductProcessorProducer::new(16), None, true, 16, 60)
     }
 
     #[test]
@@ -288,39 +245,9 @@ mod tests {
         );
     }
 
-    fn persistence_producer() -> FilePersistenceProducer {
-        let temp = tempdir().expect("tempdir should succeed");
-        let runtime = emwin_db::PersistenceRuntime::spawn(
-            emwin_db::PersistenceConfig::new(16),
-            Box::new(
-                emwin_db::ObjectStoreBlobWriter::new(
-                    url::Url::from_directory_path(temp.path()).expect("directory url should build"),
-                )
-                .expect("writer should build"),
-            ),
-            emwin_db::NoopMetadataSink,
-        );
-        runtime.producer()
-    }
-
-    fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
-        let cursor = std::io::Cursor::new(Vec::new());
-        let mut writer = zip::ZipWriter::new(cursor);
-        let options: zip::write::FileOptions<'_, ()> =
-            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        for (name, body) in entries {
-            writer
-                .start_file(name, options)
-                .expect("start file should succeed");
-            writer.write_all(body).expect("write body should succeed");
-        }
-        writer.finish().expect("finish should succeed").into_inner()
-    }
-
-    #[tokio::test]
-    async fn completed_product_is_retained_and_published() {
+    #[test]
+    fn completed_product_is_queued_for_processing() {
         let state = test_state();
-        let mut rx = state.event_tx.subscribe();
         let event = Ok(IngestEvent::Product(
             QbtCompletedFile {
                 filename: "AFDBOX.TXT".to_string(),
@@ -330,42 +257,10 @@ mod tests {
             .into(),
         ));
 
-        handle_ingest_event(event, &state, true, None).expect("event should succeed");
+        handle_ingest_event(event, &state).expect("event should succeed");
 
-        let received = rx.recv().await.expect("event should publish");
-        match received.kind {
-            LiveEventKind::ProductAvailable(metadata) => {
-                assert_eq!(metadata.filename, "AFDBOX.TXT");
-            }
-            other => panic!("unexpected event: {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn archive_products_are_post_processed_before_persistence() {
-        let state = test_state();
-        let producer = persistence_producer();
-        let zip_bytes = archive(&[(
-            "nested/AFDBOX.TXT",
-            b"000 \nFXUS61 KBOX 022101\nAFDBOX\nBody\n",
-        )]);
-        let event = Ok(IngestEvent::Product(
-            QbtCompletedFile {
-                filename: "AFDBOX.ZIP".to_string(),
-                data: Bytes::from(zip_bytes),
-                timestamp_utc: SystemTime::UNIX_EPOCH + Duration::from_secs(1704070800),
-            }
-            .into(),
-        ));
-
-        handle_ingest_event(event, &state, true, Some(&producer)).expect("event should succeed");
-
-        let listed = state
-            .retained_files
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .list();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].filename, "nested/AFDBOX.TXT");
+        let stats = state.product_processor.stats_snapshot();
+        assert_eq!(stats.queue_len, 1);
+        assert_eq!(stats.enqueued_total, 1);
     }
 }

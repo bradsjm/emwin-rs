@@ -136,14 +136,14 @@ fn build_archive_storage_plan(
 ) -> ArchiveStoragePlan {
     let timestamp = timestamp_utc(metadata.timestamp_utc);
     let origin = origin_segment(&metadata.origin);
-    let office = metadata
-        .product_summary
+    let product_summary = metadata.product_summary();
+    let office = product_summary
         .office
         .as_ref()
         .map(|office| office.code.to_string())
         .filter(|code| !code.is_empty())
         .unwrap_or_else(|| "UNK".to_string());
-    let family = metadata.product_summary.family.unwrap_or("unknown");
+    let family = product_summary.family.unwrap_or("unknown");
     let basename = basename_segment(filename);
     let leaf = format!(
         "{}-{}-{}",
@@ -194,8 +194,7 @@ fn source_kind(origin: ProductOrigin) -> SourceKind {
             subject,
             delay_stamp_utc,
         },
-        #[allow(unreachable_patterns)]
-        _ => SourceKind::Unknown,
+        _ => unreachable!("emwin-live enables all current product origin variants"),
     }
 }
 

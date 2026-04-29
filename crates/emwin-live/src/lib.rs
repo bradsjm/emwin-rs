@@ -19,9 +19,11 @@ mod events;
 mod file_pipeline;
 mod ingest;
 mod persistence;
+mod product_processor;
 mod retained;
 mod runtime;
 mod shared;
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 mod types;
 

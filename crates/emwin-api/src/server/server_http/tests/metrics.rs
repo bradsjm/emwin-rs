@@ -97,6 +97,38 @@ async fn metrics_endpoint_includes_persistence_fields_when_enabled() {
         Some(&serde_json::json!(0))
     );
     assert_eq!(
+        value.get("persistence_retry_exhausted_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("persistence_stale_dropped_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("processing_queue_len"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("processing_queue_capacity"),
+        Some(&serde_json::json!(32))
+    );
+    assert_eq!(
+        value.get("processing_enqueued_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("processing_evicted_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("processing_completed_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        value.get("processing_failed_total"),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
         value.get("archive_configured"),
         Some(&serde_json::json!(false))
     );

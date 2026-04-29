@@ -92,10 +92,11 @@ pub(super) async fn health_handler(State(state): State<Arc<AppState>>) -> Json<H
 )]
 pub(super) async fn metrics_handler(State(state): State<Arc<AppState>>) -> Json<MetricsPayload> {
     let telemetry = state.services.telemetry_snapshot();
-    let persistence = state.services.stats_snapshot().persistence;
+    let stats = state.services.stats_snapshot();
     Json(MetricsPayload {
         telemetry,
-        persistence,
+        processing: stats.processing,
+        persistence: stats.persistence,
         archive: archive_status(&state),
     })
 }

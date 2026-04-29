@@ -197,7 +197,9 @@ impl PreparedProduct {
     ) -> PersistResult<Self> {
         let payload = find_blob(blobs, BlobRole::Payload)?;
         let sidecar = find_blob_optional(blobs, BlobRole::MetadataSidecar);
-        let header = metadata.product_summary.header.as_ref();
+        let product_summary = metadata.product_summary();
+        let product_detail = metadata.product_detail();
+        let header = product_summary.header.as_ref();
         let HeaderColumns {
             header_kind,
             ttaaii,
@@ -225,31 +227,27 @@ impl PreparedProduct {
             })?,
             payload_location: payload.location.clone(),
             metadata_location: sidecar.map(|blob| blob.location.clone()),
-            source: serde_label(&metadata.product_summary.source)?,
-            family: metadata.product_summary.family.map(str::to_string),
-            artifact_kind: metadata.product_summary.artifact_kind.map(str::to_string),
-            title: metadata.product_summary.title.map(str::to_string),
-            container: metadata.product_summary.container.to_string(),
-            pil: metadata.product_summary.pil.clone(),
-            wmo_prefix: metadata.product_summary.wmo_prefix.map(str::to_string),
-            bbb_kind: metadata
-                .product_summary
+            source: serde_label(&product_summary.source)?,
+            family: product_summary.family.map(str::to_string),
+            artifact_kind: product_summary.artifact_kind.map(str::to_string),
+            title: product_summary.title.map(str::to_string),
+            container: product_summary.container.to_string(),
+            pil: product_summary.pil.clone(),
+            wmo_prefix: product_summary.wmo_prefix.map(str::to_string),
+            bbb_kind: product_summary
                 .bbb_kind
                 .as_ref()
                 .map(serde_label)
                 .transpose()?,
-            office_code: metadata
-                .product_summary
+            office_code: product_summary
                 .office
                 .as_ref()
                 .map(|office| office.code.to_string()),
-            office_city: metadata
-                .product_summary
+            office_city: product_summary
                 .office
                 .as_ref()
                 .map(|office| office.city.to_string()),
-            office_state: metadata
-                .product_summary
+            office_state: product_summary
                 .office
                 .as_ref()
                 .map(|office| office.state.to_string()),
@@ -259,34 +257,31 @@ impl PreparedProduct {
             ddhhmm,
             bbb,
             afos,
-            has_body: metadata.product_summary.facets.has_body,
-            has_artifact: metadata.product_summary.facets.has_artifact,
-            has_issues: metadata.product_summary.facets.has_issues,
-            has_vtec: metadata.product_summary.facets.vtec_count > 0,
-            has_ugc: metadata.product_summary.facets.ugc_count > 0,
-            has_hvtec: metadata.product_summary.facets.hvtec_count > 0,
-            has_latlon: metadata.product_summary.facets.latlon_count > 0,
-            has_time_mot_loc: metadata.product_summary.facets.time_mot_loc_count > 0,
-            has_wind_hail: metadata.product_summary.facets.wind_hail_count > 0,
-            vtec_count: usize_to_i32(metadata.product_summary.facets.vtec_count, "vtec_count")?,
-            ugc_count: usize_to_i32(metadata.product_summary.facets.ugc_count, "ugc_count")?,
-            hvtec_count: usize_to_i32(metadata.product_summary.facets.hvtec_count, "hvtec_count")?,
-            latlon_count: usize_to_i32(
-                metadata.product_summary.facets.latlon_count,
-                "latlon_count",
-            )?,
+            has_body: product_summary.facets.has_body,
+            has_artifact: product_summary.facets.has_artifact,
+            has_issues: product_summary.facets.has_issues,
+            has_vtec: product_summary.facets.vtec_count > 0,
+            has_ugc: product_summary.facets.ugc_count > 0,
+            has_hvtec: product_summary.facets.hvtec_count > 0,
+            has_latlon: product_summary.facets.latlon_count > 0,
+            has_time_mot_loc: product_summary.facets.time_mot_loc_count > 0,
+            has_wind_hail: product_summary.facets.wind_hail_count > 0,
+            vtec_count: usize_to_i32(product_summary.facets.vtec_count, "vtec_count")?,
+            ugc_count: usize_to_i32(product_summary.facets.ugc_count, "ugc_count")?,
+            hvtec_count: usize_to_i32(product_summary.facets.hvtec_count, "hvtec_count")?,
+            latlon_count: usize_to_i32(product_summary.facets.latlon_count, "latlon_count")?,
             time_mot_loc_count: usize_to_i32(
-                metadata.product_summary.facets.time_mot_loc_count,
+                product_summary.facets.time_mot_loc_count,
                 "time_mot_loc_count",
             )?,
             wind_hail_count: usize_to_i32(
-                metadata.product_summary.facets.wind_hail_count,
+                product_summary.facets.wind_hail_count,
                 "wind_hail_count",
             )?,
-            issue_count: usize_to_i32(metadata.product_summary.issues.count, "issue_count")?,
-            states: metadata.product_summary.keys.states.clone(),
-            ugc_codes: metadata.product_summary.keys.ugc_codes.clone(),
-            product_json: serde_json::to_value(&metadata.product_detail)?,
+            issue_count: usize_to_i32(product_summary.issues.count, "issue_count")?,
+            states: product_summary.keys.states.clone(),
+            ugc_codes: product_summary.keys.ugc_codes.clone(),
+            product_json: serde_json::to_value(&product_detail)?,
         };
 
         let issues = metadata

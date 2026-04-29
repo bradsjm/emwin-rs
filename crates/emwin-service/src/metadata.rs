@@ -1,4 +1,5 @@
 use crate::live::SourceKind;
+use emwin_parser::{ProductDetailV2, ProductSummaryV2, detail_product_v2, summarize_product_v2};
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
@@ -10,8 +11,18 @@ pub struct CompletedFileMetadata {
     pub timestamp_utc: u64,
     pub origin: SourceKind,
     pub product: emwin_parser::ProductEnrichment,
-    pub product_summary: emwin_parser::ProductSummaryV2,
-    pub product_detail: emwin_parser::ProductDetailV2,
+}
+
+impl CompletedFileMetadata {
+    /// Builds the lightweight product projection for API and database boundaries.
+    pub fn product_summary(&self) -> ProductSummaryV2 {
+        summarize_product_v2(&self.product)
+    }
+
+    /// Builds the detailed product projection for sidecars and API responses.
+    pub fn product_detail(&self) -> ProductDetailV2 {
+        detail_product_v2(&self.product)
+    }
 }
 
 impl Serialize for CompletedFileMetadata {
@@ -23,7 +34,7 @@ impl Serialize for CompletedFileMetadata {
         state.serialize_field("filename", &self.filename)?;
         state.serialize_field("size", &self.size)?;
         state.serialize_field("timestamp_utc", &self.timestamp_utc)?;
-        state.serialize_field("product", &self.product_detail)?;
+        state.serialize_field("product", &self.product_detail())?;
         state.end()
     }
 }

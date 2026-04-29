@@ -10,6 +10,20 @@ use crate::writer::StoredBlob;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+enum PersistOutcome {
+    Persisted(String),
+    StaleDropped {
+        request_key: String,
+        context: FailureContext,
+        error: PersistError,
+    },
+}
+
+struct BlobWriteFailure {
+    stored_blobs: Vec<StoredBlob>,
+    error: PersistError,
+}
+
 pub(super) async fn run_worker<M, W, S>(
     shared: Arc<SharedQueue<M>>,
     config: PersistenceConfig,
@@ -49,10 +63,29 @@ where
         )
         .await
         {
-            Ok(request_key) => {
+            Ok(PersistOutcome::Persisted(request_key)) => {
                 let mut guard = lock_unpoisoned(&producer.shared.state);
                 guard.stats.persisted_total = guard.stats.persisted_total.saturating_add(1);
                 info!(request_key = %request_key, "save complete");
+            }
+            Ok(PersistOutcome::StaleDropped {
+                request_key,
+                context,
+                error,
+            }) => {
+                let mut guard = lock_unpoisoned(&producer.shared.state);
+                guard.stats.retry_exhausted_total =
+                    guard.stats.retry_exhausted_total.saturating_add(1);
+                guard.stats.stale_dropped_total = guard.stats.stale_dropped_total.saturating_add(1);
+                warn!(
+                    request_key = %request_key,
+                    stage = context.stage,
+                    backend = context.backend,
+                    target = %context.target,
+                    error = %error,
+                    retry_max_attempts = config.retry_max_attempts,
+                    "stale persistence request dropped after retry budget exhausted"
+                );
             }
             Err((request_key, context, err)) => {
                 let mut guard = lock_unpoisoned(&producer.shared.state);
@@ -77,6 +110,8 @@ where
         evicted_total = stats.evicted_total,
         persisted_total = stats.persisted_total,
         failed_total = stats.failed_total,
+        retry_exhausted_total = stats.retry_exhausted_total,
+        stale_dropped_total = stats.stale_dropped_total,
         "persistence runtime stopped"
     );
     stats
@@ -92,14 +127,24 @@ fn is_closed<M>(producer: &PersistenceProducer<M>) -> bool {
     guard.closed && guard.pending.is_empty()
 }
 
-async fn write_blobs<W>(writer: &W, blobs: &[BlobEntry]) -> PersistResult<Vec<StoredBlob>>
+async fn write_blobs<W>(
+    writer: &W,
+    blobs: &[BlobEntry],
+) -> Result<Vec<StoredBlob>, BlobWriteFailure>
 where
     W: BlobWriter,
 {
     let mut stored_blobs = Vec::with_capacity(blobs.len());
     for blob in blobs {
-        let stored = writer.write(blob).await?;
-        stored_blobs.push(stored);
+        match writer.write(blob).await {
+            Ok(stored) => stored_blobs.push(stored),
+            Err(error) => {
+                return Err(BlobWriteFailure {
+                    stored_blobs,
+                    error,
+                });
+            }
+        }
     }
 
     Ok(stored_blobs)
@@ -130,7 +175,7 @@ async fn persist_request_with_retry<M, W, S>(
     request: PersistRequest<M>,
     config: &PersistenceConfig,
     backend_health: &mut BackendHealth,
-) -> Result<String, (String, FailureContext, PersistError)>
+) -> Result<PersistOutcome, (String, FailureContext, PersistError)>
 where
     M: Clone + Send + 'static,
     W: BlobWriter,
@@ -143,15 +188,25 @@ where
         backend: writer.backend_name(),
         target: writer.target_description(),
     };
+    let mut blob_cleanup_candidates = Vec::new();
     let stored_blobs = loop {
         match write_blobs(writer, &request.blobs).await {
             Ok(stored_blobs) => break stored_blobs,
-            Err(err) if err.is_retryable() && !should_abort_retry(producer) => {
+            Err(failure) if failure.error.is_retryable() && !should_abort_retry(producer) => {
+                blob_cleanup_candidates.extend(failure.stored_blobs);
+                if retry_budget_exhausted(config, attempt) {
+                    cleanup_stored_blobs(writer, &request_key, &blob_cleanup_candidates).await;
+                    return Ok(PersistOutcome::StaleDropped {
+                        request_key,
+                        context: blob_context.clone(),
+                        error: failure.error,
+                    });
+                }
                 let delay = retry_delay(config, attempt);
                 backend_health.note_retryable_failure(
                     &request_key,
                     &blob_context,
-                    &err,
+                    &failure.error,
                     delay,
                     attempt + 1,
                     config.failure_log_cooldown,
@@ -159,7 +214,7 @@ where
                 tokio::time::sleep(delay).await;
                 attempt = attempt.saturating_add(1);
             }
-            Err(err) => return Err((request_key, blob_context.clone(), err)),
+            Err(failure) => return Err((request_key, blob_context.clone(), failure.error)),
         }
     };
 
@@ -182,9 +237,17 @@ where
         {
             Ok(()) => {
                 backend_health.note_recovered(&request_key);
-                return Ok(request_key);
+                return Ok(PersistOutcome::Persisted(request_key));
             }
             Err(err) if err.is_retryable() && !should_abort_retry(producer) => {
+                if retry_budget_exhausted(config, attempt) {
+                    cleanup_stored_blobs(writer, &request_key, &stored_blobs).await;
+                    return Ok(PersistOutcome::StaleDropped {
+                        request_key,
+                        context: metadata_context.clone(),
+                        error: err,
+                    });
+                }
                 let delay = retry_delay(config, attempt);
                 backend_health.note_retryable_failure(
                     &request_key,
@@ -197,11 +260,29 @@ where
                 tokio::time::sleep(delay).await;
                 attempt = attempt.saturating_add(1);
             }
-            Err(err) => {
-                return Err((request_key, metadata_context.clone(), err));
-            }
+            Err(err) => return Err((request_key, metadata_context.clone(), err)),
         }
     }
+}
+
+async fn cleanup_stored_blobs<W>(writer: &W, request_key: &str, stored_blobs: &[StoredBlob])
+where
+    W: BlobWriter,
+{
+    for blob in stored_blobs {
+        if let Err(err) = writer.delete(blob).await {
+            warn!(
+                request_key = %request_key,
+                location = %blob.location,
+                error = %err,
+                "failed to clean up blob after metadata retry exhaustion"
+            );
+        }
+    }
+}
+
+fn retry_budget_exhausted(config: &PersistenceConfig, attempt: u32) -> bool {
+    attempt.saturating_add(1) >= config.retry_max_attempts.max(1)
 }
 
 fn should_abort_retry<M>(producer: &PersistenceProducer<M>) -> bool {

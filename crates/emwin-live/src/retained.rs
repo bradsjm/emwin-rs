@@ -1,5 +1,7 @@
+#[cfg(any(test, feature = "test-support"))]
 use crate::file_pipeline::build_completed_file_metadata;
 use bytes::Bytes;
+#[cfg(any(test, feature = "test-support"))]
 use emwin_protocol::ingest::ProductOrigin;
 use emwin_service::{CompletedFileMetadata, RetainedFile};
 use std::collections::{HashMap, VecDeque};
@@ -32,6 +34,7 @@ impl RetainedFiles {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn insert(
         &mut self,
         filename: String,
@@ -40,9 +43,19 @@ impl RetainedFiles {
         origin: ProductOrigin,
         completed_at: SystemTime,
     ) -> CompletedFileMetadata {
+        let metadata = build_completed_file_metadata(&filename, timestamp_utc, origin, &data);
+        self.insert_processed(filename, data, metadata, completed_at)
+    }
+
+    pub(crate) fn insert_processed(
+        &mut self,
+        filename: String,
+        data: Bytes,
+        metadata: CompletedFileMetadata,
+        completed_at: SystemTime,
+    ) -> CompletedFileMetadata {
         self.evict_expired();
 
-        let metadata = build_completed_file_metadata(&filename, timestamp_utc, origin, &data);
         let generation = self.next_generation;
         self.next_generation = self.next_generation.saturating_add(1);
 

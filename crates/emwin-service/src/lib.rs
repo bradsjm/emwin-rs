@@ -31,6 +31,6 @@ pub use error::{ServiceError, ServiceResult};
 pub use filter::{FileEventFilter, FileFilterInput, FileFilterInputError};
 pub use live::{
     IncidentBroadcastEvent, LiveBroadcastEvent, LiveEventKind, LiveStatsSnapshot, LiveTelemetry,
-    PersistenceStats, ReceiverFrame, RetainedFile, SourceKind,
+    PersistenceStats, ProcessingStats, ReceiverFrame, RetainedFile, SourceKind,
 };
 pub use metadata::CompletedFileMetadata;

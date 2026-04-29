@@ -5,18 +5,21 @@ use crate::persistence::{
     FilePersistenceRuntime, run_incident_cleanup_loop, shutdown_runtime,
     start_runtime_with_postgres,
 };
+use crate::product_processor::{ProductProcessorProducer, ProductProcessorRuntime};
 use crate::shared::lock_unpoisoned;
 use crate::types::{
     AppState, IncidentBroadcastEvent, LiveBroadcastEvent, LiveOptions, LiveStatsSnapshot,
     LiveTelemetry, ReceiverKind,
 };
+#[cfg(any(test, feature = "test-support"))]
+use emwin_service::SourceKind;
 use emwin_service::{
     ArchiveQueryService, ArchivedFeature, ArchivedIssue, ArchivedIssueListQuery, ArchivedPayload,
     ArchivedProductDetail, ArchivedProductSummary, CellAggregateQuery, CellAggregateResult,
     FacetAggregateQuery, FacetAggregateResult, FeatureListQuery, IncidentDetail, IncidentKey,
     IncidentListQuery, IncidentProductsQuery, IncidentSummary, PaginatedResponse, PersistenceStats,
-    ProductListQuery, RetainedFile, ServiceError, ServiceResult, SourceKind,
-    TimeseriesAggregateQuery, TimeseriesAggregateResult,
+    ProductListQuery, RetainedFile, ServiceError, ServiceResult, TimeseriesAggregateQuery,
+    TimeseriesAggregateResult,
 };
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -37,6 +40,7 @@ enum RuntimeMode {
 
 struct RuntimeTasks {
     ingest: JoinHandle<LiveResult<()>>,
+    product_processor: ProductProcessorRuntime,
     mode: RuntimeMode,
 }
 
@@ -102,12 +106,21 @@ impl LiveRuntime {
             .as_ref()
             .map(|runtime| runtime.producer());
 
+        let product_processor = ProductProcessorProducer::new(persistence_queue_capacity);
         let state = AppState::new(
             persistence_producer.clone(),
+            product_processor.clone(),
             archive_sink.clone(),
             quiet,
             max_retained_files,
             file_retention_secs,
+        );
+        let product_processor_runtime = ProductProcessorRuntime::spawn(
+            product_processor,
+            Arc::clone(&state),
+            post_process_archives,
+            persistence_producer.clone(),
+            shutdown_rx.clone(),
         );
 
         if let Some(postgres_sink) = archive_sink.as_ref() {
@@ -155,8 +168,6 @@ impl LiveRuntime {
                 tokio::spawn(run_qbt_ingest_loop(
                     config,
                     Arc::clone(&state),
-                    post_process_archives,
-                    persistence_producer.clone(),
                     shutdown_rx.clone(),
                 ))
             }
@@ -174,8 +185,6 @@ impl LiveRuntime {
                 tokio::spawn(run_wxwire_ingest_loop(
                     config,
                     Arc::clone(&state),
-                    post_process_archives,
-                    persistence_producer.clone(),
                     shutdown_rx.clone(),
                 ))
             }
@@ -211,7 +220,11 @@ impl LiveRuntime {
             inner: Arc::new(LiveRuntimeInner {
                 state,
                 shutdown_tx,
-                tasks: Mutex::new(Some(RuntimeTasks { ingest, mode })),
+                tasks: Mutex::new(Some(RuntimeTasks {
+                    ingest,
+                    product_processor: product_processor_runtime,
+                    mode,
+                })),
             }),
         })
     }
@@ -259,7 +272,10 @@ impl LiveRuntime {
                     evicted_total: stats.evicted_total,
                     persisted_total: stats.persisted_total,
                     failed_total: stats.failed_total,
+                    retry_exhausted_total: stats.retry_exhausted_total,
+                    stale_dropped_total: stats.stale_dropped_total,
                 }),
+            processing: state.product_processor.stats_snapshot(),
         }
     }
 
@@ -314,6 +330,7 @@ impl LiveRuntime {
         let _ = self.inner.shutdown_tx.send(true);
 
         await_task(tasks.ingest, "ingest").await?;
+        tasks.product_processor.shutdown().await?;
         match tasks.mode {
             RuntimeMode::IngestOnly => {}
             RuntimeMode::PersistenceOnly {
@@ -335,6 +352,7 @@ impl LiveRuntime {
         Ok(())
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn from_test_state(
         retained_files: Vec<(String, Vec<u8>, u64, SourceKind)>,
         telemetry: crate::types::LiveTelemetry,
@@ -345,7 +363,8 @@ impl LiveRuntime {
         archive_status: Option<(String, u64, u64)>,
     ) -> Self {
         let (shutdown_tx, _shutdown_rx) = watch::channel(false);
-        let state = AppState::new(persistence, archive, true, 32, 60);
+        let product_processor = ProductProcessorProducer::stopped_for_tests(32);
+        let state = AppState::new(persistence, product_processor, archive, true, 32, 60);
         {
             let mut retained = lock_unpoisoned(&state.retained_files);
             for (filename, data, timestamp_utc, origin) in retained_files {

@@ -17,6 +17,7 @@ use worker::run_worker;
 const DEFAULT_RETRY_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const DEFAULT_RETRY_MAX_DELAY: Duration = Duration::from_secs(60);
 const DEFAULT_FAILURE_LOG_COOLDOWN: Duration = Duration::from_secs(30);
+const DEFAULT_RETRY_MAX_ATTEMPTS: u32 = 3;
 
 /// Configuration for the background persistence runtime.
 #[derive(Debug, Clone, Copy)]
@@ -27,6 +28,8 @@ pub struct PersistenceConfig {
     pub retry_initial_delay: Duration,
     /// Upper bound for retry backoff during sustained outages.
     pub retry_max_delay: Duration,
+    /// Maximum retryable attempts before stale work is dropped to preserve freshness.
+    pub retry_max_attempts: u32,
     /// Minimum spacing between repeated warning logs for the same backend failure class.
     pub failure_log_cooldown: Duration,
 }
@@ -38,6 +41,7 @@ impl PersistenceConfig {
             queue_capacity: queue_capacity.max(1),
             retry_initial_delay: DEFAULT_RETRY_INITIAL_DELAY,
             retry_max_delay: DEFAULT_RETRY_MAX_DELAY,
+            retry_max_attempts: DEFAULT_RETRY_MAX_ATTEMPTS,
             failure_log_cooldown: DEFAULT_FAILURE_LOG_COOLDOWN,
         }
     }
@@ -46,6 +50,12 @@ impl PersistenceConfig {
     pub fn with_retry_delays(mut self, initial_delay: Duration, max_delay: Duration) -> Self {
         self.retry_initial_delay = initial_delay;
         self.retry_max_delay = max_delay.max(initial_delay);
+        self
+    }
+
+    /// Overrides the maximum retryable attempts before stale work is dropped.
+    pub fn with_retry_max_attempts(mut self, attempts: u32) -> Self {
+        self.retry_max_attempts = attempts.max(1);
         self
     }
 
@@ -129,6 +139,10 @@ pub struct PersistenceStats {
     pub persisted_total: u64,
     /// Number of requests that failed during blob or metadata persistence.
     pub failed_total: u64,
+    /// Number of retryable requests that exhausted the configured retry budget.
+    pub retry_exhausted_total: u64,
+    /// Number of stale requests intentionally dropped after retry exhaustion.
+    pub stale_dropped_total: u64,
 }
 
 /// Result returned to producers after enqueueing a persistence request.

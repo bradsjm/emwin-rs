@@ -158,6 +158,7 @@ async fn run_stats_loop(
 
                 let snapshot = services.stats_snapshot();
                 let connected_clients = state.connected_clients.load(Ordering::Relaxed);
+                let processing = snapshot.processing;
                 if let Some(persistence) = snapshot.persistence {
                     tracing::info!(
                         uptime_secs = snapshot.uptime_secs,
@@ -166,12 +167,20 @@ async fn run_stats_loop(
                         retained_files = snapshot.retained_files,
                         connected_clients,
                         upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),
+                        processing_queue_len = processing.queue_len,
+                        processing_queue_capacity = processing.queue_capacity,
+                        processing_enqueued_total = processing.enqueued_total,
+                        processing_evicted_total = processing.evicted_total,
+                        processing_completed_total = processing.completed_total,
+                        processing_failed_total = processing.failed_total,
                         persistence_queue_len = persistence.queue_len,
                         persistence_queue_capacity = persistence.queue_capacity,
                         persistence_enqueued_total = persistence.enqueued_total,
                         persistence_evicted_total = persistence.evicted_total,
                         persistence_persisted_total = persistence.persisted_total,
                         persistence_failed_total = persistence.failed_total,
+                        persistence_retry_exhausted_total = persistence.retry_exhausted_total,
+                        persistence_stale_dropped_total = persistence.stale_dropped_total,
                         "server stats snapshot"
                     );
                 } else {
@@ -182,6 +191,12 @@ async fn run_stats_loop(
                         retained_files = snapshot.retained_files,
                         connected_clients,
                         upstream = snapshot.upstream_endpoint.as_deref().unwrap_or("disconnected"),
+                        processing_queue_len = processing.queue_len,
+                        processing_queue_capacity = processing.queue_capacity,
+                        processing_enqueued_total = processing.enqueued_total,
+                        processing_evicted_total = processing.evicted_total,
+                        processing_completed_total = processing.completed_total,
+                        processing_failed_total = processing.failed_total,
                         "server stats snapshot"
                     );
                 }

@@ -9,7 +9,7 @@ use emwin_service::{
     ArchivedFeature, ArchivedIssue, ArchivedProductDetail, ArchivedProductSummary,
     CellAggregateBucket, CompletedFileMetadata, FacetAggregateBucket, IncidentChange,
     IncidentChangeAction, IncidentChangeTrigger, IncidentDetail, IncidentSummary, LiveTelemetry,
-    PersistenceStats, TimeseriesAggregateBucket,
+    PersistenceStats, ProcessingStats, TimeseriesAggregateBucket,
 };
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
@@ -36,7 +36,7 @@ impl CompletedFilePayload {
             filename: metadata.filename.clone(),
             size: metadata.size,
             timestamp_utc: metadata.timestamp_utc,
-            product: serde_json::to_value(&metadata.product_detail)
+            product: serde_json::to_value(metadata.product_detail())
                 .expect("product detail should serialize"),
             metadata,
             download_url,
@@ -63,7 +63,7 @@ impl CompletedFileEventPayload {
             filename: metadata.filename.clone(),
             size: metadata.size,
             timestamp_utc: metadata.timestamp_utc,
-            product: serde_json::to_value(&metadata.product_summary)
+            product: serde_json::to_value(metadata.product_summary())
                 .expect("product summary should serialize"),
             download_url: file_download_url(&metadata.filename),
             metadata,
@@ -143,6 +143,7 @@ impl IncidentEventPayload {
 #[derive(Debug, Clone)]
 pub(crate) struct MetricsPayload {
     pub(crate) telemetry: TelemetryPayload,
+    pub(crate) processing: ProcessingStats,
     pub(crate) persistence: Option<PersistenceStats>,
     pub(crate) archive: ArchiveStatus,
 }
@@ -159,14 +160,27 @@ impl Serialize for MetricsPayload {
             ));
         };
 
-        let persistence_field_count = usize::from(self.persistence.is_some()) * 6;
+        let processing_field_count = 6;
+        let persistence_field_count = usize::from(self.persistence.is_some()) * 8;
         let archive_field_count = 4 + usize::from(self.archive.last_error.is_some());
         let mut map = serializer.serialize_map(Some(
-            telemetry_fields.len() + persistence_field_count + archive_field_count,
+            telemetry_fields.len()
+                + processing_field_count
+                + persistence_field_count
+                + archive_field_count,
         ))?;
         for (key, value) in telemetry_fields {
             map.serialize_entry(key, value)?;
         }
+        map.serialize_entry("processing_queue_len", &self.processing.queue_len)?;
+        map.serialize_entry("processing_queue_capacity", &self.processing.queue_capacity)?;
+        map.serialize_entry("processing_enqueued_total", &self.processing.enqueued_total)?;
+        map.serialize_entry("processing_evicted_total", &self.processing.evicted_total)?;
+        map.serialize_entry(
+            "processing_completed_total",
+            &self.processing.completed_total,
+        )?;
+        map.serialize_entry("processing_failed_total", &self.processing.failed_total)?;
         if let Some(persistence) = self.persistence {
             map.serialize_entry("persistence_queue_len", &persistence.queue_len)?;
             map.serialize_entry("persistence_queue_capacity", &persistence.queue_capacity)?;
@@ -174,6 +188,14 @@ impl Serialize for MetricsPayload {
             map.serialize_entry("persistence_evicted_total", &persistence.evicted_total)?;
             map.serialize_entry("persistence_persisted_total", &persistence.persisted_total)?;
             map.serialize_entry("persistence_failed_total", &persistence.failed_total)?;
+            map.serialize_entry(
+                "persistence_retry_exhausted_total",
+                &persistence.retry_exhausted_total,
+            )?;
+            map.serialize_entry(
+                "persistence_stale_dropped_total",
+                &persistence.stale_dropped_total,
+            )?;
         }
         map.serialize_entry("archive_configured", &self.archive.configured)?;
         map.serialize_entry("archive_healthy", &self.archive.healthy)?;

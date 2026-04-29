@@ -285,6 +285,49 @@ impl BlobWriter for BlockingWriter {
 }
 
 #[derive(Debug, Default)]
+struct PartialRetryableWriter {
+    deletes: Arc<Mutex<Vec<String>>>,
+}
+
+impl BlobWriter for PartialRetryableWriter {
+    fn write<'a>(
+        &'a self,
+        entry: &'a BlobEntry,
+    ) -> BoxFuture<'a, PersistResult<crate::writer::StoredBlob>> {
+        Box::pin(async move {
+            if entry.role == BlobRole::MetadataSidecar {
+                return Err(PersistError::object_store(
+                    "put_object",
+                    true,
+                    "sidecar unavailable",
+                ));
+            }
+
+            Ok(crate::writer::StoredBlob {
+                role: entry.role,
+                location: entry.relative_path.clone(),
+                size_bytes: entry.bytes.len(),
+                content_type: entry.content_type.clone(),
+            })
+        })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        blob: &'a crate::writer::StoredBlob,
+    ) -> BoxFuture<'a, PersistResult<()>> {
+        let deletes = Arc::clone(&self.deletes);
+        Box::pin(async move {
+            deletes
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(blob.location.clone());
+            Ok(())
+        })
+    }
+}
+
+#[derive(Debug, Default)]
 struct ObjectStoreFailingWriter;
 
 impl BlobWriter for ObjectStoreFailingWriter {
@@ -326,6 +369,26 @@ impl MetadataSink<String> for DatabaseFailingSink {
         _request: PersistedRequest<String>,
     ) -> BoxFuture<'a, PersistResult<()>> {
         Box::pin(async { Err(PersistError::InvalidRequest("sink failed".to_string())) })
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "database"
+    }
+
+    fn target_description(&self) -> Option<String> {
+        Some("127.0.0.1/emwin".to_string())
+    }
+}
+
+#[derive(Debug, Default)]
+struct RetryableFailingSink;
+
+impl MetadataSink<String> for RetryableFailingSink {
+    fn persist<'a>(
+        &'a self,
+        _request: PersistedRequest<String>,
+    ) -> BoxFuture<'a, PersistResult<()>> {
+        Box::pin(async { Err(PersistError::Sqlx(sqlx::Error::PoolTimedOut)) })
     }
 
     fn backend_name(&self) -> &'static str {
@@ -423,6 +486,8 @@ fn stats_snapshot_reports_live_queue_state() {
                     evicted_total: 1,
                     persisted_total: 2,
                     failed_total: 1,
+                    retry_exhausted_total: 0,
+                    stale_dropped_total: 0,
                 },
             }),
             available: Semaphore::new(0),
@@ -439,6 +504,8 @@ fn stats_snapshot_reports_live_queue_state() {
             evicted_total: 1,
             persisted_total: 2,
             failed_total: 1,
+            retry_exhausted_total: 0,
+            stale_dropped_total: 0,
         }
     );
 }
@@ -713,6 +780,81 @@ async fn retryable_sink_failure_reuses_written_blobs_until_recovered() {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_slice(),
         &["retry-sink"]
+    );
+}
+
+#[tokio::test]
+async fn retryable_sink_exhaustion_drops_stale_request_and_cleans_blobs() {
+    let writer = RecordingWriter::default();
+    let deletes = Arc::clone(&writer.deletes);
+    let config = PersistenceConfig::new(4)
+        .with_retry_delays(Duration::from_millis(1), Duration::from_millis(1))
+        .with_retry_max_attempts(2)
+        .with_failure_log_cooldown(Duration::from_millis(1));
+    let runtime = PersistenceRuntime::spawn(config, writer, RetryableFailingSink);
+    let producer = runtime.producer();
+
+    assert!(producer.enqueue(request("retry-exhausted")).accepted);
+    wait_for_stats(&runtime, |stats| stats.stale_dropped_total == 1).await;
+
+    let stats = runtime.shutdown().await.expect("shutdown should succeed");
+    assert_eq!(stats.failed_total, 0);
+    assert_eq!(stats.retry_exhausted_total, 1);
+    assert_eq!(stats.stale_dropped_total, 1);
+    assert_eq!(
+        deletes
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_slice(),
+        &["retry-exhausted"]
+    );
+}
+
+#[tokio::test]
+async fn retryable_blob_exhaustion_cleans_partial_writes() {
+    let writer = PartialRetryableWriter::default();
+    let deletes = Arc::clone(&writer.deletes);
+    let config = PersistenceConfig::new(4)
+        .with_retry_delays(Duration::from_millis(1), Duration::from_millis(1))
+        .with_retry_max_attempts(1)
+        .with_failure_log_cooldown(Duration::from_millis(1));
+    let runtime = PersistenceRuntime::spawn(config, writer, NoopMetadataSink);
+    let producer = runtime.producer();
+
+    assert!(
+        producer
+            .enqueue(PersistRequest {
+                request_key: "partial-retry-exhausted".to_string(),
+                metadata: "partial-retry-exhausted".to_string(),
+                blobs: vec![
+                    BlobEntry::new(
+                        BlobRole::Payload,
+                        "partial-payload",
+                        b"payload".to_vec(),
+                        Some("text/plain"),
+                    ),
+                    BlobEntry::new(
+                        BlobRole::MetadataSidecar,
+                        "partial-sidecar",
+                        br#"{"ok":true}"#.to_vec(),
+                        Some("application/json"),
+                    ),
+                ],
+            })
+            .accepted
+    );
+    wait_for_stats(&runtime, |stats| stats.stale_dropped_total == 1).await;
+
+    let stats = runtime.shutdown().await.expect("shutdown should succeed");
+    assert_eq!(stats.failed_total, 0);
+    assert_eq!(stats.retry_exhausted_total, 1);
+    assert_eq!(stats.stale_dropped_total, 1);
+    assert_eq!(
+        deletes
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_slice(),
+        &["partial-payload"]
     );
 }
 

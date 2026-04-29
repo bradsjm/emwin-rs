@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use emwin_parser::{detail_product_v2, enrich_product, summarize_product_v2};
+use emwin_parser::enrich_product;
 pub use emwin_service::CompletedFileMetadata;
 use emwin_service::SourceKind;
 
@@ -12,8 +12,6 @@ pub fn build_completed_file_metadata(
     data: &[u8],
 ) -> CompletedFileMetadata {
     let product = enrich_product(filename, data);
-    let product_summary = summarize_product_v2(&product);
-    let product_detail = detail_product_v2(&product);
 
     CompletedFileMetadata {
         filename: filename.to_string(),
@@ -21,8 +19,6 @@ pub fn build_completed_file_metadata(
         timestamp_utc,
         origin,
         product,
-        product_summary,
-        product_detail,
     }
 }
 

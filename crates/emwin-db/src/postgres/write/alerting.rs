@@ -44,8 +44,8 @@ pub(super) async fn insert_product_source_event(
         "timestamp_utc": metadata.timestamp_utc,
         "origin": metadata.origin,
         "product": metadata.product,
-        "product_summary": metadata.product_summary,
-        "product_detail": metadata.product_detail,
+        "product_summary": metadata.product_summary(),
+        "product_detail": metadata.product_detail(),
     }))
     .bind(source_timestamp)
     .execute(&mut **tx)

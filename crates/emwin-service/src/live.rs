@@ -78,6 +78,18 @@ pub struct PersistenceStats {
     pub evicted_total: u64,
     pub persisted_total: u64,
     pub failed_total: u64,
+    pub retry_exhausted_total: u64,
+    pub stale_dropped_total: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ProcessingStats {
+    pub queue_len: usize,
+    pub queue_capacity: usize,
+    pub enqueued_total: u64,
+    pub evicted_total: u64,
+    pub completed_total: u64,
+    pub failed_total: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -87,5 +99,6 @@ pub struct LiveStatsSnapshot {
     pub active_servers: usize,
     pub retained_files: usize,
     pub upstream_endpoint: Option<String>,
+    pub processing: ProcessingStats,
     pub persistence: Option<PersistenceStats>,
 }
