@@ -181,6 +181,11 @@ cargo run -p emwin-cli -- server --username you@example.com --output-dir ./out -
 - CLI contract: payloads to `stdout`, diagnostics/logs to `stderr`.
 - Preserve machine-readable JSON output stability.
 - Keep human-readable text mode concise and non-ambiguous.
+- Use structured `tracing` fields for operator context such as backend, target, ids, counts, lease/retry state, and timestamps.
+- Use `info!` for lifecycle transitions, successful state changes, and periodic operator snapshots.
+- Use `warn!` for degraded, skipped, retried, claim-lost, or invalid durable-state paths that remain recoverable.
+- Use `error!` for unrecoverable runtime failures or task termination paths.
+- Never log secrets, authorization material, signing keys, destination URLs, or full payload bodies.
 
 ### Testing conventions
 

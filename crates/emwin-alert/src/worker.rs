@@ -53,12 +53,38 @@ pub struct TestAlertNotification {
 
 #[derive(Debug, Default)]
 pub struct AlertWorkerStats {
+    pub source_events_claimed_total: AtomicU64,
+    pub source_events_processed_total: AtomicU64,
+    pub alert_events_created_total: AtomicU64,
+    pub alert_matches_silenced_total: AtomicU64,
+    pub alert_matches_cooldown_suppressed_total: AtomicU64,
     pub source_claim_lost_total: AtomicU64,
+    pub delivery_attempts_claimed_total: AtomicU64,
+    pub delivery_success_total: AtomicU64,
+    pub delivery_retry_scheduled_total: AtomicU64,
+    pub delivery_terminal_failure_total: AtomicU64,
+    pub delivery_finalization_claim_lost_total: AtomicU64,
+    pub delivery_missing_alert_event_total: AtomicU64,
+    pub delivery_missing_contact_point_total: AtomicU64,
+    pub delivery_disabled_contact_point_total: AtomicU64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct AlertWorkerStatsSnapshot {
+    pub source_events_claimed_total: u64,
+    pub source_events_processed_total: u64,
+    pub alert_events_created_total: u64,
+    pub alert_matches_silenced_total: u64,
+    pub alert_matches_cooldown_suppressed_total: u64,
     pub source_claim_lost_total: u64,
+    pub delivery_attempts_claimed_total: u64,
+    pub delivery_success_total: u64,
+    pub delivery_retry_scheduled_total: u64,
+    pub delivery_terminal_failure_total: u64,
+    pub delivery_finalization_claim_lost_total: u64,
+    pub delivery_missing_alert_event_total: u64,
+    pub delivery_missing_contact_point_total: u64,
+    pub delivery_disabled_contact_point_total: u64,
 }
 
 #[derive(Debug)]
@@ -92,8 +118,61 @@ impl Default for AlertWorkerConfig {
 impl AlertWorkerStats {
     pub fn snapshot(&self) -> AlertWorkerStatsSnapshot {
         AlertWorkerStatsSnapshot {
+            source_events_claimed_total: self.source_events_claimed_total.load(Ordering::Relaxed),
+            source_events_processed_total: self
+                .source_events_processed_total
+                .load(Ordering::Relaxed),
+            alert_events_created_total: self.alert_events_created_total.load(Ordering::Relaxed),
+            alert_matches_silenced_total: self.alert_matches_silenced_total.load(Ordering::Relaxed),
+            alert_matches_cooldown_suppressed_total: self
+                .alert_matches_cooldown_suppressed_total
+                .load(Ordering::Relaxed),
             source_claim_lost_total: self.source_claim_lost_total.load(Ordering::Relaxed),
+            delivery_attempts_claimed_total: self
+                .delivery_attempts_claimed_total
+                .load(Ordering::Relaxed),
+            delivery_success_total: self.delivery_success_total.load(Ordering::Relaxed),
+            delivery_retry_scheduled_total: self
+                .delivery_retry_scheduled_total
+                .load(Ordering::Relaxed),
+            delivery_terminal_failure_total: self
+                .delivery_terminal_failure_total
+                .load(Ordering::Relaxed),
+            delivery_finalization_claim_lost_total: self
+                .delivery_finalization_claim_lost_total
+                .load(Ordering::Relaxed),
+            delivery_missing_alert_event_total: self
+                .delivery_missing_alert_event_total
+                .load(Ordering::Relaxed),
+            delivery_missing_contact_point_total: self
+                .delivery_missing_contact_point_total
+                .load(Ordering::Relaxed),
+            delivery_disabled_contact_point_total: self
+                .delivery_disabled_contact_point_total
+                .load(Ordering::Relaxed),
         }
+    }
+}
+
+impl AlertWorkerStatsSnapshot {
+    fn log(self, message: &'static str) {
+        tracing::info!(
+            source_events_claimed_total = self.source_events_claimed_total,
+            source_events_processed_total = self.source_events_processed_total,
+            alert_events_created_total = self.alert_events_created_total,
+            alert_matches_silenced_total = self.alert_matches_silenced_total,
+            alert_matches_cooldown_suppressed_total = self.alert_matches_cooldown_suppressed_total,
+            source_claim_lost_total = self.source_claim_lost_total,
+            delivery_attempts_claimed_total = self.delivery_attempts_claimed_total,
+            delivery_success_total = self.delivery_success_total,
+            delivery_retry_scheduled_total = self.delivery_retry_scheduled_total,
+            delivery_terminal_failure_total = self.delivery_terminal_failure_total,
+            delivery_finalization_claim_lost_total = self.delivery_finalization_claim_lost_total,
+            delivery_missing_alert_event_total = self.delivery_missing_alert_event_total,
+            delivery_missing_contact_point_total = self.delivery_missing_contact_point_total,
+            delivery_disabled_contact_point_total = self.delivery_disabled_contact_point_total,
+            "{message}"
+        );
     }
 }
 
@@ -125,6 +204,8 @@ pub async fn run_worker(
     let stats = AlertWorkerStats::default();
     let mut last_stats_log_at = Instant::now();
 
+    log_worker_started(&config);
+
     loop {
         tokio::select! {
             _ = shutdown_rx.changed() => break,
@@ -141,6 +222,7 @@ pub async fn run_worker(
         }
     }
 
+    stats.snapshot().log("alert worker stopped");
     Ok(())
 }
 
@@ -149,12 +231,23 @@ fn maybe_log_stats(stats: &AlertWorkerStats, interval: Duration, last_logged_at:
         return;
     }
 
-    let snapshot = stats.snapshot();
-    tracing::info!(
-        source_claim_lost_total = snapshot.source_claim_lost_total,
-        "alert worker stats snapshot"
-    );
+    stats.snapshot().log("alert worker stats snapshot");
     *last_logged_at = Instant::now();
+}
+
+fn log_worker_started(config: &AlertWorkerConfig) {
+    tracing::info!(
+        source_batch_size = config.source_batch_size,
+        delivery_batch_size = config.delivery_batch_size,
+        idle_poll_interval_secs = config.idle_poll_interval.as_secs(),
+        stats_log_interval_secs = config.stats_log_interval.as_secs(),
+        source_claim_lease_secs = config.source_claim_lease.as_secs(),
+        delivery_claim_lease_secs = config.delivery_claim_lease.as_secs(),
+        http_timeout_secs = config.http_timeout.as_secs(),
+        max_delivery_attempts = config.max_delivery_attempts,
+        apprise_enabled = config.apprise_api_url.is_some(),
+        "alert worker started"
+    );
 }
 
 pub async fn send_test_notification(
@@ -173,7 +266,7 @@ async fn run_once(
     stats: &AlertWorkerStats,
 ) -> AlertResult<()> {
     process_source_events(sink, config, stats).await?;
-    process_delivery_attempts(sink, config, client).await?;
+    process_delivery_attempts(sink, config, client, stats).await?;
     Ok(())
 }
 
@@ -191,6 +284,14 @@ async fn process_source_events(
     if events.is_empty() {
         return Ok(());
     }
+    stats
+        .source_events_claimed_total
+        .fetch_add(events.len() as u64, Ordering::Relaxed);
+    tracing::info!(
+        claimed_source_events = events.len(),
+        source_claim_lease_secs = config.source_claim_lease.as_secs(),
+        "claimed alert source event batch"
+    );
 
     let mut qbt_rules = None;
     let mut incident_rules = None;
@@ -222,7 +323,11 @@ async fn process_source_events(
             if !event_matches_criteria(&rule.criteria, &event, metadata.as_ref())? {
                 continue;
             }
-            if is_silenced(&event, metadata.as_ref(), &silences)? {
+            if let Some(silence_id) = matching_silence(&event, metadata.as_ref(), &silences)? {
+                stats
+                    .alert_matches_silenced_total
+                    .fetch_add(1, Ordering::Relaxed);
+                log_silenced_match(&event, rule, silence_id);
                 continue;
             }
             if rule.trigger_policy.cooldown_secs > 0 {
@@ -234,12 +339,16 @@ async fn process_source_events(
                     .rule_has_recent_alert_event(rule.id, &event.source_id, since)
                     .await?
                 {
+                    stats
+                        .alert_matches_cooldown_suppressed_total
+                        .fetch_add(1, Ordering::Relaxed);
+                    log_cooldown_suppressed_match(&event, rule, rule.trigger_policy.cooldown_secs);
                     continue;
                 }
             }
             let (title, body) = render_rule(&env, rule, &event)?;
             let delivery_key = build_delivery_key(rule, &event);
-            let _ = sink
+            let inserted = sink
                 .insert_alert_event_with_attempts(
                     rule,
                     event.id,
@@ -249,6 +358,19 @@ async fn process_source_events(
                     event.payload.clone(),
                 )
                 .await?;
+            if let Some(alert_event) = inserted {
+                stats
+                    .alert_events_created_total
+                    .fetch_add(1, Ordering::Relaxed);
+                tracing::info!(
+                    source_event_id = event.id,
+                    source_kind = ?event.source_kind,
+                    rule_id = rule.id,
+                    alert_event_id = alert_event.id,
+                    delivery_key = %delivery_key,
+                    "created alert event"
+                );
+            }
         }
         let Some(claimed_at) = event.claimed_at else {
             return Err(AlertError::InvalidConfig(format!(
@@ -266,9 +388,15 @@ async fn process_source_events(
                 + 1;
             tracing::warn!(
                 source_event_id = event.id,
+                source_kind = ?event.source_kind,
+                source_id = %event.source_id,
                 source_claim_lost_total,
                 "skipped source event finalization because claim lease was lost"
             );
+        } else {
+            stats
+                .source_events_processed_total
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -279,6 +407,7 @@ async fn process_delivery_attempts(
     sink: &PostgresMetadataSink,
     config: &AlertWorkerConfig,
     client: &ClientWithMiddleware,
+    stats: &AlertWorkerStats,
 ) -> AlertResult<()> {
     let attempts = sink
         .claim_due_delivery_attempts(
@@ -286,6 +415,17 @@ async fn process_delivery_attempts(
             chrono_duration(config.delivery_claim_lease)?,
         )
         .await?;
+    if attempts.is_empty() {
+        return Ok(());
+    }
+    stats
+        .delivery_attempts_claimed_total
+        .fetch_add(attempts.len() as u64, Ordering::Relaxed);
+    tracing::info!(
+        claimed_delivery_attempts = attempts.len(),
+        delivery_claim_lease_secs = config.delivery_claim_lease.as_secs(),
+        "claimed alert delivery attempt batch"
+    );
     let dispatch_config = AlertDispatchConfig {
         apprise_api_url: config.apprise_api_url.clone(),
         http_timeout: config.http_timeout,
@@ -299,7 +439,16 @@ async fn process_delivery_attempts(
             )));
         };
         let Some(event) = sink.get_alert_event(attempt.alert_event_id).await? else {
-            let _ = sink
+            stats
+                .delivery_missing_alert_event_total
+                .fetch_add(1, Ordering::Relaxed);
+            log_missing_alert_event(
+                attempt.id,
+                attempt.alert_event_id,
+                attempt.contact_point_id,
+                attempt.attempt_no + 1,
+            );
+            let finalized = sink
                 .mark_delivery_attempt_failed(
                     attempt.id,
                     claimed_at,
@@ -308,13 +457,31 @@ async fn process_delivery_attempts(
                     Some("missing alert event"),
                 )
                 .await?;
+            log_delivery_finalization_claim_loss(
+                stats,
+                finalized,
+                attempt.id,
+                attempt.alert_event_id,
+                attempt.contact_point_id,
+                attempt.attempt_no + 1,
+                "missing alert event",
+            );
             continue;
         };
         let Some(contact_point) = sink
             .get_alert_contact_point_record(attempt.contact_point_id)
             .await?
         else {
-            let _ = sink
+            stats
+                .delivery_missing_contact_point_total
+                .fetch_add(1, Ordering::Relaxed);
+            log_missing_contact_point(
+                attempt.id,
+                event.id,
+                attempt.contact_point_id,
+                attempt.attempt_no + 1,
+            );
+            let finalized = sink
                 .mark_delivery_attempt_failed(
                     attempt.id,
                     claimed_at,
@@ -323,10 +490,28 @@ async fn process_delivery_attempts(
                     Some("missing contact point"),
                 )
                 .await?;
+            log_delivery_finalization_claim_loss(
+                stats,
+                finalized,
+                attempt.id,
+                event.id,
+                attempt.contact_point_id,
+                attempt.attempt_no + 1,
+                "missing contact point",
+            );
             continue;
         };
         if !contact_point.enabled {
-            let _ = sink
+            stats
+                .delivery_disabled_contact_point_total
+                .fetch_add(1, Ordering::Relaxed);
+            log_disabled_contact_point(
+                attempt.id,
+                event.id,
+                &contact_point,
+                attempt.attempt_no + 1,
+            );
+            let finalized = sink
                 .mark_delivery_attempt_failed(
                     attempt.id,
                     claimed_at,
@@ -335,6 +520,15 @@ async fn process_delivery_attempts(
                     Some("contact point disabled"),
                 )
                 .await?;
+            log_delivery_finalization_claim_loss(
+                stats,
+                finalized,
+                attempt.id,
+                event.id,
+                contact_point.id,
+                attempt.attempt_no + 1,
+                "contact point disabled",
+            );
             continue;
         }
 
@@ -349,10 +543,26 @@ async fn process_delivery_attempts(
                         outcome.response_excerpt.as_deref(),
                     )
                     .await?;
-                if !finalized {
-                    tracing::warn!(
+                if finalized {
+                    stats.delivery_success_total.fetch_add(1, Ordering::Relaxed);
+                    tracing::info!(
                         delivery_attempt_id = attempt.id,
-                        "skipped delivery success finalization because claim lease was lost"
+                        alert_event_id = event.id,
+                        contact_point_id = contact_point.id,
+                        contact_point_kind = ?contact_point.config.kind(),
+                        attempt_no = attempt.attempt_no + 1,
+                        response_code = outcome.response_code,
+                        "alert delivery succeeded"
+                    );
+                } else {
+                    log_delivery_finalization_claim_loss(
+                        stats,
+                        finalized,
+                        attempt.id,
+                        event.id,
+                        contact_point.id,
+                        attempt.attempt_no + 1,
+                        "delivery success",
                     );
                 }
             }
@@ -362,7 +572,19 @@ async fn process_delivery_attempts(
             }) => {
                 let next_attempt_no = attempt.attempt_no + 1;
                 if next_attempt_no >= config.max_delivery_attempts {
-                    let _ = sink
+                    stats
+                        .delivery_terminal_failure_total
+                        .fetch_add(1, Ordering::Relaxed);
+                    log_delivery_retry_exhausted(
+                        &attempt,
+                        &event,
+                        &contact_point,
+                        config.max_delivery_attempts,
+                        next_attempt_no,
+                        response_code,
+                        response_excerpt.as_deref(),
+                    );
+                    let finalized = sink
                         .mark_delivery_attempt_failed(
                             attempt.id,
                             claimed_at,
@@ -371,24 +593,67 @@ async fn process_delivery_attempts(
                             response_excerpt.as_deref(),
                         )
                         .await?;
+                    log_delivery_finalization_claim_loss(
+                        stats,
+                        finalized,
+                        attempt.id,
+                        event.id,
+                        contact_point.id,
+                        next_attempt_no,
+                        "delivery failure",
+                    );
                 } else {
-                    let _ = sink
+                    let next_retry_at =
+                        Utc::now() + ChronoDuration::seconds(backoff_seconds(next_attempt_no));
+                    stats
+                        .delivery_retry_scheduled_total
+                        .fetch_add(1, Ordering::Relaxed);
+                    log_delivery_retry_scheduled(
+                        &attempt,
+                        &event,
+                        &contact_point,
+                        next_attempt_no,
+                        next_retry_at,
+                        response_code,
+                        response_excerpt.as_deref(),
+                    );
+                    let finalized = sink
                         .mark_delivery_attempt_retry(
                             attempt.id,
                             claimed_at,
                             next_attempt_no,
-                            Utc::now() + ChronoDuration::seconds(backoff_seconds(next_attempt_no)),
+                            next_retry_at,
                             response_code,
                             response_excerpt.as_deref(),
                         )
                         .await?;
+                    log_delivery_finalization_claim_loss(
+                        stats,
+                        finalized,
+                        attempt.id,
+                        event.id,
+                        contact_point.id,
+                        next_attempt_no,
+                        "delivery retry scheduling",
+                    );
                 }
             }
             Err(DeliveryFailure::Terminal {
                 response_code,
                 response_excerpt,
             }) => {
-                let _ = sink
+                stats
+                    .delivery_terminal_failure_total
+                    .fetch_add(1, Ordering::Relaxed);
+                log_delivery_terminal_failure(
+                    &attempt,
+                    &event,
+                    &contact_point,
+                    attempt.attempt_no + 1,
+                    response_code,
+                    response_excerpt.as_deref(),
+                );
+                let finalized = sink
                     .mark_delivery_attempt_failed(
                         attempt.id,
                         claimed_at,
@@ -397,6 +662,15 @@ async fn process_delivery_attempts(
                         response_excerpt.as_deref(),
                     )
                     .await?;
+                log_delivery_finalization_claim_loss(
+                    stats,
+                    finalized,
+                    attempt.id,
+                    event.id,
+                    contact_point.id,
+                    attempt.attempt_no + 1,
+                    "delivery failure",
+                );
             }
         }
     }
@@ -404,17 +678,179 @@ async fn process_delivery_attempts(
     Ok(())
 }
 
-fn is_silenced(
+fn matching_silence(
     event: &AlertSourceEvent,
     metadata: Option<&CompletedFileMetadata>,
     silences: &[emwin_service::AlertSilence],
-) -> AlertResult<bool> {
+) -> AlertResult<Option<i64>> {
     for silence in silences {
         if event_matches_criteria(&silence.criteria, event, metadata)? {
-            return Ok(true);
+            return Ok(Some(silence.id));
         }
     }
-    Ok(false)
+    Ok(None)
+}
+
+fn log_silenced_match(event: &AlertSourceEvent, rule: &AlertRule, silence_id: i64) {
+    tracing::info!(
+        source_event_id = event.id,
+        source_kind = ?event.source_kind,
+        source_id = %event.source_id,
+        rule_id = rule.id,
+        silence_id,
+        "alert match suppressed by silence"
+    );
+}
+
+fn log_cooldown_suppressed_match(event: &AlertSourceEvent, rule: &AlertRule, cooldown_secs: u64) {
+    tracing::info!(
+        source_event_id = event.id,
+        source_kind = ?event.source_kind,
+        source_id = %event.source_id,
+        rule_id = rule.id,
+        cooldown_secs,
+        "alert match suppressed by cooldown"
+    );
+}
+
+fn log_delivery_finalization_claim_loss(
+    stats: &AlertWorkerStats,
+    finalized: bool,
+    delivery_attempt_id: i64,
+    alert_event_id: i64,
+    contact_point_id: i64,
+    attempt_no: i32,
+    outcome: &'static str,
+) {
+    if finalized {
+        return;
+    }
+
+    let delivery_finalization_claim_lost_total = stats
+        .delivery_finalization_claim_lost_total
+        .fetch_add(1, Ordering::Relaxed)
+        + 1;
+    tracing::warn!(
+        delivery_attempt_id,
+        alert_event_id,
+        contact_point_id,
+        attempt_no,
+        outcome,
+        delivery_finalization_claim_lost_total,
+        "skipped delivery finalization because claim lease was lost"
+    );
+}
+
+fn log_missing_alert_event(
+    delivery_attempt_id: i64,
+    alert_event_id: i64,
+    contact_point_id: i64,
+    attempt_no: i32,
+) {
+    tracing::warn!(
+        delivery_attempt_id,
+        alert_event_id,
+        contact_point_id,
+        attempt_no,
+        "delivery attempt missing alert event"
+    );
+}
+
+fn log_missing_contact_point(
+    delivery_attempt_id: i64,
+    alert_event_id: i64,
+    contact_point_id: i64,
+    attempt_no: i32,
+) {
+    tracing::warn!(
+        delivery_attempt_id,
+        alert_event_id,
+        contact_point_id,
+        attempt_no,
+        "delivery attempt missing contact point"
+    );
+}
+
+fn log_disabled_contact_point(
+    delivery_attempt_id: i64,
+    alert_event_id: i64,
+    contact_point: &AlertContactPointRecord,
+    attempt_no: i32,
+) {
+    tracing::warn!(
+        delivery_attempt_id,
+        alert_event_id,
+        contact_point_id = contact_point.id,
+        contact_point_kind = ?contact_point.config.kind(),
+        attempt_no,
+        "delivery attempt skipped because contact point is disabled"
+    );
+}
+
+fn log_delivery_retry_scheduled(
+    attempt: &AlertDeliveryAttempt,
+    event: &AlertEvent,
+    contact_point: &AlertContactPointRecord,
+    next_attempt_no: i32,
+    next_retry_at: chrono::DateTime<Utc>,
+    response_code: Option<i32>,
+    response_excerpt: Option<&str>,
+) {
+    tracing::warn!(
+        delivery_attempt_id = attempt.id,
+        alert_event_id = event.id,
+        contact_point_id = contact_point.id,
+        contact_point_kind = ?contact_point.config.kind(),
+        attempt_no = attempt.attempt_no,
+        next_attempt_no,
+        next_retry_at = %next_retry_at,
+        response_code,
+        response_excerpt = response_excerpt.unwrap_or(""),
+        "alert delivery retry scheduled"
+    );
+}
+
+fn log_delivery_retry_exhausted(
+    attempt: &AlertDeliveryAttempt,
+    event: &AlertEvent,
+    contact_point: &AlertContactPointRecord,
+    max_delivery_attempts: i32,
+    next_attempt_no: i32,
+    response_code: Option<i32>,
+    response_excerpt: Option<&str>,
+) {
+    tracing::warn!(
+        delivery_attempt_id = attempt.id,
+        alert_event_id = event.id,
+        contact_point_id = contact_point.id,
+        contact_point_kind = ?contact_point.config.kind(),
+        attempt_no = attempt.attempt_no,
+        next_attempt_no,
+        max_delivery_attempts,
+        response_code,
+        response_excerpt = response_excerpt.unwrap_or(""),
+        "alert delivery retryable failure reached max attempts"
+    );
+}
+
+fn log_delivery_terminal_failure(
+    attempt: &AlertDeliveryAttempt,
+    event: &AlertEvent,
+    contact_point: &AlertContactPointRecord,
+    attempt_no: i32,
+    response_code: Option<i32>,
+    response_excerpt: Option<&str>,
+) {
+    tracing::warn!(
+        delivery_attempt_id = attempt.id,
+        alert_event_id = event.id,
+        contact_point_id = contact_point.id,
+        contact_point_kind = ?contact_point.config.kind(),
+        attempt_no,
+        response_code,
+        response_excerpt = response_excerpt.unwrap_or(""),
+        "alert delivery failed"
+    );
 }
 
 fn event_matches_criteria(
@@ -785,17 +1221,257 @@ fn truncate(value: Option<String>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AlertContactPointConfig, AlertDispatchConfig, TestAlertNotification, backoff_seconds,
-        build_delivery_key, send_test_notification, sign_payload,
+        AlertContactPointConfig, AlertDispatchConfig, AlertWorkerConfig, AlertWorkerStats,
+        TestAlertNotification, backoff_seconds, build_delivery_key, log_cooldown_suppressed_match,
+        log_delivery_finalization_claim_loss, log_delivery_retry_exhausted,
+        log_delivery_retry_scheduled, log_delivery_terminal_failure, log_disabled_contact_point,
+        log_missing_alert_event, log_missing_contact_point, log_silenced_match, log_worker_started,
+        send_test_notification, sign_payload,
     };
     use chrono::Utc;
+    use emwin_db::AlertContactPointRecord;
     use emwin_service::{
-        AlertMatchCriteria, AlertRule, AlertRuleTarget, AlertSourceEvent, AlertSourceKind,
-        AlertTemplate, AlertTriggerPolicy, FileFilterInput,
+        AlertDeliveryAttempt, AlertDeliveryStatus, AlertEvent, AlertMatchCriteria, AlertRule,
+        AlertRuleTarget, AlertSourceEvent, AlertSourceKind, AlertTemplate, AlertTriggerPolicy,
+        FileFilterInput,
     };
+    use std::io::Write;
+    use std::sync::atomic::Ordering;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use tracing_subscriber::fmt::MakeWriter;
     use wiremock::matchers::{body_string_contains, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[derive(Clone, Debug, Default)]
+    struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl SharedLogBuffer {
+        fn contents(&self) -> String {
+            String::from_utf8(
+                self.0
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone(),
+            )
+            .expect("logs should be utf-8")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct LogWriter(SharedLogBuffer);
+
+    impl Write for LogWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedLogBuffer {
+        type Writer = LogWriter;
+
+        fn make_writer(&'a self) -> LogWriter {
+            LogWriter(self.clone())
+        }
+    }
+
+    fn capture_logs(action: impl FnOnce()) -> String {
+        let buffer = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(buffer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        action();
+        buffer.contents()
+    }
+
+    #[test]
+    fn stats_snapshot_reports_all_observability_counters() {
+        let stats = AlertWorkerStats::default();
+        stats
+            .source_events_claimed_total
+            .store(2, Ordering::Relaxed);
+        stats
+            .source_events_processed_total
+            .store(1, Ordering::Relaxed);
+        stats.alert_events_created_total.store(3, Ordering::Relaxed);
+        stats
+            .alert_matches_silenced_total
+            .store(4, Ordering::Relaxed);
+        stats
+            .alert_matches_cooldown_suppressed_total
+            .store(5, Ordering::Relaxed);
+        stats.source_claim_lost_total.store(6, Ordering::Relaxed);
+        stats
+            .delivery_attempts_claimed_total
+            .store(7, Ordering::Relaxed);
+        stats.delivery_success_total.store(8, Ordering::Relaxed);
+        stats
+            .delivery_retry_scheduled_total
+            .store(9, Ordering::Relaxed);
+        stats
+            .delivery_terminal_failure_total
+            .store(10, Ordering::Relaxed);
+        stats
+            .delivery_finalization_claim_lost_total
+            .store(11, Ordering::Relaxed);
+        stats
+            .delivery_missing_alert_event_total
+            .store(12, Ordering::Relaxed);
+        stats
+            .delivery_missing_contact_point_total
+            .store(13, Ordering::Relaxed);
+        stats
+            .delivery_disabled_contact_point_total
+            .store(14, Ordering::Relaxed);
+
+        let snapshot = stats.snapshot();
+        assert_eq!(snapshot.source_events_claimed_total, 2);
+        assert_eq!(snapshot.source_events_processed_total, 1);
+        assert_eq!(snapshot.alert_events_created_total, 3);
+        assert_eq!(snapshot.alert_matches_silenced_total, 4);
+        assert_eq!(snapshot.alert_matches_cooldown_suppressed_total, 5);
+        assert_eq!(snapshot.source_claim_lost_total, 6);
+        assert_eq!(snapshot.delivery_attempts_claimed_total, 7);
+        assert_eq!(snapshot.delivery_success_total, 8);
+        assert_eq!(snapshot.delivery_retry_scheduled_total, 9);
+        assert_eq!(snapshot.delivery_terminal_failure_total, 10);
+        assert_eq!(snapshot.delivery_finalization_claim_lost_total, 11);
+        assert_eq!(snapshot.delivery_missing_alert_event_total, 12);
+        assert_eq!(snapshot.delivery_missing_contact_point_total, 13);
+        assert_eq!(snapshot.delivery_disabled_contact_point_total, 14);
+    }
+
+    #[test]
+    fn startup_and_shutdown_logs_include_non_secret_fields() {
+        let logs = capture_logs(|| {
+            let config = AlertWorkerConfig {
+                source_batch_size: 11,
+                delivery_batch_size: 7,
+                idle_poll_interval: Duration::from_secs(2),
+                stats_log_interval: Duration::from_secs(30),
+                source_claim_lease: Duration::from_secs(300),
+                delivery_claim_lease: Duration::from_secs(120),
+                http_timeout: Duration::from_secs(9),
+                max_delivery_attempts: 4,
+                apprise_api_url: Some("http://127.0.0.1:8000".to_string()),
+            };
+            log_worker_started(&config);
+
+            let stats = AlertWorkerStats::default();
+            stats.delivery_success_total.store(2, Ordering::Relaxed);
+            stats.snapshot().log("alert worker stopped");
+        });
+
+        assert!(logs.contains("alert worker started"));
+        assert!(logs.contains("source_batch_size=11"));
+        assert!(logs.contains("delivery_batch_size=7"));
+        assert!(logs.contains("apprise_enabled=true"));
+        assert!(!logs.contains("http://127.0.0.1:8000"));
+        assert!(logs.contains("alert worker stopped"));
+        assert!(logs.contains("delivery_success_total=2"));
+    }
+
+    #[test]
+    fn suppression_logs_distinguish_silence_and_cooldown() {
+        let logs = capture_logs(|| {
+            let rule = test_rule(7);
+            let event = test_source_event(AlertSourceKind::IncidentChange, 10, "KOAX/FF/W/1");
+            log_silenced_match(&event, &rule, 41);
+            log_cooldown_suppressed_match(&event, &rule, 90);
+        });
+
+        assert!(logs.contains("alert match suppressed by silence"));
+        assert!(logs.contains("silence_id=41"));
+        assert!(logs.contains("alert match suppressed by cooldown"));
+        assert!(logs.contains("cooldown_secs=90"));
+    }
+
+    #[test]
+    fn delivery_finalization_claim_loss_log_includes_context() {
+        let logs = capture_logs(|| {
+            let stats = AlertWorkerStats::default();
+            log_delivery_finalization_claim_loss(&stats, false, 9, 10, 11, 2, "delivery failure");
+        });
+
+        assert!(logs.contains("skipped delivery finalization because claim lease was lost"));
+        assert!(logs.contains("delivery_attempt_id=9"));
+        assert!(logs.contains("alert_event_id=10"));
+        assert!(logs.contains("contact_point_id=11"));
+        assert!(logs.contains("attempt_no=2"));
+        assert!(logs.contains("outcome=\"delivery failure\""));
+    }
+
+    #[test]
+    fn missing_or_disabled_delivery_target_logs_warning_context() {
+        let logs = capture_logs(|| {
+            log_missing_alert_event(1, 2, 3, 4);
+            log_missing_contact_point(5, 6, 7, 8);
+            log_disabled_contact_point(9, 10, &test_contact_point(false), 11);
+        });
+
+        assert!(logs.contains("delivery attempt missing alert event"));
+        assert!(logs.contains("delivery attempt missing contact point"));
+        assert!(logs.contains("delivery attempt skipped because contact point is disabled"));
+        assert!(logs.contains("contact_point_kind=Webhook"));
+    }
+
+    #[test]
+    fn delivery_retry_and_failure_logs_include_structured_fields() {
+        let logs = capture_logs(|| {
+            let attempt = test_delivery_attempt(17, 21, 34, 1);
+            let event = test_alert_event(21, 7, 55);
+            let contact_point = test_contact_point(true);
+            let next_retry_at = Utc::now();
+
+            log_delivery_retry_scheduled(
+                &attempt,
+                &event,
+                &contact_point,
+                2,
+                next_retry_at,
+                Some(429),
+                Some("slow down"),
+            );
+            log_delivery_retry_exhausted(
+                &attempt,
+                &event,
+                &contact_point,
+                4,
+                4,
+                Some(503),
+                Some("retry budget exhausted"),
+            );
+            log_delivery_terminal_failure(
+                &attempt,
+                &event,
+                &contact_point,
+                2,
+                Some(400),
+                Some("bad request"),
+            );
+        });
+
+        assert!(logs.contains("alert delivery retry scheduled"));
+        assert!(logs.contains("next_attempt_no=2"));
+        assert!(logs.contains("response_code=429"));
+        assert!(logs.contains("response_excerpt=\"slow down\""));
+        assert!(logs.contains("alert delivery retryable failure reached max attempts"));
+        assert!(logs.contains("max_delivery_attempts=4"));
+        assert!(logs.contains("alert delivery failed"));
+        assert!(logs.contains("response_code=400"));
+    }
 
     #[tokio::test]
     async fn webhook_test_send_succeeds() {
@@ -944,6 +1620,58 @@ mod tests {
             created_at: now,
             claimed_at: Some(now),
             processed_at: None,
+        }
+    }
+
+    fn test_alert_event(id: i64, rule_id: i64, source_event_id: i64) -> AlertEvent {
+        AlertEvent {
+            id,
+            rule_id,
+            source_event_id,
+            delivery_key: format!("{rule_id}:delivery"),
+            severity: Some("warning".to_string()),
+            title: "title".to_string(),
+            body: "body".to_string(),
+            payload: serde_json::json!({"kind":"test"}),
+            created_at: Utc::now(),
+        }
+    }
+
+    fn test_delivery_attempt(
+        id: i64,
+        alert_event_id: i64,
+        contact_point_id: i64,
+        attempt_no: i32,
+    ) -> AlertDeliveryAttempt {
+        let now = Utc::now();
+        AlertDeliveryAttempt {
+            id,
+            alert_event_id,
+            contact_point_id,
+            delivery_key: format!("{alert_event_id}:{contact_point_id}"),
+            attempt_no,
+            status: AlertDeliveryStatus::InProgress,
+            claimed_at: Some(now),
+            next_retry_at: None,
+            response_code: None,
+            response_excerpt: None,
+            delivered_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn test_contact_point(enabled: bool) -> AlertContactPointRecord {
+        AlertContactPointRecord {
+            id: 34,
+            name: "webhook".to_string(),
+            enabled,
+            config: AlertContactPointConfig::Webhook {
+                url: "https://example.invalid/hook".to_string(),
+                authorization_header: Some("Bearer secret".to_string()),
+                signing_secret: Some("signing-secret".to_string()),
+                timeout_secs: Some(5),
+            },
         }
     }
 }
